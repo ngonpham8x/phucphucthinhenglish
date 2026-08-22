@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Student, Teacher, ClassRoom, Room, TuitionReceipt, CourseProgram, UserAccount } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { DashboardDetailModal, DashboardDetailType } from './DashboardDetailModal';
 import {
   Users,
   GraduationCap,
@@ -60,9 +61,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab
 }) => {
   const { t, language } = useLanguage();
+  const [selectedDetail, setSelectedDetail] = useState<DashboardDetailType | null>(null);
   const isOwner = currentUser.role === 'owner';
   const showRevenue = isOwner || (currentUser.permissions.report?.revenue ?? false);
   const showDebt = isOwner || (currentUser.permissions.tuition?.showDebt ?? false);
+  const activeStudents = students.filter((student) => student.status === 'active');
+  const droppedStudents = students.filter((student) => student.status === 'dropped');
+  const debtStudents = students.filter((student) => student.feeStatus === 'debt');
+  const paidStudents = students.filter((student) => student.feeStatus === 'paid');
+  const latestReceiptMonth = receipts
+    .map((receipt) => receipt.paymentDate.slice(0, 7))
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? null;
+  const monthlyRevenue = receipts
+    .filter((receipt) => !latestReceiptMonth || receipt.paymentDate.startsWith(latestReceiptMonth))
+    .reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+  const formatCurrency = (value: number) => value.toLocaleString('vi-VN') + 'đ';
 
   // Chart 1: Học sinh theo chương trình (Donut)
   const programDonutData = [
@@ -122,10 +137,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* ------------------------------------------------------------- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: Tổng học sinh */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('students')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('students')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-600">
           <div>
             <span className="text-xs font-semibold text-slate-500">{t('dashboard.total_students')}</span>
-            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">356</div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">{students.length}</div>
             <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center">
               <span className="text-emerald-500 font-bold mr-1">↑ 12</span> {t('dashboard.compared_prev_month')}
             </div>
@@ -136,10 +151,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 2: Tổng giáo viên */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('teachers')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('teachers')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600">
           <div>
             <span className="text-xs font-semibold text-slate-500">{t('dashboard.total_teachers')}</span>
-            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">28</div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">{teachers.length}</div>
             <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center">
               <span className="text-emerald-500 font-bold mr-1">↑ 2</span> {t('dashboard.compared_prev_month')}
             </div>
@@ -150,10 +165,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 3: Tổng lớp */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('classes')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('classes')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-600">
           <div>
             <span className="text-xs font-semibold text-slate-500">{t('dashboard.total_classes')}</span>
-            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">32</div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">{classes.length}</div>
             <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center">
               <span className="text-emerald-500 font-bold mr-1">↑ 3</span> {t('dashboard.compared_prev_month')}
             </div>
@@ -164,10 +179,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Card 4: Tổng phòng */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('rooms')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('rooms')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600">
           <div>
             <span className="text-xs font-semibold text-slate-500">{t('dashboard.total_rooms')}</span>
-            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">12</div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-0.5">{rooms.length}</div>
             <div className="text-[11px] text-slate-500 font-medium mt-1">
               {t('dashboard.no_change')}
             </div>
@@ -179,10 +194,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Card 5: Doanh thu tháng hoặc Cần thu học phí */}
         {showRevenue ? (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+          <div role="button" tabIndex={0} onClick={() => setSelectedDetail('revenue')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('revenue')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between transition hover:-translate-y-0.5 hover:border-purple-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-600">
             <div>
               <span className="text-xs font-semibold text-slate-500">{t('dashboard.monthly_revenue')}</span>
-              <div className="text-lg font-extrabold text-slate-900 mt-0.5">215.800.000đ</div>
+              <div className="text-lg font-extrabold text-slate-900 mt-0.5">{formatCurrency(monthlyRevenue)}</div>
               <div className="text-[11px] text-emerald-600 font-medium mt-1 flex items-center">
                 <span className="text-emerald-500 font-bold mr-1">↑ 18%</span> {t('dashboard.compared_prev_month')}
               </div>
@@ -192,10 +207,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
         ) : (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+          <div role={showDebt ? 'button' : undefined} tabIndex={showDebt ? 0 : undefined} onClick={() => showDebt && setSelectedDetail('debt')} onKeyDown={(event) => event.key === 'Enter' && showDebt && setSelectedDetail('debt')} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-600">
             <div>
               <span className="text-xs font-semibold text-slate-500">{t('dashboard.pending_tuition')}</span>
-              <div className="text-lg font-extrabold text-amber-700 mt-0.5">32 {t('class.students')}</div>
+              <div className="text-lg font-extrabold text-amber-700 mt-0.5">{showDebt ? debtStudents.length : '—'} {t('class.students')}</div>
               <div className="text-[11px] text-amber-600 font-medium mt-1 flex items-center">
                 <span className="text-amber-600 font-bold mr-1">21.800.000đ</span> {language === 'vi' ? 'còn nợ phải thu' : 'outstanding'}
               </div>
@@ -212,46 +227,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* ------------------------------------------------------------- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Pill 1: Đang học */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('active')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('active')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600">
           <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
             <UserCheck className="w-5 h-5" />
           </div>
           <div>
             <span className="text-xs font-medium text-slate-500">{t('actions.active')}</span>
-            <div className="text-xl font-bold text-slate-900">330</div>
+            <div className="text-xl font-bold text-slate-900">{activeStudents.length}</div>
           </div>
         </div>
 
         {/* Pill 2: Nghỉ học */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('dropped')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('dropped')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3 transition hover:-translate-y-0.5 hover:border-red-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-600">
           <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
             <UserMinus className="w-5 h-5" />
           </div>
           <div>
             <span className="text-xs font-medium text-slate-500">{t('actions.dropped')}</span>
-            <div className="text-xl font-bold text-slate-900">15</div>
+            <div className="text-xl font-bold text-slate-900">{droppedStudents.length}</div>
           </div>
         </div>
 
         {/* Pill 3: Nợ học phí */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3">
+        <div role={showDebt ? 'button' : undefined} tabIndex={showDebt ? 0 : undefined} onClick={() => showDebt && setSelectedDetail('debt')} onKeyDown={(event) => event.key === 'Enter' && showDebt && setSelectedDetail('debt')} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3 transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-600">
           <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
             <span className="text-xs font-medium text-slate-500">{t('student.status_debt')}</span>
-            <div className="text-xl font-bold text-slate-900">32</div>
+            <div className="text-xl font-bold text-slate-900">{showDebt ? debtStudents.length : '—'}</div>
           </div>
         </div>
 
         {/* Pill 4: Đã đóng đủ */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3">
+        <div role="button" tabIndex={0} onClick={() => setSelectedDetail('paid')} onKeyDown={(event) => event.key === 'Enter' && setSelectedDetail('paid')} className="cursor-pointer bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center gap-3 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-600">
           <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
             <span className="text-xs font-medium text-slate-500">{t('student.status_paid')}</span>
-            <div className="text-xl font-bold text-slate-900">323</div>
+            <div className="text-xl font-bold text-slate-900">{paidStudents.length}</div>
           </div>
         </div>
       </div>
@@ -750,6 +765,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      <DashboardDetailModal
+        detail={selectedDetail}
+        students={students}
+        teachers={teachers}
+        classes={classes}
+        rooms={rooms}
+        receipts={receipts}
+        programs={programs}
+        revenueMonth={latestReceiptMonth}
+        canViewDebt={showDebt}
+        onClose={() => setSelectedDetail(null)}
+        onViewFull={onNavigateTab}
+      />
     </div>
   );
 };
