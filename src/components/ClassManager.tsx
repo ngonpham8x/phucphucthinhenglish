@@ -52,13 +52,13 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
     setEditingClass({
       id: `CLASS${(classes.length + 1).toString().padStart(2, '0')}`,
       code: `LOP-0${classes.length + 1}`,
-      name: language === 'vi' ? 'Lớp Tiếng Anh Mới' : 'New English Class',
-      programId: programs[0]?.id || '',
-      teacherId: teachers[0]?.id || '',
-      roomId: rooms[0]?.id || '',
-      scheduleTime: '18:00 - 19:30',
-      days: language === 'vi' ? ['Thứ 2', 'Thứ 4', 'Thứ 6'] : ['Mon', 'Wed', 'Fri'],
-      capacity: 20,
+      name: '',
+      programId: '',
+      teacherId: '',
+      roomId: '',
+      scheduleTime: '',
+      days: [],
+      capacity: 0,
       studentIds: []
     });
     setIsModalOpen(true);
@@ -123,7 +123,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
           const program = programs.find(p => p.id === cls.programId);
           const classStudents = students.filter(s => s.classId === cls.id);
           const currentCount = classStudents.length;
-          const percentFull = Math.round((currentCount / (cls.capacity || 1)) * 100);
+          const capacityKnown = cls.capacity > 0;
+          const percentFull = capacityKnown ? Math.round((currentCount / cls.capacity) * 100) : 0;
 
           return (
             <div
@@ -193,16 +194,16 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                 <div className="mt-4 pt-3 border-t border-slate-100">
                   <div className="flex justify-between items-center text-xs font-semibold mb-1">
                     <span className="text-slate-600">{t('class.capacity')}</span>
-                    <span className="text-slate-900">{currentCount} / {cls.capacity} {t('class.students')}</span>
+                    <span className="text-slate-900">{currentCount} / {capacityKnown ? cls.capacity : (language === 'vi' ? 'Chưa cập nhật' : 'Unspecified')} {t('class.students')}</span>
                   </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  {capacityKnown ? <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all ${
                         percentFull >= 90 ? 'bg-rose-600' : 'bg-emerald-600'
                       }`}
                       style={{ width: `${Math.min(percentFull, 100)}%` }}
                     />
-                  </div>
+                  </div> : <p className="text-[11px] text-amber-700">Chưa có sức chứa trong file nguồn.</p>}
                 </div>
               </div>
 

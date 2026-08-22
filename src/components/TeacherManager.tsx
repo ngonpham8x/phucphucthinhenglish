@@ -52,13 +52,12 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
     setEditingTeacher({
       id: `GV${(teachers.length + 1).toString().padStart(3, '0')}`,
       name: '',
-      avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&auto=format&fit=crop&q=80',
       phone: '',
       email: '',
-      address: 'Tây Ninh',
-      specialty: 'IELTS / Tiếng Anh Cấp 2, 3',
+      address: '',
+      specialty: '',
       assignedClassIds: [],
-      scheduleNotes: 'Giảng dạy các ca tối',
+      scheduleNotes: '',
       notes: ''
     });
     setIsModalOpen(true);
@@ -300,7 +299,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
                           <CalendarDays className="w-3.5 h-3.5 text-purple-600" /> Ngày dạy: <span className="font-bold">{cls.days.join(', ')}</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-500 text-[11px]">
-                          <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Sĩ số: <span className="font-bold text-slate-800">{cls.studentIds ? cls.studentIds.length : 0} / {cls.capacity} học sinh</span>
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Sĩ số: <span className="font-bold text-slate-800">{cls.studentIds ? cls.studentIds.length : 0} / {cls.capacity > 0 ? cls.capacity : 'Chưa cập nhật'} học sinh</span>
                         </div>
                       </div>
                     </div>

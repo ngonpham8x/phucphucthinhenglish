@@ -110,14 +110,13 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       id: `HS_NEW_${Date.now()}`,
       code: autoCode,
       name: '',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      dob: '2012-05-10',
-      gender: 'Nam',
-      school: 'THPT Tây Ninh',
-      gradeLevel: 'Khối 10',
-      programId: programs[0]?.id || '',
-      classId: classes[0]?.id || '',
-      address: 'TP. Tây Ninh',
+      dob: '',
+      gender: 'Chưa xác định',
+      school: '',
+      gradeLevel: '',
+      programId: '',
+      classId: '',
+      address: '',
       email: '',
       phone: '',
       parentName: '',
@@ -125,7 +124,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       enrollDate: new Date().toISOString().split('T')[0],
       notes: '',
       status: 'active',
-      feeStatus: 'paid'
+      feeStatus: 'unpaid'
     });
     setIsModalOpen(true);
   };
@@ -311,7 +310,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                             />
                             <div>
                               <div className="font-bold text-slate-900 text-sm">{st.name}</div>
-                              <div className="text-[10px] text-slate-500">{st.gender === 'Nam' ? (language === 'vi' ? 'Nam' : 'Male') : (language === 'vi' ? 'Nữ' : 'Female')} • {language === 'vi' ? 'NS' : 'DOB'}: {st.dob}</div>
+                              <div className="text-[10px] text-slate-500">{st.gender === 'Nam' ? (language === 'vi' ? 'Nam' : 'Male') : (st.gender === 'Nữ' ? (language === 'vi' ? 'Nữ' : 'Female') : (language === 'vi' ? 'Chưa xác định' : 'Unspecified'))} • {language === 'vi' ? 'NS' : 'DOB'}: {st.dob || '—'}</div>
                             </div>
                           </div>
                         </td>
@@ -620,7 +619,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 </div>
                 <h3 className="text-xl font-black text-slate-900 mt-1">{viewingStudent.name}</h3>
                 <div className="text-xs text-slate-500 font-medium flex items-center justify-center sm:justify-start gap-3 mt-0.5">
-                  <span>{viewingStudent.gender === 'Nam' ? 'Nam 👦' : 'Nữ 👧'}</span>
+                  <span>{viewingStudent.gender === 'Nam' ? 'Nam 👦' : (viewingStudent.gender === 'Nữ' ? 'Nữ 👧' : 'Chưa xác định')}</span>
                   <span>•</span>
                   <span>NS: {viewingStudent.dob}</span>
                   <span>•</span>
@@ -845,11 +844,12 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   <label className="block font-semibold text-slate-700 mb-1">Giới Tính</label>
                   <select
                     value={editingStudent.gender}
-                    onChange={(e) => setEditingStudent({ ...editingStudent, gender: e.target.value as 'Nam' | 'Nữ' })}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, gender: e.target.value as 'Nam' | 'Nữ' | 'Chưa xác định' })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700"
                   >
                     <option value="Nam">Nam</option>
                     <option value="Nữ">Nữ</option>
+                    <option value="Chưa xác định">Chưa xác định</option>
                   </select>
                 </div>
 

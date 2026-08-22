@@ -136,7 +136,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                       <td className="p-2.5 font-bold text-slate-400">{idx + 1}</td>
                       <td className="p-2.5 font-bold text-red-800">{cls.code}</td>
                       <td className="p-2.5 font-bold text-slate-900">{cls.name}</td>
-                      <td className="p-2.5">{classStudents.length} / {cls.capacity} HS</td>
+                      <td className="p-2.5">{classStudents.length} / {cls.capacity > 0 ? cls.capacity : 'Chưa cập nhật'} HS</td>
                       <td className="p-2.5 font-bold text-emerald-700">{paid.toLocaleString('vi-VN')} đ</td>
                       <td className="p-2.5 font-bold text-rose-700">{debt.toLocaleString('vi-VN')} đ</td>
                     </tr>

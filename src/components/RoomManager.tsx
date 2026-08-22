@@ -40,10 +40,10 @@ export const RoomManager: React.FC<RoomManagerProps> = ({
   const handleOpenAdd = () => {
     setEditingRoom({
       id: `P${100 + rooms.length + 1}`,
-      name: `Phòng P${100 + rooms.length + 1}`,
-      capacity: 20,
+      name: '',
+      capacity: 0,
       status: 'available',
-      notes: 'Trang bị tivi & máy lạnh'
+      notes: ''
     });
     setIsModalOpen(true);
   };
@@ -132,7 +132,7 @@ export const RoomManager: React.FC<RoomManagerProps> = ({
                 <div className="space-y-2 text-xs text-slate-600 border-t border-slate-100 pt-3">
                   <div className="flex items-center gap-2">
                     <Users className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Sức chứa: <strong>{room.capacity} bàn học</strong></span>
+                    <span>Sức chứa: <strong>{room.capacity > 0 ? `${room.capacity} bàn học` : 'Chưa cập nhật'}</strong></span>
                   </div>
 
                   <div className="flex items-center gap-2">

@@ -7,9 +7,10 @@ Thực hiện trực tiếp trong project Supabase của trung tâm. Không đư
 1. Vào **SQL Editor** → **New query**.
 2. Mở file `supabase/migrations/001_auth_profiles.sql` trong repository, sao chép toàn bộ nội dung vào SQL Editor, rồi chọn **Run**.
 3. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/002_bootstrap_owners.sql`.
-4. Vào **Table Editor** → schema `public` → bảng `owner_bootstrap_allowlist` → **Insert**.
-5. Thêm một dòng cho mỗi trong hai email Chủ trung tâm đã trao đổi, chỉ điền cột `email`; không cần điền `created_at`.
-6. Không chia sẻ ảnh màn hình hoặc export của bảng này. Bảng đã bật RLS và browser không có quyền đọc nó.
+4. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/003_center_data.sql`. Migration này tạo kho dữ liệu trung tâm có RLS; tuyệt đối không dán danh sách học sinh/học phí vào SQL Editor hay GitHub.
+5. Vào **Table Editor** → schema `public` → bảng `owner_bootstrap_allowlist` → **Insert**.
+6. Thêm một dòng cho mỗi trong hai email Chủ trung tâm đã trao đổi, chỉ điền cột `email`; không cần điền `created_at`.
+7. Không chia sẻ ảnh màn hình hoặc export của bảng này. Bảng đã bật RLS và browser không có quyền đọc nó.
 
 Nếu một trong hai chủ đã đăng nhập trước khi được thêm vào allowlist, trigger của migration sẽ tự chuyển profile tương ứng thành `owner` và kích hoạt tài khoản ngay khi bạn lưu dòng đó.
 
@@ -53,9 +54,18 @@ Trong thời gian bootstrap, bất kỳ email không nằm trong allowlist vẫn
 
 Vào **Project Settings** → **Auth** → **SMTP Settings** để thêm SMTP riêng trước khi dùng thật. Dịch vụ email mặc định chỉ phù hợp thử nghiệm và có giới hạn gửi rất thấp; nên dùng SMTP có domain gửi riêng như Resend, SendGrid, Mailgun hoặc SES.
 
-## 7. Kiểm tra cuối
+## 7. Nhập dữ liệu Excel riêng tư
+
+1. Đăng nhập bằng tài khoản Chủ trung tâm.
+2. Vào **Excel Import / Export** → tab **Nhập**.
+3. Chọn file `PhucPhucThinh_BaoCaoToanHeThong_2026-08-10_DaChuanHoa.xlsx` được cung cấp riêng, không commit file này lên GitHub.
+4. Khi ứng dụng hiện số lớp, học sinh và phiếu thu, chọn **Xác nhận nhập toàn bộ dữ liệu**.
+5. Chờ thông báo thành công. Dữ liệu sẽ lưu ở `public.center_data` trong Supabase, chỉ người dùng đã được kích hoạt mới đọc/ghi được theo RLS.
+
+## 8. Kiểm tra cuối
 
 1. Đăng nhập Google bằng một owner và kiểm tra có nút quản lý tài khoản.
 2. Mời một email thử nghiệm role `staff`; email mời phải đến hộp thư và cho phép đặt mật khẩu.
 3. Xác nhận staff không mở được phần quản lý tài khoản.
 4. Đăng xuất, thử một email chưa được mời; ứng dụng phải hiển thị trạng thái chưa được cấp quyền.
+5. Mở Excel Import / Export và xác nhận báo cáo tổng quan có tổng thu theo tháng/từng lớp; thêm một dòng ở sheet `HỌC PHÍ` của file xuất để kiểm tra công thức tự cộng.

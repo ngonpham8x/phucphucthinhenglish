@@ -6,3 +6,5 @@ coverage/
 *.log
 .env*
 !.env.example
+# Private exports/imports may contain student and tuition data; never commit them.
+*DaChuanHoa.xlsx

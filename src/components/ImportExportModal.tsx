@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { generateMasterExcelWorkbook, parseExcelImportData, ImportValidationResult } from '../services/excelService';
-import { Student, Teacher, ClassRoom, TuitionReceipt, Grade, CenterSettings } from '../types';
+import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult } from '../services/excelService';
+import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings } from '../types';
 import { FileSpreadsheet, FileUp, FileDown, CheckCircle2, AlertTriangle, Download, Upload, X, RefreshCw } from 'lucide-react';
 
 interface ImportExportModalProps {
@@ -8,11 +8,15 @@ interface ImportExportModalProps {
   onClose: () => void;
   students: Student[];
   teachers: Teacher[];
+  rooms: Room[];
   classes: ClassRoom[];
   receipts: TuitionReceipt[];
   grades: Grade[];
   settings: CenterSettings;
+  canSyncCenterData: boolean;
+  isOwner: boolean;
   onImportStudents: (newStudents: Student[]) => void;
+  onImportCenterData: (data: CenterWorkbookData) => void;
 }
 
 export const ImportExportModal: React.FC<ImportExportModalProps> = ({
@@ -20,16 +24,23 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   onClose,
   students,
   teachers,
+  rooms,
   classes,
   receipts,
   grades,
   settings,
-  onImportStudents
+  canSyncCenterData,
+  isOwner,
+  onImportStudents,
+  onImportCenterData
 }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   const [isExporting, setIsExporting] = useState(false);
   const [validationResult, setValidationResult] = useState<ImportValidationResult | null>(null);
   const [isImportingSuccess, setIsImportingSuccess] = useState(false);
+  const [fallbackClassId, setFallbackClassId] = useState(classes[0]?.id || '');
+  const [fileName, setFileName] = useState('');
+  const [centerImport, setCenterImport] = useState<CenterWorkbookData | null>(null);
 
   if (!isOpen) return null;
 
@@ -41,6 +52,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         students,
         classes,
         teachers,
+        rooms,
         receipts,
         grades
       });
@@ -61,49 +73,83 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
 
-    // Simulate mock parsing or JSON reader
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      // Mock rows for validation demonstration
-      const dummyRawData = [
-        { 'Mã HS': 'HS099', 'Họ và tên': 'Nguyễn Hoàng Khang', 'SĐT': '0912345678', 'Trường': 'THPT Chuyên Hoàng Lê Kha', 'Khối': 'Khối 11' },
-        { 'Mã HS': 'HS100', 'Họ và tên': 'Trần Thị Thu Thảo', 'SĐT': '0987654321', 'Trường': 'THPT Tây Ninh', 'Khối': 'Khối 10' }
-      ];
+    try {
+      const centerResult = await parseCenterWorkbookFile(file);
+      if (centerResult.data) {
+        setCenterImport(centerResult.data);
+        setValidationResult(null);
+        return;
+      }
+      if (classes.length === 0) {
+        setCenterImport(null);
+        setValidationResult({
+          validRows: [],
+          errors: centerResult.errors.length ? centerResult.errors : [{ row: 0, field: 'Tệp Excel', message: 'Hãy dùng báo cáo Excel đã chuẩn hoá để nhập dữ liệu lần đầu.' }]
+        });
+        return;
+      }
+      const result = await parseExcelStudentFile(file);
+      const existingCodes = new Set(students.map((student) => student.code.trim().toLocaleUpperCase('vi-VN')));
+      const duplicateRows = result.validRows.filter((row) => existingCodes.has((row.code || '').trim().toLocaleUpperCase('vi-VN')));
+      const validRows = result.validRows.filter((row) => !existingCodes.has((row.code || '').trim().toLocaleUpperCase('vi-VN')));
+      setValidationResult({
+        validRows,
+        errors: [
+          ...result.errors,
+          ...duplicateRows.map((row) => ({ row: 0, field: row.code || 'Mã học sinh', message: 'Mã học sinh đã có trong hệ thống.' }))
+        ]
+      });
+      setCenterImport(null);
+    } catch (error) {
+      console.error(error);
+      setValidationResult({ validRows: [], errors: [{ row: 0, field: 'Tệp Excel', message: 'Không thể đọc tệp. Vui lòng dùng tệp .xlsx hợp lệ.' }] });
+    }
+  };
 
-      const res = parseExcelImportData(dummyRawData);
-      setValidationResult(res);
-    };
-    reader.readAsText(file);
+  const handleConfirmCenterImport = () => {
+    if (!centerImport || !canSyncCenterData || !isOwner) return;
+    onImportCenterData(centerImport);
+    setIsImportingSuccess(true);
+    setTimeout(() => {
+      setIsImportingSuccess(false);
+      setCenterImport(null);
+      onClose();
+    }, 1500);
   };
 
   const handleConfirmImport = () => {
     if (!validationResult || validationResult.validRows.length === 0) return;
 
-    const newStudentsList: Student[] = validationResult.validRows.map((item, idx) => ({
-      id: `HS_IMP_${Date.now()}_${idx}`,
-      code: item.code || `HS${100 + idx}`,
-      name: item.name || 'Học sinh mới',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      dob: item.dob || '2012-01-01',
-      gender: item.gender as any || 'Nam',
-      school: item.school || 'THPT Tây Ninh',
-      gradeLevel: item.gradeLevel || 'Khối 10',
-      programId: classes[0]?.programId || '',
-      classId: classes[0]?.id || '',
-      address: item.address || 'Tây Ninh',
-      email: item.email || 'import@gmail.com',
-      phone: item.phone || '0900000000',
-      parentName: item.parentName || 'Phụ huynh',
-      parentPhone: item.parentPhone || '0900000000',
-      enrollDate: new Date().toISOString().split('T')[0],
-      notes: 'Import từ Excel',
-      status: 'active',
-      feeStatus: 'paid'
-    }));
+    const fallbackClass = classes.find((item) => item.id === fallbackClassId);
+    if (!fallbackClass) return;
+    const newStudentsList: Student[] = validationResult.validRows.map((item, idx) => {
+      const classroom = classes.find((candidate) => candidate.code === item.classCode) || fallbackClass;
+      return {
+        id: `HS_IMP_${Date.now()}_${idx}`,
+        code: item.code || '',
+        name: item.name || '',
+        dob: item.dob || '',
+        gender: item.gender || 'Chưa xác định',
+        school: item.school || '',
+        gradeLevel: item.gradeLevel || '',
+        programId: classroom.programId,
+        classId: classroom.id,
+        address: item.address || '',
+        email: item.email || '',
+        phone: item.phone || '',
+        parentName: item.parentName || '',
+        parentPhone: item.parentPhone || '',
+        enrollDate: new Date().toISOString().split('T')[0],
+        notes: `Nhập từ Excel: ${fileName || 'tệp không rõ tên'}`,
+        status: 'active',
+        feeStatus: 'unpaid'
+      };
+    });
 
     onImportStudents(newStudentsList);
     setIsImportingSuccess(true);
@@ -195,6 +241,30 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                     className="mt-3 text-xs mx-auto block"
                   />
                 </div>
+
+                {!centerImport && classes.length > 0 && <div>
+                  <label className="block font-bold text-slate-700 mb-1">Lớp áp dụng khi file không có “Mã lớp”</label>
+                  <select
+                    value={fallbackClassId}
+                    onChange={(event) => setFallbackClassId(event.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-800"
+                  >
+                    {classes.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.code} — {classroom.name}</option>)}
+                  </select>
+                </div>}
+
+                {centerImport && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+                    <div className="font-bold">Đã nhận diện báo cáo chuẩn hoá: {fileName}</div>
+                    <div className="mt-1 text-[11px]">{centerImport.classes.length} lớp · {centerImport.students.length} học sinh · {centerImport.receipts.length} phiếu thu</div>
+                    <p className="mt-2 text-[11px]">Dữ liệu sẽ thay toàn bộ dữ liệu hiện có của trung tâm và đồng bộ vào Supabase theo quyền tài khoản đã đăng nhập.</p>
+                    {canSyncCenterData && isOwner ? (
+                      <button onClick={handleConfirmCenterImport} className="mt-3 w-full rounded-xl bg-red-800 py-2 font-bold text-white hover:bg-red-900">
+                        Xác nhận nhập toàn bộ dữ liệu
+                      </button>
+                    ) : <p className="mt-3 rounded-lg bg-amber-100 p-2 text-[11px] font-semibold text-amber-900">{!isOwner ? 'Chỉ Chủ trung tâm được thay toàn bộ dữ liệu.' : 'Chưa kết nối được kho dữ liệu Supabase. Hãy chạy migration `003_center_data.sql`, sau đó tải lại trang.'}</p>}
+                  </div>
+                )}
 
                 {validationResult && (
                   <div className="p-3 bg-slate-100 rounded-xl border border-slate-200">

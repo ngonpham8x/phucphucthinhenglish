@@ -208,7 +208,7 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
                     <td className="px-3 py-3"><div className="font-bold text-slate-900">{classRoom.name}</div><div className="mt-0.5 text-[11px] text-slate-500">{programById.get(classRoom.programId)?.name ?? 'Chưa xác định'}</div></td>
                     <td className="px-3 py-3 text-slate-700">{teacherById.get(classRoom.teacherId)?.name ?? 'Chưa phân công'}</td>
                     <td className="px-3 py-3 text-slate-700">{roomById.get(classRoom.roomId)?.name ?? 'Chưa xếp phòng'}</td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">{classRoom.studentIds.length}/{classRoom.capacity}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-700">{classRoom.studentIds.length}/{classRoom.capacity > 0 ? classRoom.capacity : 'Chưa cập nhật'}</td>
                     <td className="px-3 py-3 text-slate-700">{classRoom.days.join(', ')} · {classRoom.scheduleTime}</td>
                   </tr>
                 ))}
@@ -225,7 +225,7 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
                 {rooms.map((room) => (
                   <tr key={room.id} className="hover:bg-slate-50">
                     <td className="px-3 py-3"><div className="font-bold text-slate-900">{room.name}</div><div className="mt-0.5 text-[11px] text-slate-500">{room.id}</div></td>
-                    <td className="px-3 py-3 text-slate-700">{room.capacity} chỗ</td>
+                    <td className="px-3 py-3 text-slate-700">{room.capacity > 0 ? `${room.capacity} chỗ` : 'Chưa cập nhật'}</td>
                     <td className="px-3 py-3 text-slate-700">{room.status === 'available' ? 'Sẵn sàng' : 'Bảo trì'}</td>
                     <td className="px-3 py-3 text-slate-700">{classes.filter((item) => item.roomId === room.id).map((item) => item.code).join(', ') || 'Trống lịch'}</td>
                     <td className="px-3 py-3 text-slate-500">{room.notes || '—'}</td>

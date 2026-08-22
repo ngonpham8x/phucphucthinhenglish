@@ -27,9 +27,9 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
 
   const [collectingStudentId, setCollectingStudentId] = useState<string>(students[0]?.id || '');
-  const [paidAmountInput, setPaidAmountInput] = useState<number>(3000000);
+  const [paidAmountInput, setPaidAmountInput] = useState<number>(0);
   const [discountInput, setDiscountInput] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ'>('Chuyển khoản');
+  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chuyển khoản');
   const [paymentNotes, setPaymentNotes] = useState('');
 
   const canCollect = isOwner || permissions.tuition.collect;
@@ -41,7 +41,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCollectingStudentId(students[0]?.id || '');
     const st = students[0];
     const program = programs.find(p => p.id === st?.programId);
-    setPaidAmountInput(program ? program.tuitionFee : 3000000);
+    setPaidAmountInput(program?.tuitionFee ?? 0);
     setDiscountInput(0);
     setIsCollectModalOpen(true);
   };
@@ -52,7 +52,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     if (!student) return;
 
     const program = programs.find(p => p.id === student.programId);
-    const courseFee = program ? program.tuitionFee : 3500000;
+    const courseFee = program?.tuitionFee ?? paidAmountInput;
     const finalPrice = Math.max(courseFee - discountInput, 0);
     const debtAmount = Math.max(finalPrice - paidAmountInput, 0);
 
@@ -66,7 +66,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       paidAmount: paidAmountInput,
       debtAmount,
       paymentDate: new Date().toISOString().split('T')[0],
-      collectorName: isOwner ? 'Phúc Phúc Thịnh (Chủ Cơ Sở)' : 'Nguyễn Thị Mai (Quản Lý)',
+      collectorName: isOwner ? 'Chủ trung tâm' : 'Nhân viên',
       paymentMethod,
       notes: paymentNotes || 'Thu học phí'
     };
@@ -247,6 +247,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   <option value="Chuyển khoản">Chuyển khoản Ngân hàng</option>
                   <option value="Tiền mặt">Tiền mặt tại trung tâm</option>
                   <option value="Thẻ">Quẹt thẻ POS</option>
+                  <option value="Chưa xác định">Chưa xác định</option>
                 </select>
               </div>
 

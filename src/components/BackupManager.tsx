@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SystemBackup, CenterSettings, Student, Teacher, ClassRoom, TuitionReceipt, Grade } from '../types';
+import { SystemBackup, CenterSettings, Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade } from '../types';
 import {
   Database,
   Download,
@@ -22,6 +22,7 @@ interface BackupManagerProps {
   settings: CenterSettings;
   students?: Student[];
   teachers?: Teacher[];
+  rooms?: Room[];
   classes?: ClassRoom[];
   receipts?: TuitionReceipt[];
   grades?: Grade[];
@@ -35,6 +36,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
   settings,
   students = [],
   teachers = [],
+  rooms = [],
   classes = [],
   receipts = [],
   grades = [],
@@ -56,6 +58,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
         students,
         classes,
         teachers,
+        rooms,
         receipts,
         grades
       });

@@ -49,14 +49,55 @@ import { AuthScreen } from './components/AuthScreen';
 import { UserManagementModal } from './components/UserManagementModal';
 import { profileToAccount, ProfileRow } from './lib/auth';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
+import type { CenterWorkbookData } from './services/excelService';
 
 const ImportExportModal = lazy(() => import('./components/ImportExportModal').then((module) => ({ default: module.ImportExportModal })));
 const BackupManager = lazy(() => import('./components/BackupManager').then((module) => ({ default: module.BackupManager })));
 
+interface CenterDataPayload {
+  settings: CenterSettings;
+  programs: CourseProgram[];
+  teachers: Teacher[];
+  rooms: Room[];
+  classes: ClassRoom[];
+  students: Student[];
+  timetableSlots: TimetableSlot[];
+  grades: Grade[];
+  receipts: TuitionReceipt[];
+  backups: SystemBackup[];
+  activityLogs: ActivityLog[];
+}
+
+const DATA_SCHEMA_VERSION = 'secure-supabase-import-v1';
+const DATA_STORE_KEYS = [
+  'settings',
+  'teachers',
+  'rooms',
+  'classes',
+  'students',
+  'timetableSlots',
+  'grades',
+  'receipts',
+  'backups',
+  'activityLogs'
+] as const;
+
 export default function App() {
   // Persistence Helper with localStorage
+  const ensureDataSchema = () => {
+    try {
+      if (localStorage.getItem('PHUC_PHUC_THINH_DATA_VERSION') === DATA_SCHEMA_VERSION) return;
+      DATA_STORE_KEYS.forEach((key) => localStorage.removeItem(`PHUC_PHUC_THINH_${key}`));
+      localStorage.setItem('PHUC_PHUC_THINH_DATA_VERSION', DATA_SCHEMA_VERSION);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const loadStored = <T,>(key: string, fallback: T): T => {
     try {
+      ensureDataSchema();
+      if (isSupabaseConfigured) return fallback;
       const stored = localStorage.getItem(`PHUC_PHUC_THINH_${key}`);
       return stored ? JSON.parse(stored) : fallback;
     } catch (e) {
@@ -66,6 +107,7 @@ export default function App() {
 
   const saveStored = <T,>(key: string, value: T) => {
     try {
+      if (isSupabaseConfigured) return;
       localStorage.setItem(`PHUC_PHUC_THINH_${key}`, JSON.stringify(value));
     } catch (e) {
       console.error(e);
@@ -79,8 +121,10 @@ export default function App() {
   const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'signed-out' | 'blocked'>(
     isSupabaseConfigured ? 'loading' : 'signed-out'
   );
+  const [isCenterDataHydrated, setIsCenterDataHydrated] = useState(!isSupabaseConfigured);
+  const [canSyncCenterData, setCanSyncCenterData] = useState(false);
 
-  const [programs] = useState<CourseProgram[]>(initialPrograms);
+  const [programs, setPrograms] = useState<CourseProgram[]>(initialPrograms);
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadStored('teachers', initialTeachers));
   const [rooms, setRooms] = useState<Room[]>(() => loadStored('rooms', initialRooms));
   const [classes, setClasses] = useState<ClassRoom[]>(() => loadStored('classes', initialClasses));
@@ -127,6 +171,8 @@ export default function App() {
 
       if (!nextSession) {
         setCurrentUser(null);
+        setIsCenterDataHydrated(!isSupabaseConfigured);
+        setCanSyncCenterData(false);
         setAuthStatus('signed-out');
         return;
       }
@@ -145,7 +191,37 @@ export default function App() {
         return;
       }
 
-      setCurrentUser(profileToAccount(data as ProfileRow, nextSession.user));
+      const account = profileToAccount(data as ProfileRow, nextSession.user);
+      setCurrentUser(account);
+      setIsCenterDataHydrated(false);
+      const { data: centerData, error: centerDataError } = await supabase
+        .from('center_data')
+        .select('payload')
+        .eq('id', 'primary')
+        .maybeSingle();
+
+      if (!isMounted) return;
+      if (!centerDataError) {
+        const payload = centerData?.payload as Partial<CenterDataPayload> | undefined;
+        if (payload) {
+          if (payload.settings) setSettings(payload.settings);
+          if (Array.isArray(payload.programs)) setPrograms(payload.programs);
+          if (Array.isArray(payload.teachers)) setTeachers(payload.teachers);
+          if (Array.isArray(payload.rooms)) setRooms(payload.rooms);
+          if (Array.isArray(payload.classes)) setClasses(payload.classes);
+          if (Array.isArray(payload.students)) setStudents(payload.students);
+          if (Array.isArray(payload.timetableSlots)) setTimetableSlots(payload.timetableSlots);
+          if (Array.isArray(payload.grades)) setGrades(payload.grades);
+          if (Array.isArray(payload.receipts)) setReceipts(payload.receipts);
+          if (Array.isArray(payload.backups)) setBackups(payload.backups);
+          if (Array.isArray(payload.activityLogs)) setActivityLogs(payload.activityLogs);
+        }
+        setCanSyncCenterData(true);
+      } else {
+        console.warn('Không thể tải dữ liệu trung tâm từ Supabase:', centerDataError.message);
+        setCanSyncCenterData(false);
+      }
+      setIsCenterDataHydrated(true);
       setAuthStatus('ready');
     };
 
@@ -159,6 +235,20 @@ export default function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!supabase || !currentUser || !isCenterDataHydrated || !canSyncCenterData) return;
+    const payload: CenterDataPayload = { settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs };
+    const timer = window.setTimeout(() => {
+      void supabase
+        .from('center_data')
+        .upsert({ id: 'primary', payload }, { onConflict: 'id' })
+        .then(({ error }) => {
+          if (error) console.error('Không thể đồng bộ dữ liệu trung tâm:', error.message);
+        });
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs, currentUser, isCenterDataHydrated, canSyncCenterData]);
 
   // Activity Logger
   const addLog = (
@@ -198,7 +288,32 @@ export default function App() {
 
   const handleImportStudents = (newStudentsList: Student[]) => {
     setStudents(prev => [...newStudentsList, ...prev]);
+    setClasses(prev => prev.map((classroom) => ({
+      ...classroom,
+      studentIds: [...classroom.studentIds, ...newStudentsList.filter((student) => student.classId === classroom.id).map((student) => student.id)]
+    })));
     addLog('IMPORT', 'Excel', `Import ${newStudentsList.length} học sinh mới từ file Excel`);
+  };
+
+  const handleImportCenterData = (data: CenterWorkbookData) => {
+    setPrograms(data.programs);
+    setTeachers(data.teachers);
+    setRooms(data.rooms);
+    setClasses(data.classes);
+    setStudents(data.students);
+    setTimetableSlots(data.timetableSlots);
+    setGrades(data.grades);
+    setReceipts(data.receipts);
+    setBackups([]);
+    setActivityLogs(currentUser ? [{
+      id: `LOG_IMPORT_${Date.now()}`,
+      timestamp: new Date().toLocaleString('vi-VN'),
+      userEmail: currentUser.email,
+      userName: currentUser.name,
+      action: 'IMPORT',
+      module: 'Excel',
+      details: `Nhập dữ liệu trung tâm: ${data.classes.length} lớp, ${data.students.length} học sinh, ${data.receipts.length} phiếu thu.`
+    }] : []);
   };
 
   // Teacher CRUD Handlers
@@ -536,6 +651,7 @@ export default function App() {
                 settings={settings}
                 students={students}
                 teachers={teachers}
+                rooms={rooms}
                 classes={classes}
                 receipts={receipts}
                 grades={grades}
@@ -594,11 +710,15 @@ export default function App() {
             onClose={() => setIsImportExportModalOpen(false)}
             students={students}
             teachers={teachers}
+            rooms={rooms}
             classes={classes}
             receipts={receipts}
             grades={grades}
             settings={settings}
+            canSyncCenterData={canSyncCenterData}
+            isOwner={currentUser.role === 'owner'}
             onImportStudents={handleImportStudents}
+            onImportCenterData={handleImportCenterData}
           />
         </Suspense>
       )}
@@ -628,6 +748,7 @@ export default function App() {
                 settings={settings}
                 students={students}
                 teachers={teachers}
+                rooms={rooms}
                 classes={classes}
                 receipts={receipts}
                 grades={grades}

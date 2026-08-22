@@ -28,7 +28,7 @@ export interface Student {
   name: string;
   avatar?: string;
   dob: string;
-  gender: 'Nam' | 'Nữ';
+  gender: 'Nam' | 'Nữ' | 'Chưa xác định';
   school: string;
   gradeLevel: string; // Khối 1..12
   programId: string;
@@ -122,7 +122,7 @@ export interface TuitionReceipt {
   debtAmount: number;
   paymentDate: string;
   collectorName: string;
-  paymentMethod: 'Tiền mặt' | 'Chuyển khoản' | 'Thẻ';
+  paymentMethod: 'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định';
   notes?: string;
 }
 
