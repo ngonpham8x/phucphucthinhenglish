@@ -20,6 +20,7 @@ interface TimetableManagerProps {
   classes: ClassRoom[];
   teachers: Teacher[];
   rooms: Room[];
+  isOwner: boolean;
   onAddSlot: (slot: TimetableSlot) => void;
   onUpdateSlot: (slot: TimetableSlot) => void;
   onDeleteSlot: (id: string) => void;
@@ -30,6 +31,7 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
   classes,
   teachers,
   rooms,
+  isOwner,
   onAddSlot,
   onUpdateSlot,
   onDeleteSlot
@@ -40,6 +42,7 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const canEdit = isOwner;
 
   const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
   const timeSlots = ['17:30 - 19:00', '18:00 - 19:30', '19:30 - 21:00'];
@@ -146,13 +149,15 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={handleOpenAdd}
-            className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white font-bold rounded-xl text-xs transition-colors shadow-sm flex items-center gap-1.5"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            Tạo Ca Học
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleOpenAdd}
+              className="px-4 py-2 bg-red-800 hover:bg-red-900 text-white font-bold rounded-xl text-xs transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              Tạo Ca Học
+            </button>
+          )}
         </div>
       </div>
 
@@ -227,13 +232,15 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
                                   >
                                     <div className="font-bold text-red-900 flex items-center justify-between">
                                       <span className="truncate">{cls?.name || 'Lớp học'}</span>
-                                      <button
-                                        onClick={() => onDeleteSlot(slot.id)}
-                                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 transition-opacity"
-                                        title="Xóa ca"
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </button>
+                                      {canEdit && (
+                                        <button
+                                          onClick={() => onDeleteSlot(slot.id)}
+                                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 transition-opacity"
+                                          title="Xóa ca"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      )}
                                     </div>
 
                                     <div className="text-[10px] text-slate-700 mt-1 space-y-0.5">

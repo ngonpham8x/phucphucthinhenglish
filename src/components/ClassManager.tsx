@@ -46,7 +46,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
   const [editingClass, setEditingClass] = useState<ClassRoom | null>(null);
   const [viewingClassStudents, setViewingClassStudents] = useState<ClassRoom | null>(null);
 
-  const canEdit = isOwner || permissions.student.edit;
+  // Quản lý lớp thay đổi lịch, phòng và phân công nên chỉ Chủ trung tâm được sửa.
+  const canEdit = isOwner;
 
   const handleOpenAdd = () => {
     setEditingClass({

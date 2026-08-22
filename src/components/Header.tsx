@@ -27,7 +27,6 @@ interface HeaderProps {
   settings: CenterSettings;
   onOpenLogin: () => void;
   onOpenUserManagement: () => void;
-  onOpenSyncModal: () => void;
   onOpenBackupModal: () => void;
   onOpenSettingsModal: () => void;
   onOpenPwaInstall?: () => void;
@@ -75,71 +74,9 @@ export const Header: React.FC<HeaderProps> = ({
   const [showMessages, setShowMessages] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<SystemMessage | null>(null);
 
-  // Mock notifications list
-  const [notifications, setNotifications] = useState<SystemNotification[]>([
-    {
-      id: 'N1',
-      title: 'Đã thu học phí mới',
-      desc: 'Học viên Lê Hoàng Phúc vừa đóng 3.800.000đ học phí Lớp Tiếng Anh 12 - Global Success.',
-      time: '2 phút trước',
-      read: false,
-      type: 'success'
-    },
-    {
-      id: 'N2',
-      title: 'Cập nhật lịch học',
-      desc: 'Lớp Toán & Tiếng Việt Lớp 3 (Trường QT IGC) chuyển lịch học sang phòng P102.',
-      time: '15 phút trước',
-      read: false,
-      type: 'info'
-    },
-    {
-      id: 'N3',
-      title: 'Sao lưu tự động thành công',
-      desc: 'Hệ thống vừa tự động tạo bản sao lưu dữ liệu toàn trung tâm lúc 08:00 AM.',
-      time: '1 giờ trước',
-      read: false,
-      type: 'info'
-    },
-    {
-      id: 'N4',
-      title: 'Đồng bộ Google Sheets',
-      desc: 'Đã hoàn tất đồng bộ 10 học viên mới sang bảng MasterData Google Sheets.',
-      time: '2 giờ trước',
-      read: false,
-      type: 'success'
-    },
-    {
-      id: 'N5',
-      title: 'Nhắc nhở học phí còn nợ',
-      desc: 'Hiện có 32 học viên đang còn nợ học phí cần được liên hệ nhắc thu phí.',
-      time: '3 giờ trước',
-      read: false,
-      type: 'warning'
-    }
-  ]);
-
-  // Mock messages list
-  const [messages, setMessages] = useState<SystemMessage[]>([
-    {
-      id: 'M1',
-      sender: 'PH Nguyễn Thị Kim Thanh',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-      subject: 'Xin phép nghỉ học cho bé Khánh Ngọc',
-      content: 'Chào trung tâm, em Khánh Ngọc (Lớp Toán & Tiếng Việt Lớp 3) xin phép nghỉ học buổi chiều Thứ 4 này do bận đi khám răng định kỳ. Nhờ cô giáo gửi giúp bài tập qua Zalo cho bé ôn tập ở nhà. Cảm ơn trung tâm!',
-      time: '10 phút trước',
-      read: false
-    },
-    {
-      id: 'M2',
-      sender: 'GV Trần Thị B (IELTS)',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      subject: 'Cập nhật điểm thi giữa khóa Lớp IELTS-AC',
-      content: 'Thầy/Cô quản lý ơi, em đã hoàn tất chấm điểm thi giữa kỳ cho 15 bạn học sinh lớp IELTS Academic. Đã cập nhật xong lên hệ thống, nhờ bộ phận Giáo vụ kiểm tra và duyệt bảng điểm giúp em.',
-      time: '45 phút trước',
-      read: false
-    }
-  ]);
+  // Chưa tích hợp hệ thống thông báo/tin nhắn thực tế: không hiển thị dữ liệu mẫu.
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [messages, setMessages] = useState<SystemMessage[]>([]);
 
   const unreadNotifsCount = notifications.filter(n => !n.read).length;
   const unreadMsgCount = messages.filter(m => !m.read).length;

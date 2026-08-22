@@ -84,7 +84,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const canAdd = isOwner || permissions.student.add;
   const canEdit = isOwner || permissions.student.edit;
   const canDelete = isOwner || permissions.student.delete;
-  const canExport = isOwner || (permissions.student?.export ?? false) || (permissions.excel?.export ?? false);
+  // Báo cáo workbook có cả dữ liệu học phí, nên chỉ quyền Excel mới được mở.
+  const canExport = isOwner || permissions.excel.import || permissions.excel.export;
 
   // Filtered list
   const filteredStudents = students.filter(s => {

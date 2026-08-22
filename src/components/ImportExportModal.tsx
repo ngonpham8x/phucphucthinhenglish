@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult } from '../services/excelService';
-import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings } from '../types';
+import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings, StaffPermissions } from '../types';
 import { FileSpreadsheet, FileUp, FileDown, CheckCircle2, AlertTriangle, Download, Upload, X, RefreshCw } from 'lucide-react';
 
 interface ImportExportModalProps {
@@ -15,6 +15,7 @@ interface ImportExportModalProps {
   settings: CenterSettings;
   canSyncCenterData: boolean;
   isOwner: boolean;
+  permissions: StaffPermissions;
   onImportStudents: (newStudents: Student[]) => void;
   onImportCenterData: (data: CenterWorkbookData) => void;
 }
@@ -31,10 +32,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   settings,
   canSyncCenterData,
   isOwner,
+  permissions,
   onImportStudents,
   onImportCenterData
 }) => {
-  const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
+  const canImport = isOwner || permissions.excel.import;
+  const canExport = isOwner || permissions.excel.export;
+  const [activeTab, setActiveTab] = useState<'export' | 'import'>(canExport ? 'export' : 'import');
   const [isExporting, setIsExporting] = useState(false);
   const [validationResult, setValidationResult] = useState<ImportValidationResult | null>(null);
   const [isImportingSuccess, setIsImportingSuccess] = useState(false);
@@ -46,6 +50,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   if (!isOpen) return null;
 
   const handleExportExcel = async () => {
+    if (!canExport) return;
     setIsExporting(true);
     try {
       const blob = await generateMasterExcelWorkbook({
@@ -75,6 +80,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   };
 
   const handleSelectedFile = async (file: File) => {
+    if (!canImport) return;
     setFileName(file.name);
 
     try {
@@ -134,7 +140,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   };
 
   const handleConfirmImport = () => {
-    if (!validationResult || validationResult.validRows.length === 0) return;
+    if (!canImport || !validationResult || validationResult.validRows.length === 0) return;
 
     const fallbackClass = classes.find((item) => item.id === fallbackClassId);
     if (!fallbackClass) return;
@@ -193,25 +199,25 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
         {/* Tab switch */}
         <div className="flex bg-slate-100 p-1 rounded-xl mb-5">
-          <button
+          {canExport && <button
             onClick={() => setActiveTab('export')}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'export' ? 'bg-red-800 text-white shadow-xs' : 'text-slate-600'
             }`}
           >
             <FileDown className="w-4 h-4 text-amber-400" /> Xuất File Excel (Export)
-          </button>
-          <button
+          </button>}
+          {canImport && <button
             onClick={() => setActiveTab('import')}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'import' ? 'bg-red-800 text-white shadow-xs' : 'text-slate-600'
             }`}
           >
             <FileUp className="w-4 h-4 text-amber-400" /> Nhập File Excel (Import)
-          </button>
+          </button>}
         </div>
 
-        {activeTab === 'export' ? (
+        {activeTab === 'export' && canExport ? (
           <div className="space-y-4 text-xs">
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-slate-700">
               <div className="font-bold text-slate-900 text-sm">Cấu trúc Workbook ExcelJS Xuất Ra:</div>

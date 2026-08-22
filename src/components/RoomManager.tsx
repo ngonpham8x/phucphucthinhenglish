@@ -35,7 +35,8 @@ export const RoomManager: React.FC<RoomManagerProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
 
-  const canEdit = isOwner || permissions.student.edit;
+  // Phòng học là cấu hình dùng chung; chỉ Chủ trung tâm có thể thay đổi.
+  const canEdit = isOwner;
 
   const handleOpenAdd = () => {
     setEditingRoom({

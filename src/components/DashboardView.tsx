@@ -22,8 +22,13 @@ const monthLabel = (month: string) => month ? `Tháng ${month.slice(5)}/${month.
 export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers, classes, rooms, receipts, programs, currentUser, onNavigateTab }) => {
   const [selectedDetail, setSelectedDetail] = useState<DashboardDetailType | null>(null);
   const isOwner = currentUser.role === 'owner';
-  const showRevenue = isOwner || (currentUser.permissions.report?.revenue ?? false);
-  const showDebt = isOwner || (currentUser.permissions.tuition?.showDebt ?? false);
+  const canViewStudents = isOwner || currentUser.permissions.student.view;
+  const canViewTeachers = isOwner || currentUser.permissions.teacher.view;
+  const canViewClasses = canViewStudents || canViewTeachers;
+  const canViewRooms = canViewClasses;
+  const canViewTuition = isOwner || currentUser.permissions.tuition.view;
+  const showRevenue = isOwner || (currentUser.permissions.report?.view && currentUser.permissions.report?.revenue);
+  const showDebt = isOwner || (canViewTuition && currentUser.permissions.tuition.showDebt);
   const activeStudents = students.filter((student) => student.status === 'active');
   const reservedStudents = students.filter((student) => student.status === 'reserved');
   const droppedStudents = students.filter((student) => student.status === 'dropped');
@@ -37,39 +42,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
   const programById = new Map(programs.map((program) => [program.id, program]));
 
   const receiptMonths = receipts.map((receipt) => receipt.paymentDate.slice(0, 7)).filter((month): month is string => Boolean(month));
-  const monthlyRevenueData = [...new Set<string>(receiptMonths)]
+  const monthlyRevenueData = (showRevenue ? [...new Set<string>(receiptMonths)] : [])
     .sort()
     .map((month) => ({ month: monthLabel(month), amount: receipts.filter((receipt) => receipt.paymentDate.startsWith(month)).reduce((sum, receipt) => sum + receipt.paidAmount, 0) }));
-  const programData = programs.map((program, index) => ({
+  const programData = (canViewStudents ? programs : []).map((program, index) => ({
     name: program.name,
     value: students.filter((student) => student.programId === program.id).length,
     color: COLORS[index % COLORS.length]
   })).filter((item) => item.value > 0);
-  const tuitionStatusData = [
+  const tuitionStatusData = (showDebt ? [
     { name: 'Đã đóng đủ', value: paidStudents.length, color: '#059669' },
     { name: 'Còn nợ / chưa đóng', value: debtStudents.length, color: '#dc2626' },
     { name: 'Bảo lưu', value: reservedStudents.length, color: '#d97706' }
-  ].filter((item) => item.value > 0);
-  const classMonthlyData = classes.map((classroom) => ({
+  ] : []).filter((item) => item.value > 0);
+  const classMonthlyData = (showRevenue ? classes : []).map((classroom) => ({
     classroom,
     collected: receipts.filter((receipt) => receipt.classId === classroom.id && receipt.paymentDate.startsWith(latestReceiptMonth)).reduce((sum, receipt) => sum + receipt.paidAmount, 0),
     debt: receipts.filter((receipt) => receipt.classId === classroom.id).reduce((sum, receipt) => sum + receipt.debtAmount, 0)
   })).sort((a, b) => b.collected - a.collected || b.debt - a.debt);
-  const studentRows = students.slice(0, 8).map((student) => ({
+  const studentRows = (canViewStudents ? students : []).slice(0, 8).map((student) => ({
     ...student,
     classroom: classById.get(student.classId),
     program: programById.get(student.programId),
     debt: receipts.filter((receipt) => receipt.studentId === student.id).reduce((sum, receipt) => sum + receipt.debtAmount, 0)
   }));
 
-  const Card = ({ label, value, icon: Icon, color, detail, subtitle }: { label: string; value: string | number; icon: React.ElementType; color: string; detail: DashboardDetailType; subtitle?: string }) => (
-    <button onClick={() => setSelectedDetail(detail)} className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-600">
-      <div className="flex items-center justify-between gap-3">
-        <div><p className="text-xs font-semibold text-slate-500">{label}</p><p className="mt-1 text-xl font-extrabold text-slate-900">{value}</p>{subtitle && <p className="mt-1 text-[11px] text-slate-500">{subtitle}</p>}</div>
-        <span className={`grid h-11 w-11 place-items-center rounded-xl ${color}`}><Icon className="h-5 w-5" /></span>
-      </div>
-    </button>
-  );
+  const Card = ({ label, value, icon: Icon, color, detail, subtitle }: { label: string; value: string | number; icon: React.ElementType; color: string; detail: DashboardDetailType; subtitle?: string }) => {
+    const canOpen = detail === 'students' || detail === 'active' || detail === 'dropped'
+      ? canViewStudents
+      : detail === 'teachers'
+        ? canViewTeachers
+        : detail === 'classes'
+          ? canViewClasses
+          : detail === 'rooms'
+            ? canViewRooms
+            : detail === 'revenue' || detail === 'debt' || detail === 'paid'
+              ? showRevenue || showDebt
+              : false;
+    const content = <div className="flex items-center justify-between gap-3">
+      <div><p className="text-xs font-semibold text-slate-500">{label}</p><p className="mt-1 text-xl font-extrabold text-slate-900">{canOpen ? value : '—'}</p>{canOpen && subtitle && <p className="mt-1 text-[11px] text-slate-500">{subtitle}</p>}</div>
+      <span className={`grid h-11 w-11 place-items-center rounded-xl ${color}`}><Icon className="h-5 w-5" /></span>
+    </div>;
+    const className = 'w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs';
+    return canOpen
+      ? <button onClick={() => setSelectedDetail(detail)} className={`${className} transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-red-600`}>{content}</button>
+      : <div className={className}>{content}</div>;
+  };
 
   return (
     <div className="space-y-5 pb-8">

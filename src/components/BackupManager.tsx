@@ -3,7 +3,6 @@ import { SystemBackup, CenterSettings, Student, Teacher, ClassRoom, Room, Tuitio
 import {
   Database,
   Download,
-  RefreshCw,
   Mail,
   CheckCircle2,
   History,
@@ -26,8 +25,6 @@ interface BackupManagerProps {
   classes?: ClassRoom[];
   receipts?: TuitionReceipt[];
   grades?: Grade[];
-  onTriggerBackup: (type: 'Thủ công' | 'Tự động Hằng Ngày' | 'Tự động Hằng Tuần') => void;
-  onRestoreBackup: (backupId: string) => void;
   onOpenImportExportModal?: () => void;
 }
 
@@ -40,11 +37,8 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
   classes = [],
   receipts = [],
   grades = [],
-  onTriggerBackup,
-  onRestoreBackup,
   onOpenImportExportModal
 }) => {
-  const [isProcessingBackup, setIsProcessingBackup] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -126,38 +120,10 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
     }
   };
 
-  // 3. Trigger manual system backup snapshot
-  const handleManualBackup = () => {
-    setIsProcessingBackup(true);
-    setStatusMessage(null);
-    setTimeout(() => {
-      onTriggerBackup('Thủ công');
-      setIsProcessingBackup(false);
-      setStatusMessage('Đã tạo bản sao lưu ZIP PostgreSQL + Excel mới nhất & gửi Email cho Admin thành công!');
-    }, 1000);
-  };
-
-  // 4. Download specific backup item
+  // Bản ghi sao lưu cũ chỉ có thể tải lại dưới dạng bản xuất hiện thời.
   const handleDownloadBackup = (bk: SystemBackup) => {
-    const dummyBackupContent = JSON.stringify({
-      version: '2.5.0',
-      timestamp: bk.timestamp,
-      center: settings.name,
-      database: 'PostgreSQL_PhucPhucThinh',
-      status: 'verified',
-      studentsCount: students.length,
-      classesCount: classes.length
-    }, null, 2);
-
-    const blob = new Blob([dummyBackupContent], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = bk.filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    void bk;
+    handleExportSystemJson();
   };
 
   return (
@@ -173,19 +139,12 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
             Quản Lý Sao Lưu & Xuất Báo Cáo Toàn Bộ Hệ Thống
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            Hệ thống hỗ trợ tự động lưu trữ PostgreSQL hằng ngày, nén file ZIP, gửi Email cho Admin và cho phép xuất toàn bộ báo cáo Excel / JSON chỉ bằng 1 cú nhấp chuột.
+            Tải xuống bản sao dữ liệu hiện tại dưới dạng Excel hoặc JSON. Sao lưu máy chủ tự động và gửi email chỉ hiển thị khi đã tích hợp dịch vụ phía máy chủ.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={handleManualBackup}
-            disabled={isProcessingBackup}
-            className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-md transition-all active:scale-95"
-          >
-            <RefreshCw className={`w-4 h-4 text-slate-950 ${isProcessingBackup ? 'animate-spin' : ''}`} />
-            {isProcessingBackup ? 'Đang tạo Sao Lưu ZIP...' : 'Tạo Bản Sao Lưu Thủ Công'}
-          </button>
+          <span className="rounded-xl border border-amber-300/40 bg-amber-400/10 px-3 py-2 text-xs font-bold text-amber-200">Chọn Excel hoặc JSON bên dưới để sao lưu</span>
         </div>
       </div>
 
@@ -287,25 +246,25 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
           <div className="font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-            <Shield className="w-4 h-4 text-emerald-600" /> Tự Động Hằng Ngày
+            <Shield className="w-4 h-4 text-emerald-600" /> Sao Lưu Thủ Công
           </div>
-          <div className="text-slate-500">Khởi chạy lúc 00:00 hằng ngày, nén ZIP toàn bộ CSDL PostgreSQL.</div>
+          <div className="text-slate-500">Xuất Excel hoặc JSON từ dữ liệu hiện có để lưu giữ tại nơi an toàn do trung tâm quản lý.</div>
         </div>
 
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
           <div className="font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-            <Mail className="w-4 h-4 text-blue-600" /> Tự Động Gửi Email Admin
+            <Mail className="w-4 h-4 text-blue-600" /> Email Báo Cáo
           </div>
           <div className="text-slate-500">
-            Gửi file đính kèm báo cáo & backup tới <strong>{settings.adminReportEmail || 'admin@phucphucthinh.edu.vn'}</strong> mỗi tuần.
+            Chưa có máy chủ gửi email tự động. Email nhận báo cáo đã cấu hình: <strong>{settings.adminReportEmail || 'Chưa cấu hình'}</strong>.
           </div>
         </div>
 
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
           <div className="font-bold text-slate-900 flex items-center gap-1.5 mb-1">
-            <History className="w-4 h-4 text-amber-600" /> Giữ 30 Bản Gần Nhất
+            <History className="w-4 h-4 text-amber-600" /> Lịch Sử Bản Xuất
           </div>
-          <div className="text-slate-500">Tự động xoay vòng xóa bản sao lưu cũ quá 30 ngày để tiết kiệm dung lượng.</div>
+          <div className="text-slate-500">Lịch sử sao lưu máy chủ chưa được tích hợp; hãy lưu các tệp tải về theo quy trình của trung tâm.</div>
         </div>
       </div>
 
@@ -313,7 +272,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-800 text-slate-200 font-bold text-xs uppercase flex items-center justify-between">
           <span>Lịch Sử 30 Bản Sao Lưu Gần Nhất ({backups.length})</span>
-          <span className="text-[10px] text-amber-400 font-medium">Bản sao lưu lưu trên Cloud Run & Email</span>
+          <span className="text-[10px] text-amber-400 font-medium">Chỉ hiển thị bản xuất đã ghi nhận</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -332,7 +291,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
               {backups.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-400">
-                    Chưa có bản sao lưu nào. Hãy bấm "Tạo Bản Sao Lưu Thủ Công".
+                    Chưa có bản sao lưu máy chủ. Hãy xuất Excel hoặc JSON để lưu tệp sao lưu.
                   </td>
                 </tr>
               ) : (
@@ -364,17 +323,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
                           <Download className="w-3.5 h-3.5 text-blue-600" /> Download
                         </button>
 
-                        <button
-                          onClick={() => {
-                            if (confirm(`Khôi phục dữ liệu hệ thống từ bản ${bk.filename}?`)) {
-                              onRestoreBackup(bk.id);
-                              alert('Đã phục hồi dữ liệu hệ thống thành công!');
-                            }
-                          }}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-[11px] transition-colors"
-                        >
-                          Restore
-                        </button>
+                        <span className="px-2.5 py-1 text-[11px] font-semibold text-slate-400">Khôi phục cần tệp JSON</span>
                       </div>
                     </td>
                   </tr>

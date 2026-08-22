@@ -41,7 +41,6 @@ import { GradeManager } from './components/GradeManager';
 import { TuitionManager } from './components/TuitionManager';
 import { ReportView } from './components/ReportView';
 import { ActivityLogView } from './components/ActivityLogView';
-import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { SystemSettingsModal } from './components/SystemSettingsModal';
 import { LoginModal } from './components/LoginModal';
 import { PwaInstallModal } from './components/PwaInstallModal';
@@ -81,6 +80,26 @@ const DATA_STORE_KEYS = [
   'backups',
   'activityLogs'
 ] as const;
+
+const canAccessTab = (tab: string, user: UserAccount) => {
+  if (user.role === 'owner') return true;
+  const permissions = user.permissions;
+
+  switch (tab) {
+    case 'dashboard': return true;
+    case 'students': return permissions.student.view;
+    case 'teachers': return permissions.teacher.view;
+    case 'classes': return permissions.student.view;
+    case 'rooms':
+    case 'timetable':
+    case 'teacher-schedule': return permissions.student.view || permissions.teacher.view;
+    case 'grades': return permissions.grade.view;
+    case 'tuition': return permissions.tuition.view;
+    case 'reports': return permissions.report.view && permissions.report.revenue;
+    case 'excel-import-export': return permissions.excel.import || permissions.excel.export;
+    default: return false;
+  }
+};
 
 export default function App() {
   // Persistence Helper with localStorage
@@ -123,8 +142,9 @@ export default function App() {
   );
   const [isCenterDataHydrated, setIsCenterDataHydrated] = useState(!isSupabaseConfigured);
   const [canSyncCenterData, setCanSyncCenterData] = useState(false);
+  const [hasCenterData, setHasCenterData] = useState(false);
 
-  const [programs, setPrograms] = useState<CourseProgram[]>(initialPrograms);
+  const [programs, setPrograms] = useState<CourseProgram[]>(() => isSupabaseConfigured ? [] : initialPrograms);
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadStored('teachers', initialTeachers));
   const [rooms, setRooms] = useState<Room[]>(() => loadStored('rooms', initialRooms));
   const [classes, setClasses] = useState<ClassRoom[]>(() => loadStored('classes', initialClasses));
@@ -156,7 +176,6 @@ export default function App() {
   // Modals state
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
   const [isUserManagementOpen, setIsUserManagementOpen] = useState<boolean>(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
   const [isImportExportModalOpen, setIsImportExportModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
@@ -186,6 +205,7 @@ export default function App() {
         setCurrentUser(null);
         setIsCenterDataHydrated(!isSupabaseConfigured);
         setCanSyncCenterData(false);
+        setHasCenterData(false);
         setAuthStatus('signed-out');
         return;
       }
@@ -207,6 +227,7 @@ export default function App() {
       const account = profileToAccount(data as ProfileRow, nextSession.user);
       setCurrentUser(account);
       setIsCenterDataHydrated(false);
+      setHasCenterData(false);
       const { data: centerData, error: centerDataError } = await supabase
         .from('center_data')
         .select('payload')
@@ -216,7 +237,8 @@ export default function App() {
       if (!isMounted) return;
       if (!centerDataError) {
         const payload = centerData?.payload as Partial<CenterDataPayload> | undefined;
-        if (payload) {
+        const hasPayload = Boolean(payload && typeof payload === 'object' && Object.keys(payload).length > 0);
+        if (hasPayload && payload) {
           if (payload.settings) setSettings(payload.settings);
           if (Array.isArray(payload.programs)) setPrograms(payload.programs);
           if (Array.isArray(payload.teachers)) setTeachers(payload.teachers);
@@ -230,9 +252,11 @@ export default function App() {
           if (Array.isArray(payload.activityLogs)) setActivityLogs(payload.activityLogs);
         }
         setCanSyncCenterData(true);
+        setHasCenterData(hasPayload);
       } else {
         console.warn('Không thể tải dữ liệu trung tâm từ Supabase:', centerDataError.message);
         setCanSyncCenterData(false);
+        setHasCenterData(false);
       }
       setIsCenterDataHydrated(true);
       setAuthStatus('ready');
@@ -250,7 +274,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!supabase || !currentUser || !isCenterDataHydrated || !canSyncCenterData) return;
+    if (!supabase || !currentUser || !isCenterDataHydrated || !canSyncCenterData || !hasCenterData) return;
     const payload: CenterDataPayload = { settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs };
     const timer = window.setTimeout(() => {
       void supabase
@@ -261,7 +285,7 @@ export default function App() {
         });
     }, 750);
     return () => window.clearTimeout(timer);
-  }, [settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs, currentUser, isCenterDataHydrated, canSyncCenterData]);
+  }, [settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs, currentUser, isCenterDataHydrated, canSyncCenterData, hasCenterData]);
 
   // Activity Logger
   const addLog = (
@@ -318,6 +342,7 @@ export default function App() {
     setGrades(data.grades);
     setReceipts(data.receipts);
     setBackups([]);
+    setHasCenterData(true);
     setActivityLogs(currentUser ? [{
       id: `LOG_IMPORT_${Date.now()}`,
       timestamp: new Date().toLocaleString('vi-VN'),
@@ -427,24 +452,6 @@ export default function App() {
     addLog('THÊM', 'Học phí', `Lập phiếu thu ${r.code} số tiền ${r.paidAmount.toLocaleString('vi-VN')} đ`);
   };
 
-  // Backup Trigger
-  const handleTriggerBackup = (type: 'Thủ công' | 'Tự động Hằng Ngày' | 'Tự động Hằng Tuần') => {
-    const newBk: SystemBackup = {
-      id: `BK_${Date.now()}`,
-      filename: `PhucPhucThinh_${type === 'Thủ công' ? 'Manual' : 'Auto'}_${new Date().toISOString().replace(/[:-]/g, '').split('.')[0]}.zip`,
-      timestamp: new Date().toLocaleString('vi-VN'),
-      sizeKb: Math.floor(Math.random() * 500) + 1200,
-      type,
-      status: 'Thành công'
-    };
-    setBackups(prev => [newBk, ...prev.slice(0, 29)]); // Keep max 30 records
-    addLog('BACKUP', 'Sao lưu', `Tạo bản sao lưu ZIP hệ thống (${type})`);
-  };
-
-  const handleRestoreBackup = (backupId: string) => {
-    addLog('RESTORE', 'Phục hồi', `Phục hồi dữ liệu hệ thống thành công từ bản backup ${backupId}`);
-  };
-
   const handleLogout = async () => {
     if (supabase) await supabase.auth.signOut();
     setCurrentUser(null);
@@ -475,6 +482,10 @@ export default function App() {
 
   if (!currentUser || !session) return <AuthScreen />;
 
+  const navigateTo = (tab: string) => {
+    if (canAccessTab(tab, currentUser)) setActiveTab(tab);
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans antialiased text-slate-900">
       {/* Top Header Navigation */}
@@ -483,7 +494,6 @@ export default function App() {
         settings={settings}
         onOpenLogin={() => setIsLoginOpen(true)}
         onOpenUserManagement={() => setIsUserManagementOpen(true)}
-        onOpenSyncModal={() => setIsSyncModalOpen(true)}
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenPwaInstall={() => setIsPwaModalOpen(true)}
@@ -499,7 +509,7 @@ export default function App() {
         {/* Sidebar Navigation */}
         <Sidebar
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={navigateTo}
           collapsed={sidebarCollapsed}
           setCollapsed={setSidebarCollapsed}
           currentUser={currentUser}
@@ -517,7 +527,7 @@ export default function App() {
               receipts={receipts}
               programs={programs}
               currentUser={currentUser}
-              onNavigateTab={(tab) => setActiveTab(tab)}
+              onNavigateTab={navigateTo}
             />
           )}
 
@@ -583,6 +593,7 @@ export default function App() {
               classes={classes}
               teachers={teachers}
               rooms={rooms}
+              isOwner={currentUser.role === 'owner'}
               onAddSlot={handleAddSlot}
               onUpdateSlot={handleUpdateSlot}
               onDeleteSlot={handleDeleteSlot}
@@ -622,19 +633,6 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'google-sheets' && (
-            <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs">
-              <h3 className="font-bold text-lg text-slate-900 mb-2">Google Sheets Sync Engine</h3>
-              <p className="text-xs text-slate-500 mb-4">Trạng thái kết nối Google Sheets tự động</p>
-              <button
-                onClick={() => setIsSyncModalOpen(true)}
-                className="px-4 py-2 bg-emerald-700 text-white rounded-xl font-bold text-xs"
-              >
-                Mở Cấu Hình & Đồng Bộ
-              </button>
-            </div>
-          )}
-
           {activeTab === 'excel-import-export' && (
             <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs">
               <h3 className="font-bold text-lg text-slate-900 mb-2">Import / Export File ExcelJS</h3>
@@ -668,8 +666,6 @@ export default function App() {
                 classes={classes}
                 receipts={receipts}
                 grades={grades}
-                onTriggerBackup={handleTriggerBackup}
-                onRestoreBackup={handleRestoreBackup}
                 onOpenImportExportModal={() => setIsImportExportModalOpen(true)}
               />
             </Suspense>
@@ -708,14 +704,6 @@ export default function App() {
         accessToken={session.access_token}
       />
 
-      <GoogleSheetsModal
-        isOpen={isSyncModalOpen}
-        onClose={() => setIsSyncModalOpen(false)}
-        config={settings.sheetsConfig}
-        onSaveConfig={(cfg) => setSettings({ ...settings, sheetsConfig: cfg })}
-        onManualSync={() => addLog('ĐỒNG BỘ', 'Google Sheets', 'Đồng bộ dữ liệu 2 chiều thành công với Google Sheets')}
-      />
-
       {isImportExportModalOpen && (
         <Suspense fallback={null}>
           <ImportExportModal
@@ -730,6 +718,7 @@ export default function App() {
             settings={settings}
             canSyncCenterData={canSyncCenterData}
             isOwner={currentUser.role === 'owner'}
+            permissions={currentUser.permissions}
             onImportStudents={handleImportStudents}
             onImportCenterData={handleImportCenterData}
           />
@@ -765,8 +754,6 @@ export default function App() {
                 classes={classes}
                 receipts={receipts}
                 grades={grades}
-                onTriggerBackup={handleTriggerBackup}
-                onRestoreBackup={handleRestoreBackup}
                 onOpenImportExportModal={() => setIsImportExportModalOpen(true)}
               />
             </Suspense>

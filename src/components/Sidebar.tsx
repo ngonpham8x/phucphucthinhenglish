@@ -48,14 +48,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: t('dashboard'), icon: LayoutDashboard, visible: true, iconColor: 'text-blue-600' },
     { id: 'students', label: t('students'), icon: Users, visible: isOwner || perms.student.view, iconColor: 'text-emerald-600' },
     { id: 'teachers', label: t('teachers'), icon: GraduationCap, visible: isOwner || perms.teacher.view, iconColor: 'text-indigo-600' },
-    { id: 'classes', label: t('classes'), icon: BookOpen, visible: true, iconColor: 'text-amber-600' },
-    { id: 'rooms', label: t('rooms'), icon: DoorOpen, visible: true, iconColor: 'text-rose-600' },
-    { id: 'timetable', label: t('timetable'), icon: CalendarDays, visible: true, iconColor: 'text-purple-600' },
-    { id: 'teacher-schedule', label: 'Lịch giáo viên', icon: CalendarCheck, visible: true, iconColor: 'text-cyan-600' },
+    { id: 'classes', label: t('classes'), icon: BookOpen, visible: isOwner || perms.student.view, iconColor: 'text-amber-600' },
+    { id: 'rooms', label: t('rooms'), icon: DoorOpen, visible: isOwner || perms.student.view || perms.teacher.view, iconColor: 'text-rose-600' },
+    { id: 'timetable', label: t('timetable'), icon: CalendarDays, visible: isOwner || perms.student.view || perms.teacher.view, iconColor: 'text-purple-600' },
+    { id: 'teacher-schedule', label: 'Lịch giáo viên', icon: CalendarCheck, visible: isOwner || perms.student.view || perms.teacher.view, iconColor: 'text-cyan-600' },
     { id: 'grades', label: t('grades'), icon: XCircle, visible: isOwner || perms.grade.view, iconColor: 'text-orange-600' },
     { id: 'tuition', label: t('tuition'), icon: DollarSign, visible: isOwner || perms.tuition.view, iconColor: 'text-emerald-700' },
     { id: 'reports', label: t('reports'), icon: BarChart3, visible: isOwner || (perms.report?.view && perms.report?.revenue), iconColor: 'text-indigo-700' },
-    { id: 'google-sheets', label: t('sheets'), icon: FileSpreadsheet, visible: isOwner, iconColor: 'text-emerald-600' },
+    // Đồng bộ Google Sheets cần OAuth/API phía máy chủ; ẩn tới khi tích hợp thật.
+    { id: 'google-sheets', label: t('sheets'), icon: FileSpreadsheet, visible: false, iconColor: 'text-emerald-600' },
     { id: 'excel-import-export', label: t('excel'), icon: FileDown, visible: isOwner || perms.excel.import || perms.excel.export, iconColor: 'text-teal-600' },
     { id: 'backups', label: t('backups'), icon: CloudUpload, visible: isOwner, iconColor: 'text-sky-600' },
     { id: 'settings', label: t('settings'), icon: Settings, visible: isOwner, iconColor: 'text-slate-600' },
@@ -139,5 +140,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
-
-
