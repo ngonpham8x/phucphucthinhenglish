@@ -14,7 +14,7 @@ export const Logo: React.FC<LogoProps> = ({ className = '', size = 48, showText 
         src={logoImg}
         onError={(e) => {
           // Fallback to static public path if needed
-          e.currentTarget.src = '/logo.png';
+          e.currentTarget.src = '/phuc-phuc-thinh-logo.png';
         }}
         alt="Phúc Phúc Thịnh English Logo"
         style={{ width: `${size}px`, height: `${size}px` }}
@@ -35,4 +35,3 @@ export const Logo: React.FC<LogoProps> = ({ className = '', size = 48, showText 
     </div>
   );
 };
-
