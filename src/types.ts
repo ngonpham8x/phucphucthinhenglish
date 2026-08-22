@@ -1,0 +1,167 @@
+export type UserRole = 'owner' | 'staff';
+
+export interface StaffPermissions {
+  student: { view: boolean; add: boolean; edit: boolean; delete: boolean; export: boolean };
+  teacher: { view: boolean; edit: boolean; delete: boolean };
+  tuition: { view: boolean; collect: boolean; delete: boolean; showDebt: boolean };
+  grade: { view: boolean; edit: boolean };
+  excel: { import: boolean; export: boolean };
+  report: { view: boolean; revenue: boolean };
+}
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  role: UserRole;
+  active: boolean;
+  permissions: StaffPermissions;
+}
+
+export type StudentStatus = 'active' | 'reserved' | 'dropped'; // Đang học, Bảo lưu, Nghỉ học
+export type FeeStatus = 'paid' | 'unpaid' | 'debt' | 'partial';
+
+export interface Student {
+  id: string;
+  code: string; // e.g., HS001
+  name: string;
+  avatar?: string;
+  dob: string;
+  gender: 'Nam' | 'Nữ';
+  school: string;
+  gradeLevel: string; // Khối 1..12
+  programId: string;
+  classId: string;
+  address: string;
+  email: string;
+  phone: string;
+  parentName: string;
+  parentPhone: string;
+  enrollDate: string;
+  notes?: string;
+  status: StudentStatus;
+  feeStatus: FeeStatus;
+}
+
+export interface CourseProgram {
+  id: string;
+  code: string;
+  name: string;
+  category: 'Cấp 1' | 'Cấp 2' | 'Cấp 3' | 'Cambridge' | 'IELTS' | 'TOEIC' | 'TOEFL' | 'Khác';
+  tuitionFee: number;
+  description?: string;
+}
+
+export interface Teacher {
+  id: string;
+  name: string;
+  avatar?: string;
+  phone: string;
+  email: string;
+  address: string;
+  specialty: string;
+  assignedClassIds: string[];
+  scheduleNotes?: string;
+  notes?: string;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  capacity: number;
+  status: 'available' | 'maintenance';
+  notes?: string;
+}
+
+export interface ClassRoom {
+  id: string;
+  code: string;
+  name: string;
+  programId: string;
+  teacherId: string;
+  roomId: string;
+  scheduleTime: string; // e.g., "18:00 - 19:30"
+  days: string[]; // e.g., ["Thứ 2", "Thứ 4", "Thứ 6"]
+  capacity: number;
+  studentIds: string[];
+}
+
+export interface TimetableSlot {
+  id: string;
+  classId: string;
+  teacherId: string;
+  roomId: string;
+  dayOfWeek: string; // 'Thứ 2' | 'Thứ 3' | ... | 'Chủ Nhật'
+  startTime: string; // "17:30"
+  endTime: string;   // "19:00"
+}
+
+export interface Grade {
+  id: string;
+  studentId: string;
+  classId: string;
+  listening: number;
+  speaking: number;
+  reading: number;
+  writing: number;
+  midterm: number;
+  finalExam: number;
+  attendance: number;
+  average: number;
+}
+
+export interface TuitionReceipt {
+  id: string;
+  code: string; // e.g. PT-2026-001
+  studentId: string;
+  classId: string;
+  courseFee: number;
+  discount: number;
+  paidAmount: number;
+  debtAmount: number;
+  paymentDate: string;
+  collectorName: string;
+  paymentMethod: 'Tiền mặt' | 'Chuyển khoản' | 'Thẻ';
+  notes?: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  userEmail: string;
+  userName: string;
+  action: 'ĐĂNG NHẬP' | 'THÊM' | 'SỬA' | 'XÓA' | 'EXPORT' | 'IMPORT' | 'BACKUP' | 'RESTORE' | 'ĐỒNG BỘ';
+  module: string;
+  details: string;
+}
+
+export interface SystemBackup {
+  id: string;
+  filename: string;
+  timestamp: string;
+  sizeKb: number;
+  type: 'Thủ công' | 'Tự động Hằng Ngày' | 'Tự động Hằng Tuần';
+  status: 'Thành công' | 'Thất bại';
+}
+
+export interface GoogleSheetsConfig {
+  spreadsheetId: string;
+  sheetName: string;
+  autoSync: boolean;
+  syncInterval: 'realtime' | 'daily' | 'weekly';
+  lastSync?: string;
+  connected: boolean;
+}
+
+export interface CenterSettings {
+  name: string;
+  slogan: string;
+  address: string;
+  phone: string;
+  email: string;
+  adminReportEmail: string;
+  autoEmailReport: boolean;
+  autoBackup: boolean;
+  sheetsConfig: GoogleSheetsConfig;
+}

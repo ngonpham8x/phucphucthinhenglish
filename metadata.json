@@ -1,0 +1,6 @@
+{
+  "name": "Trung Tâm Anh Ngữ Phúc Phúc Thịnh",
+  "description": "Hệ thống quản lý trung tâm Anh ngữ Phúc Phúc Thịnh - Quản lý học sinh, giáo viên, lớp học, học phí, thời khóa biểu và báo cáo",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
