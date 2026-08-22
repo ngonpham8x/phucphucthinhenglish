@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult } from '../services/excelService';
 import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings } from '../types';
 import { FileSpreadsheet, FileUp, FileDown, CheckCircle2, AlertTriangle, Download, Upload, X, RefreshCw } from 'lucide-react';
@@ -41,6 +41,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const [fallbackClassId, setFallbackClassId] = useState(classes[0]?.id || '');
   const [fileName, setFileName] = useState('');
   const [centerImport, setCenterImport] = useState<CenterWorkbookData | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -73,9 +74,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleSelectedFile = async (file: File) => {
     setFileName(file.name);
 
     try {
@@ -109,6 +108,18 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       console.error(error);
       setValidationResult({ validRows: [], errors: [{ row: 0, field: 'Tệp Excel', message: 'Không thể đọc tệp. Vui lòng dùng tệp .xlsx hợp lệ.' }] });
     }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) void handleSelectedFile(file);
+    event.target.value = '';
+  };
+
+  const handleFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) void handleSelectedFile(file);
   };
 
   const handleConfirmCenterImport = () => {
@@ -205,8 +216,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-slate-700">
               <div className="font-bold text-slate-900 text-sm">Cấu trúc Workbook ExcelJS Xuất Ra:</div>
               <ul className="list-disc list-inside space-y-1 text-slate-600">
-                <li><strong>Sheet 1 (TỔNG HỢP):</strong> Thống kê tổng số học sinh, doanh thu, nợ học phí và công thức tự động `=SUM(...)`, `=COUNTA(...)` nối tới các sheet lớp.</li>
-                <li><strong>Các Sheet Lớp:</strong> Mỗi lớp học là 01 worksheet riêng (Lớp IELTS-65A, Lớp CAM-FLY1...) giữ nguyên logo, màu đỏ-vàng, freeze header & auto filter.</li>
+                <li><strong>TỔNG QUAN:</strong> Bấm vào tổng thu, công nợ hoặc số tiền từng tháng để mở đúng lớp/sổ thu liên quan.</li>
+                <li><strong>Sheet Lớp &amp; Học sinh:</strong> Có tổng tiền theo tháng, tổng từng học sinh và liên kết đến phiếu thu gốc; công thức `SUMIFS` tự mở rộng khi thêm dòng.</li>
               </ul>
             </div>
 
@@ -230,15 +241,26 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
               </div>
             ) : (
               <>
-                <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') fileInputRef.current?.click(); }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={handleFileDrop}
+                  className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-red-700"
+                  aria-label="Chọn hoặc kéo thả tệp Excel để nhập"
+                >
                   <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <div className="font-bold text-slate-800">Kéo thả file Excel (.xlsx) vào đây</div>
-                  <div className="text-[11px] text-slate-500 mt-1">Hệ thống sẽ kiểm tra lỗi trùng lặp trước khi lưu</div>
+                  <div className="font-bold text-slate-800">Bấm để chọn hoặc kéo thả tệp Excel (.xlsx)</div>
+                  <div className="mt-1 text-[11px] text-slate-500">Hệ thống kiểm tra dữ liệu trước khi lưu; có thể chọn lại cùng một tệp.</div>
+                  <div className="mt-3 inline-flex rounded-lg bg-red-800 px-3 py-2 text-xs font-bold text-white">Chọn tệp Excel</div>
                   <input
+                    ref={fileInputRef}
                     type="file"
-                    accept=".xlsx, .xls, .csv"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     onChange={handleFileUpload}
-                    className="mt-3 text-xs mx-auto block"
+                    className="sr-only"
                   />
                 </div>
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import { ArrowRight, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, ChevronRight, ReceiptText, X } from 'lucide-react';
 import { ClassRoom, CourseProgram, Room, Student, Teacher, TuitionReceipt } from '../types';
 
 export type DashboardDetailType =
@@ -48,7 +48,11 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
   onClose,
   onViewFull
 }) => {
-  if (!detail) return null;
+  const [selectedRevenueClassId, setSelectedRevenueClassId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (detail !== 'revenue') setSelectedRevenueClassId(null);
+  }, [detail]);
 
   const classById = new Map<string, ClassRoom>(classes.map((item) => [item.id, item]));
   const teacherById = new Map<string, Teacher>(teachers.map((item) => [item.id, item]));
@@ -72,11 +76,38 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
     paid: 'Học sinh đã đóng đủ'
   };
 
-  const isStudentDetail = detail in detailStudentMap;
-  const visibleStudents = detailStudentMap[detail] ?? [];
+  const isStudentDetail = detail ? detail in detailStudentMap : false;
+  const visibleStudents = detail ? detailStudentMap[detail] ?? [] : [];
   const visibleReceipts = revenueMonth
     ? receipts.filter((receipt) => receipt.paymentDate.startsWith(revenueMonth))
     : receipts;
+
+  const revenueClassRows = useMemo(() => classes.map((classroom) => {
+    const classReceipts = visibleReceipts.filter((receipt) => receipt.classId === classroom.id);
+    return {
+      classroom,
+      receipts: classReceipts,
+      paidAmount: classReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0),
+      debtAmount: classReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0),
+      studentCount: new Set(classReceipts.map((receipt) => receipt.studentId)).size
+    };
+  }).filter((row) => row.receipts.length > 0).sort((a, b) => b.paidAmount - a.paidAmount), [classes, visibleReceipts]);
+  const selectedRevenueClass = revenueClassRows.find((row) => row.classroom.id === selectedRevenueClassId) ?? null;
+  const revenueStudentRows = selectedRevenueClass ? (() => {
+    const groupedStudents = new Map<string, { student: Student | undefined; receipts: TuitionReceipt[] }>();
+    selectedRevenueClass.receipts.forEach((receipt) => {
+      const group = groupedStudents.get(receipt.studentId) ?? { student: studentById.get(receipt.studentId), receipts: [] };
+      group.receipts.push(receipt);
+      groupedStudents.set(receipt.studentId, group);
+    });
+    return [...groupedStudents.values()].map((row) => ({
+      ...row,
+      paidAmount: row.receipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0),
+      debtAmount: row.receipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0)
+    })).sort((a, b) => b.paidAmount - a.paidAmount);
+  })() : [];
+
+  if (!detail) return null;
 
   const title = isStudentDetail
     ? detailStudentTitle[detail]!
@@ -84,7 +115,9 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
         teachers: 'Danh sách giáo viên',
         classes: 'Danh sách lớp học',
         rooms: 'Danh sách phòng học',
-        revenue: 'Doanh thu tháng ' + formatMonth(revenueMonth)
+        revenue: selectedRevenueClass
+          ? `${selectedRevenueClass.classroom.code} · ${selectedRevenueClass.classroom.name}`
+          : 'Doanh thu tháng ' + formatMonth(revenueMonth)
       } satisfies Partial<Record<DashboardDetailType, string>>)[detail] ?? 'Chi tiết';
 
   const total = isStudentDetail
@@ -95,7 +128,9 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
         ? classes.length
         : detail === 'rooms'
           ? rooms.length
-          : visibleReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+          : selectedRevenueClass
+            ? selectedRevenueClass.paidAmount
+            : visibleReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
 
   const viewTab = detail === 'teachers'
     ? 'teachers'
@@ -236,23 +271,52 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
           )}
 
           {detail === 'revenue' && (
-            <table className="w-full min-w-[680px] text-left text-xs">
-              <thead className="sticky top-0 bg-slate-50 text-[10px] font-bold uppercase text-slate-500">
-                <tr><th className="px-3 py-2.5">Ngày thu</th><th className="px-3 py-2.5">Phiếu thu</th><th className="px-3 py-2.5">Học sinh</th><th className="px-3 py-2.5">Hình thức</th><th className="px-3 py-2.5 text-right">Đã thu</th><th className="px-3 py-2.5 text-right">Còn nợ</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleReceipts.map((receipt) => (
-                  <tr key={receipt.id} className="hover:bg-slate-50">
-                    <td className="px-3 py-3 text-slate-700">{receipt.paymentDate}</td>
-                    <td className="px-3 py-3 font-semibold text-slate-700">{receipt.code}</td>
-                    <td className="px-3 py-3 font-bold text-slate-900">{studentById.get(receipt.studentId)?.name ?? 'Học sinh đã xóa'}</td>
-                    <td className="px-3 py-3 text-slate-700">{receipt.paymentMethod}</td>
-                    <td className="px-3 py-3 text-right font-bold text-emerald-700">{formatCurrency(receipt.paidAmount)}</td>
-                    <td className="px-3 py-3 text-right text-slate-700">{canViewDebt ? formatCurrency(receipt.debtAmount) : '—'}</td>
-                  </tr>
+            selectedRevenueClass ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-950">
+                  <div className="font-extrabold">{selectedRevenueClass.classroom.code} · {selectedRevenueClass.classroom.name}</div>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-red-800">
+                    <span>{revenueStudentRows.length} học sinh đã đóng trong tháng</span>
+                    <span>Tổng thu: <b>{formatCurrency(selectedRevenueClass.paidAmount)}</b></span>
+                    {canViewDebt && <span>Nợ ghi nhận: <b>{formatCurrency(selectedRevenueClass.debtAmount)}</b></span>}
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {revenueStudentRows.map(({ student, receipts: studentReceipts, paidAmount, debtAmount }) => (
+                    <article key={student?.id ?? studentReceipts[0]?.studentId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-extrabold text-slate-900">{student?.name ?? 'Học sinh đã xóa'}</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">{student?.code || 'Chưa có mã'} · {studentReceipts.length} phiếu thu</p>
+                        </div>
+                        <ReceiptText className="h-5 w-5 shrink-0 text-red-700" />
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2 text-xs">
+                        <div><p className="text-[10px] font-semibold uppercase text-slate-500">Đã đóng</p><p className="mt-0.5 font-extrabold text-emerald-700">{formatCurrency(paidAmount)}</p></div>
+                        <div><p className="text-[10px] font-semibold uppercase text-slate-500">Còn nợ</p><p className="mt-0.5 font-extrabold text-rose-700">{canViewDebt ? formatCurrency(debtAmount) : '—'}</p></div>
+                      </div>
+                      <div className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-100 text-xs">
+                        {studentReceipts.map((receipt) => (
+                          <div key={receipt.id} className="flex items-center justify-between gap-2 px-2.5 py-2">
+                            <div className="min-w-0"><p className="font-semibold text-slate-700">{receipt.code}</p><p className="text-[10px] text-slate-500">{receipt.paymentDate} · {receipt.paymentMethod}</p></div>
+                            <p className="shrink-0 font-bold text-emerald-700">{formatCurrency(receipt.paidAmount)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {revenueClassRows.map((row) => (
+                  <button key={row.classroom.id} type="button" onClick={() => setSelectedRevenueClassId(row.classroom.id)} className="group rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-red-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-red-600">
+                    <div className="flex items-start justify-between gap-3"><div><p className="font-extrabold text-slate-900">{row.classroom.code}</p><p className="mt-0.5 text-xs text-slate-500">{row.classroom.name}</p></div><ChevronRight className="h-5 w-5 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-red-700" /></div>
+                    <div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-slate-500">Đã thu</p><p className="mt-0.5 text-lg font-extrabold text-emerald-700">{formatCurrency(row.paidAmount)}</p></div><div className="text-right text-[11px] text-slate-500"><p>{row.studentCount} học sinh</p>{canViewDebt && <p className="mt-1 font-bold text-rose-700">Nợ: {formatCurrency(row.debtAmount)}</p>}</div></div>
+                  </button>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            )
           )}
 
           {((isStudentDetail && visibleStudents.length === 0) || (detail === 'revenue' && visibleReceipts.length === 0)) && (
@@ -261,6 +325,11 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
         </div>
 
         <footer className="flex items-center justify-end border-t border-slate-100 px-5 py-3 sm:px-6">
+          {detail === 'revenue' && selectedRevenueClass && (
+            <button type="button" onClick={() => setSelectedRevenueClassId(null)} className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              <ArrowLeft className="h-3.5 w-3.5" /> Danh sách lớp
+            </button>
+          )}
           <button
             type="button"
             onClick={handleViewFull}
