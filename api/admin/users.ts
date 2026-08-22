@@ -21,12 +21,6 @@ const OWNER_PERMISSIONS = {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const recentRequests = new Map<string, { count: number; resetAt: number }>();
 
-function maskEmail(email: string): string {
-  const [localPart, domain] = email.split('@');
-  if (!localPart || !domain) return 'Tài khoản nội bộ';
-  return `${localPart.slice(0, 1)}•••@${domain}`;
-}
-
 function json(res: any, status: number, body: Record<string, unknown>) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.status(status).json(body);
@@ -149,12 +143,10 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     const { data, error } = await client
       .from('profiles')
-      .select('id, email, full_name, avatar_url, role, is_active, created_at')
+      .select('id, full_name, avatar_url, role, is_active, created_at')
       .order('created_at', { ascending: false });
     if (error) return json(res, 500, { error: 'Không thể tải danh sách tài khoản.' });
-    return json(res, 200, {
-      users: (data || []).map((user) => ({ ...user, email: maskEmail(user.email) })),
-    });
+    return json(res, 200, { users: data || [] });
   }
 
   const body = getBody(req);

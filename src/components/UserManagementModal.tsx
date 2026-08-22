@@ -4,7 +4,6 @@ import { StaffPermissions, UserRole } from '../types';
 
 interface ManagedUser {
   id: string;
-  email: string;
   full_name: string;
   avatar_url: string | null;
   role: UserRole;
@@ -229,7 +228,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
               {member.avatar_url ? <img src={member.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" referrerPolicy="no-referrer" /> : <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><UserRoundCheck className="h-4 w-4" /></div>}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-bold text-slate-800">{member.full_name || 'Chưa đặt tên'}</p>
-                <p className="truncate text-[11px] text-slate-500">{member.email}</p>
               </div>
               <div className="text-right">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${member.role === 'owner' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>{member.role === 'owner' ? 'Chủ trung tâm' : 'Nhân viên'}</span>
