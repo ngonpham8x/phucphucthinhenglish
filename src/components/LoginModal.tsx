@@ -1,7 +1,6 @@
-import React, { FormEvent, useState } from 'react';
-import { KeyRound, LoaderCircle, LogOut, ShieldCheck, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { LogOut, ShieldCheck, X } from 'lucide-react';
 import { UserAccount } from '../types';
-import { supabase } from '../lib/supabase';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -11,28 +10,9 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, currentUser, onLogout }) => {
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
-
-  const handleChangePassword = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!supabase) return;
-    setError(null);
-    setMessage(null);
-    setIsSubmitting(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    setIsSubmitting(false);
-    if (updateError) {
-      setError('Không thể đổi mật khẩu. Vui lòng thử lại.');
-      return;
-    }
-    setPassword('');
-    setMessage('Đã cập nhật mật khẩu.');
-  };
 
   const handleLogout = async () => {
     setIsSubmitting(true);
@@ -62,29 +42,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, current
           </div>
         </div>
 
-        <form className="mt-6 border-t border-slate-100 pt-5" onSubmit={handleChangePassword}>
-          <label className="block text-xs font-bold text-slate-700">
-            Đặt mật khẩu mới
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={12}
-              required
-              placeholder="Tối thiểu 12 ký tự"
-              className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-600"
-            />
-          </label>
-          <button type="submit" disabled={isSubmitting} className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 py-2 text-xs font-bold text-red-800 hover:bg-red-100 disabled:opacity-60 flex items-center justify-center gap-2">
-            {isSubmitting && <LoaderCircle className="h-4 w-4 animate-spin" />}<KeyRound className="h-4 w-4" /> Cập nhật mật khẩu
-          </button>
-        </form>
-
-        {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs text-red-800">{error}</p>}
-        {message && <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-xs text-emerald-800">{message}</p>}
-
-        <button onClick={handleLogout} disabled={isSubmitting} className="mt-5 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2">
+        <button onClick={handleLogout} disabled={isSubmitting} className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2">
           <LogOut className="h-4 w-4" /> Đăng xuất
         </button>
       </section>
