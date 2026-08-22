@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const STAFF_PERMISSIONS = {
-  student: { view: true, add: true, edit: true, delete: false, export: false },
-  teacher: { view: true, edit: true, delete: false },
-  tuition: { view: true, collect: true, delete: false, showDebt: false },
-  grade: { view: true, edit: true },
-  excel: { import: true, export: false },
-  report: { view: false, revenue: false },
-};
+const STAFF_PERMISSION_SHAPE = {
+  student: ['view', 'add', 'edit', 'delete', 'export'],
+  teacher: ['view', 'edit', 'delete'],
+  tuition: ['view', 'collect', 'delete', 'showDebt'],
+  grade: ['view', 'edit'],
+  excel: ['import', 'export'],
+  report: ['view', 'revenue'],
+} as const;
 
 const OWNER_PERMISSIONS = {
   student: { view: true, add: true, edit: true, delete: true, export: true },
@@ -75,6 +75,18 @@ function getBody(req: any): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function normalizeStaffPermissions(candidate: unknown) {
+  const input = candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : {};
+  return Object.fromEntries(Object.entries(STAFF_PERMISSION_SHAPE).map(([module, actions]) => {
+    const inputModule = input[module] && typeof input[module] === 'object' && !Array.isArray(input[module])
+      ? input[module] as Record<string, unknown>
+      : {};
+    return [module, Object.fromEntries(actions.map((action) => [action, inputModule[action] === true]))];
+  }));
 }
 
 function serverClient() {
@@ -163,7 +175,7 @@ export default async function handler(req: any, res: any) {
     const { data: existing } = await client.from('profiles').select('id').eq('email', email).maybeSingle();
     if (existing) return json(res, 409, { error: 'Email này đã được cấp hoặc đang chờ kích hoạt.' });
 
-    const permissions = role === 'owner' ? OWNER_PERMISSIONS : STAFF_PERMISSIONS;
+    const permissions = role === 'owner' ? OWNER_PERMISSIONS : normalizeStaffPermissions(body.permissions);
     const { data: invitation, error: inviteError } = await client.auth.admin.inviteUserByEmail(email, {
       data: { full_name: fullName },
       redirectTo: process.env.APP_URL,
