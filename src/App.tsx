@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
   Student,
@@ -139,6 +139,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const contentViewportRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      // The page can scroll on desktop while the main area scrolls on smaller
+      // viewports. Reset both whenever the user changes a menu/tab.
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      contentViewportRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeTab]);
 
   // Modals state
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
@@ -494,7 +507,7 @@ export default function App() {
         />
 
         {/* Content View Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+        <main ref={contentViewportRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
           {activeTab === 'dashboard' && (
             <DashboardView
               students={students}
