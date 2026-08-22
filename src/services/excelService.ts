@@ -246,7 +246,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     studentSheetRowById.set(student.id, rowNumber);
   });
   const studentFooterRow = 6 + data.students.length;
-  writeFooter(studentsSheet, studentFooterRow, studentHeaders.length, { 3: 'COUNTA(B6:B1048576)' });
+  writeFooter(studentsSheet, studentFooterRow, studentHeaders.length, { 3: `COUNTA(B6:B${studentFooterRow - 1})` });
   studentsSheet.autoFilter = { from: 'A5', to: `O${studentFooterRow - 1}` };
   studentsSheet.views = [{ state: 'frozen', ySplit: 5 }];
   studentsSheet.columns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 14 }, { width: 20 }, { width: 18 }, { width: 17 }, { width: 18 }, { width: 35 }, { width: 15 }, { width: 55 }, { width: 20 }, { width: 22 }, { width: 18 }];
@@ -267,7 +267,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     row.getCell(9).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
   });
   const classFooterRow = 6 + data.classes.length;
-  writeFooter(classSheet, classFooterRow, classHeaders.length, { 3: 'COUNTA(B6:B1048576)-1', 8: `SUM(H6:H${classFooterRow - 1})` });
+  writeFooter(classSheet, classFooterRow, classHeaders.length, { 3: `COUNTA(B6:B${classFooterRow - 1})`, 8: `SUM(H6:H${classFooterRow - 1})` });
   classSheet.autoFilter = { from: 'A5', to: `I${classFooterRow - 1}` };
   classSheet.views = [{ state: 'frozen', ySplit: 5 }];
   classSheet.columns = [{ width: 8 }, { width: 18 }, { width: 32 }, { width: 26 }, { width: 32 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 28 }];
@@ -293,7 +293,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     [12, 13].forEach((column) => { row.getCell(column).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true }; });
   });
   const tuitionFooterRow = 6 + orderedReceipts.length;
-  writeFooter(tuitionSheet, tuitionFooterRow, tuitionHeaders.length, { 7: 'SUMIFS(G:G,A:A,"<>TỔNG CỘNG")', 8: 'SUMIFS(H:H,A:A,"<>TỔNG CỘNG")' });
+  writeFooter(tuitionSheet, tuitionFooterRow, tuitionHeaders.length, { 7: `SUM(G6:G${tuitionFooterRow - 1})`, 8: `SUM(H6:H${tuitionFooterRow - 1})` });
   tuitionSheet.getCell(tuitionFooterRow, 7).numFmt = moneyFormat;
   tuitionSheet.getCell(tuitionFooterRow, 8).numFmt = moneyFormat;
   tuitionSheet.autoFilter = { from: 'A5', to: `M${tuitionFooterRow - 1}` };
@@ -381,7 +381,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       }
     });
     const footerRow = 12 + classStudents.length;
-    writeFooter(sheet, footerRow, headers.length, { 3: 'COUNTA(B12:B1048576)', 7: 'SUMIFS(G:G,A:A,"<>TỔNG CỘNG")', 8: 'SUMIFS(H:H,A:A,"<>TỔNG CỘNG")' });
+    writeFooter(sheet, footerRow, headers.length, { 3: `COUNTA(B12:B${footerRow - 1})`, 7: `SUM(G12:G${footerRow - 1})`, 8: `SUM(H12:H${footerRow - 1})` });
     sheet.getCell(footerRow, 7).numFmt = moneyFormat;
     sheet.getCell(footerRow, 8).numFmt = moneyFormat;
     sheet.autoFilter = { from: 'A11', to: `K${footerRow - 1}` };
@@ -399,7 +399,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     ['2. Nhập học phí', 'Thêm một dòng ở sheet HỌC PHÍ: Mã phiếu, ID hệ thống, mã học sinh, mã lớp, đã thu, công nợ, ngày thu. Không đổi tên các cột.'],
     ['3. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$I:$I,\">=\"&D$14,'HỌC PHÍ'!$I:$I,\"<\"&EDATE(D$14,1))"],
     ['4. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
-    ['5. Cách hoạt động', 'Công thức sử dụng cả cột nên các dòng học phí thêm mới vẫn tự được cộng vào TỔNG QUAN và sheet lớp, không cần sửa phạm vi.'],
+    ['5. Cách hoạt động', 'Khi nhập thêm dữ liệu trực tiếp trong Excel, hãy chèn dòng mới ngay phía trên hàng “TỔNG CỘNG”. Excel sẽ tự mở rộng các công thức, đồng thời TỔNG QUAN và sheet lớp vẫn cộng đúng dữ liệu mới.'],
     ['6. Lưu ý dữ liệu nguồn', 'Nguồn: PhucPhucThinh_BaoCaoToanHeThong_2026-08-10 (1).xlsx. Các trường thiếu được để trống. Cột T7 lặp lại ở Jolly sp4 được ghi chú và chuẩn hoá thành kỳ T8/2026. Tiền sách được lưu trong ghi chú, không cộng vào học phí.']
   ];
   guideRows.forEach((values, index) => {
