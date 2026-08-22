@@ -7,7 +7,7 @@ import { LanguageProvider } from './context/LanguageContext.tsx';
 // Register Service Worker for PWA installation
 if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch((err) => {
       console.log('SW registration failed:', err);
     });
   });
@@ -20,5 +20,4 @@ createRoot(document.getElementById('root')!).render(
     </LanguageProvider>
   </StrictMode>,
 );
-
 

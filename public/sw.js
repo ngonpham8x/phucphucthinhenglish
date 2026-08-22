@@ -1,5 +1,5 @@
 // Service Worker for Trung Tâm Anh Ngữ Phúc Phúc Thịnh PWA
-const CACHE_NAME = 'phuc-phuc-thinh-v1';
+const CACHE_NAME = 'phuc-phuc-thinh-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -31,7 +31,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first, falling back to cache
+  const requestUrl = new URL(event.request.url);
+
+  // Do not intercept Google avatars, Supabase, browser extensions, or other
+  // cross-origin requests. Those requests must be handled by the browser so
+  // the app CSP and the response type remain valid.
+  if (event.request.method !== 'GET' || requestUrl.origin !== self.location.origin) return;
+
+  // Network first, falling back to this app's cached shell only.
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);
