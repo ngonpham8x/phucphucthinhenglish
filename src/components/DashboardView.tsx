@@ -91,7 +91,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
 
   return (
     <div className="space-y-5 pb-8">
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
         <Card label="Tổng học sinh" value={students.length} icon={Users} color="bg-red-100 text-red-600" detail="students" subtitle={`${activeStudents.length} đang học`} />
         <Card label="Tổng giáo viên" value={teachers.length} icon={GraduationCap} color="bg-blue-100 text-blue-600" detail="teachers" />
         <Card label="Tổng lớp" value={classes.length} icon={Building2} color="bg-amber-100 text-amber-600" detail="classes" />
@@ -99,7 +99,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
         {showRevenue ? <Card label={`Doanh thu ${monthLabel(latestReceiptMonth).toLocaleLowerCase('vi-VN')}`} value={currency(monthlyRevenue)} icon={DollarSign} color="bg-purple-100 text-purple-600" detail="revenue" subtitle="Từ các phiếu thu đã nhập" /> : <Card label="Học sinh còn nợ" value={showDebt ? debtStudents.length : '—'} icon={AlertTriangle} color="bg-amber-100 text-amber-600" detail="debt" />}
       </section>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Card label="Đang học" value={activeStudents.length} icon={UserCheck} color="bg-emerald-100 text-emerald-600" detail="active" />
         <Card label="Bảo lưu" value={reservedStudents.length} icon={UserMinus} color="bg-amber-100 text-amber-600" detail="dropped" />
         <Card label="Còn nợ học phí" value={showDebt ? debtStudents.length : '—'} icon={AlertTriangle} color="bg-orange-100 text-orange-600" detail="debt" />
