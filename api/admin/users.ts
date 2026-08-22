@@ -143,10 +143,11 @@ export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     const { data, error } = await client
       .from('profiles')
-      .select('id, full_name, avatar_url, role, is_active, created_at')
-      .order('created_at', { ascending: false });
-    if (error) return json(res, 500, { error: 'Không thể tải danh sách tài khoản.' });
-    return json(res, 200, { users: data || [] });
+      .select('id, full_name, avatar_url')
+      .eq('id', callerId)
+      .maybeSingle();
+    if (error || !data) return json(res, 500, { error: 'Không thể tải tài khoản đang đăng nhập.' });
+    return json(res, 200, { users: [data] });
   }
 
   const body = getBody(req);

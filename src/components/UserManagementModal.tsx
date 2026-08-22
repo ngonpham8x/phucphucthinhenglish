@@ -1,14 +1,11 @@
 import React, { FormEvent, useCallback, useEffect, useState } from 'react';
-import { LoaderCircle, MailPlus, RefreshCw, ShieldCheck, UserRoundCheck, X } from 'lucide-react';
+import { LoaderCircle, MailPlus, ShieldCheck, UserRoundCheck, X } from 'lucide-react';
 import { StaffPermissions, UserRole } from '../types';
 
 interface ManagedUser {
   id: string;
   full_name: string;
   avatar_url: string | null;
-  role: UserRole;
-  is_active: boolean;
-  created_at: string;
 }
 
 interface UserManagementModalProps {
@@ -134,26 +131,6 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     }
   };
 
-  const updateActiveStatus = async (user: ManagedUser) => {
-    setError(null);
-    setMessage(null);
-    setIsSubmitting(true);
-    try {
-      const response = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'setActive', userId: user.id, active: !user.is_active }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Không thể cập nhật trạng thái.');
-      setMembers((current) => current.map((item) => item.id === user.id ? { ...item, is_active: !item.is_active } : item));
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Không thể cập nhật trạng thái.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
       <section role="dialog" aria-modal="true" aria-label="Quản lý tài khoản" className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
@@ -212,28 +189,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs text-red-800">{error}</p>}
         {message && <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-xs text-emerald-800">{message}</p>}
 
-        <div className="mt-6 flex items-center justify-between">
-          <h3 className="font-bold text-slate-900">Tài khoản đã cấp</h3>
-          <button onClick={() => void loadMembers()} disabled={isLoading || isSubmitting} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50" title="Tải lại">
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+        <div className="mt-6">
+          <h3 className="font-bold text-slate-900">Tài khoản đang đăng nhập</h3>
         </div>
-        <div className="mt-2 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+        <div className="mt-2 overflow-hidden rounded-xl border border-slate-200">
           {isLoading && members.length === 0 ? (
             <div className="p-5 text-center text-xs text-slate-500">Đang tải tài khoản…</div>
           ) : members.length === 0 ? (
-            <div className="p-5 text-center text-xs text-slate-500">Chưa có tài khoản nào.</div>
+            <div className="p-5 text-center text-xs text-slate-500">Không tìm thấy tài khoản đang đăng nhập.</div>
           ) : members.map((member) => (
             <div key={member.id} className="flex items-center gap-3 p-3">
               {member.avatar_url ? <img src={member.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" referrerPolicy="no-referrer" /> : <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-500"><UserRoundCheck className="h-4 w-4" /></div>}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-bold text-slate-800">{member.full_name || 'Chưa đặt tên'}</p>
-              </div>
-              <div className="text-right">
-                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${member.role === 'owner' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>{member.role === 'owner' ? 'Chủ trung tâm' : 'Nhân viên'}</span>
-                <button onClick={() => void updateActiveStatus(member)} disabled={isSubmitting} className={`mt-1 block text-[11px] font-semibold hover:underline disabled:opacity-50 ${member.is_active ? 'text-emerald-700' : 'text-red-700'}`}>
-                  {member.is_active ? 'Đang hoạt động · Khóa' : 'Đã khóa · Mở'}
-                </button>
               </div>
             </div>
           ))}
