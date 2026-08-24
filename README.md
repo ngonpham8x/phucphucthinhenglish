@@ -11,9 +11,9 @@
 
 ## Đăng nhập và phân quyền
 
-- Đăng nhập Google OAuth và email/mật khẩu qua Supabase Auth.
+- Chỉ đăng nhập bằng Google OAuth; hệ thống không hiển thị đăng nhập email/mật khẩu.
 - Không có tự đăng ký công khai.
 - Hai cấp bậc: `owner` (Chủ trung tâm) và `staff` (Nhân viên).
-- Chỉ `owner` có thể cấp tài khoản trực tiếp bằng email hoặc khóa tài khoản.
+- Chỉ `owner` có thể cấp quyền Google trực tiếp bằng email hoặc khóa tài khoản.
 
 Đọc quy trình thiết lập Supabase trong [SUPABASE_SETUP.md](SUPABASE_SETUP.md) và yêu cầu bảo mật/deploy trong [SECURITY.md](SECURITY.md).

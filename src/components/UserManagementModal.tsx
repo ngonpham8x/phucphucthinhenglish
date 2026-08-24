@@ -1,5 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useState } from 'react';
-import { LoaderCircle, MailPlus, ShieldCheck, UserRoundCheck, X } from 'lucide-react';
+import { LoaderCircle, ShieldCheck, UserRoundCheck, X } from 'lucide-react';
 import { StaffPermissions, UserRole } from '../types';
 
 interface ManagedUser {
@@ -105,7 +105,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
     } as StaffPermissions));
   };
 
-  const inviteUser = async (event: FormEvent<HTMLFormElement>) => {
+  const grantGoogleAccess = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setMessage(null);
@@ -117,15 +117,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         body: JSON.stringify({ email, fullName, role, permissions: role === 'staff' ? staffPermissions : undefined }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Không thể gửi lời mời.');
+      if (!response.ok) throw new Error(payload.error || 'Không thể cấp quyền Google.');
       setEmail('');
       setFullName('');
       setRole('staff');
       setStaffPermissions(createEmptyPermissions());
-      setMessage('Đã tạo tài khoản và gửi email mời thiết lập mật khẩu.');
+      setMessage('Đã cấp quyền. Người này chỉ cần đăng nhập Google bằng đúng email để sử dụng hệ thống.');
       await loadMembers();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Không thể gửi lời mời.');
+      setError(requestError instanceof Error ? requestError.message : 'Không thể cấp quyền Google.');
     } finally {
       setIsSubmitting(false);
     }
@@ -139,10 +139,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
         </button>
         <div className="pr-8">
           <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-900"><ShieldCheck className="h-5 w-5 text-red-800" /> Quản lý tài khoản</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Chỉ Chủ trung tâm có thể cấp hoặc khóa tài khoản. Hệ thống không có chức năng tự đăng ký.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Chỉ Chủ trung tâm có thể cấp hoặc khóa tài khoản. Tài khoản mới chỉ đăng nhập bằng Google, không cần đặt mật khẩu.</p>
         </div>
 
-        <form className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 sm:grid-cols-2" onSubmit={inviteUser}>
+        <form className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 sm:grid-cols-2" onSubmit={grantGoogleAccess}>
           <label className="text-xs font-bold text-slate-700">Họ và tên
             <input value={fullName} onChange={(event) => setFullName(event.target.value)} required minLength={2} maxLength={120} className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-600" />
           </label>
@@ -181,7 +181,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
           )}
           <div className="flex items-end">
             <button type="submit" disabled={isSubmitting} className="w-full rounded-xl bg-red-800 py-2.5 text-sm font-bold text-white hover:bg-red-900 disabled:opacity-60 flex items-center justify-center gap-2">
-              {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <MailPlus className="h-4 w-4" />} Gửi lời mời
+              {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UserRoundCheck className="h-4 w-4" />} Cấp quyền Google
             </button>
           </div>
         </form>

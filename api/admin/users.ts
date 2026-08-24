@@ -165,20 +165,37 @@ export default async function handler(req: any, res: any) {
       return json(res, 500, { error: 'APP_URL phải là địa chỉ HTTPS đã cấu hình trên máy chủ.' });
     }
 
-    const { data: existing } = await client.from('profiles').select('id').eq('email', email).maybeSingle();
-    if (existing) return json(res, 409, { error: 'Email này đã được cấp hoặc đang chờ kích hoạt.' });
-
     const permissions = role === 'owner' ? OWNER_PERMISSIONS : normalizeStaffPermissions(body.permissions);
-    const { data: invitation, error: inviteError } = await client.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: fullName },
-      redirectTo: process.env.APP_URL,
+    const { data: existing, error: existingError } = await client
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+    if (existingError) return json(res, 500, { error: 'Không thể kiểm tra tài khoản.' });
+
+    // A known Google user can be promoted without an email invitation or password.
+    if (existing) {
+      const { error: profileUpdateError } = await client.from('profiles').update({
+        full_name: fullName,
+        role,
+        is_active: true,
+        permissions,
+      }).eq('id', existing.id);
+      if (profileUpdateError) return json(res, 500, { error: 'Không thể cập nhật quyền cho tài khoản.' });
+      return json(res, 200, { user: { id: existing.id, role }, provisioned: false });
+    }
+
+    // This creates no password and sends no email. Supabase links Google later.
+    const { data: provisionedUser, error: provisionError } = await client.auth.admin.createUser({
+      email,
+      user_metadata: { full_name: fullName },
     });
-    if (inviteError || !invitation.user) {
-      return json(res, 400, { error: 'Không thể tạo lời mời. Email có thể đã tồn tại hoặc dịch vụ email chưa được cấu hình.' });
+    if (provisionError || !provisionedUser.user) {
+      return json(res, 400, { error: 'Không thể cấp quyền Google. Email có thể đã tồn tại hoặc chưa sẵn sàng.' });
     }
 
     const { error: profileWriteError } = await client.from('profiles').upsert({
-      id: invitation.user.id,
+      id: provisionedUser.user.id,
       email,
       full_name: fullName,
       role,
@@ -186,12 +203,12 @@ export default async function handler(req: any, res: any) {
       permissions,
     });
     if (profileWriteError) {
-      // The invitation already exists. Do not reveal a partially configured account as usable.
-      await client.auth.admin.deleteUser(invitation.user.id);
+      // Do not leave a partly provisioned Google account active.
+      await client.auth.admin.deleteUser(provisionedUser.user.id);
       return json(res, 500, { error: 'Không thể hoàn tất việc cấp quyền cho tài khoản.' });
     }
 
-    return json(res, 201, { user: { id: invitation.user.id, role } });
+    return json(res, 201, { user: { id: provisionedUser.user.id, role }, provisioned: true });
   }
 
   const userId = typeof body.userId === 'string' ? body.userId : '';

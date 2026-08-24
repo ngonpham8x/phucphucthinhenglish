@@ -14,14 +14,13 @@ Thực hiện trực tiếp trong project Supabase của trung tâm. Không đư
 
 Nếu một trong hai chủ đã đăng nhập trước khi được thêm vào allowlist, trigger của migration sẽ tự chuyển profile tương ứng thành `owner` và kích hoạt tài khoản ngay khi bạn lưu dòng đó.
 
-## 2. Thiết lập Email Auth
+## 2. Chỉ dùng đăng nhập Google
 
-1. Vào **Authentication** → **Providers** → **Email**.
-2. Bật Email provider và bật **Confirm email**.
-3. Tắt **Allow new users to sign up** sau khi hoàn thành bước bootstrap ở phần 4 bên dưới.
-4. Vào **Authentication** → **URL Configuration**. Tạm thời có thể để Site URL là `http://localhost:3000`; sau khi Vercel deploy, thay bằng HTTPS domain thật.
+1. Vào **Authentication** → **Providers** → **Email** và tắt provider nếu không cần dùng ngoài hệ thống.
+2. Tắt **Allow new users to sign up** sau khi hoàn thành bước bootstrap ở phần 4 bên dưới.
+3. Vào **Authentication** → **URL Configuration**. Tạm thời có thể để Site URL là `http://localhost:3000`; sau khi Vercel deploy, thay bằng HTTPS domain thật.
 
-Email/password dùng lời mời do Chủ trung tâm tạo trong ứng dụng. Không có nút đăng ký công khai.
+Hệ thống chỉ hiển thị đăng nhập Google; không dùng màn hình đăng nhập email/mật khẩu.
 
 ## 3. Thiết lập Google OAuth
 
@@ -41,7 +40,7 @@ Email/password dùng lời mời do Chủ trung tâm tạo trong ứng dụng. K
 3. Vào **Authentication** → **Users** để kiểm tra đã có đúng hai user cần thiết.
 4. Tắt lại **Allow new users to sign up**.
 
-Trong thời gian bootstrap, bất kỳ email không nằm trong allowlist vẫn chỉ tạo profile `staff` **inactive** và không thể vào ứng dụng. Sau khi tắt signup, user mới chỉ có thể được mời bởi Chủ trung tâm qua API server.
+Trong thời gian bootstrap, bất kỳ email không nằm trong allowlist vẫn chỉ tạo profile `staff` **inactive** và không thể vào ứng dụng. Sau khi tắt signup, Chủ trung tâm hiện có cấp quyền Google cho user mới tại màn hình **Quản lý tài khoản**.
 
 ## 5. Lấy khóa và cấu hình Vercel
 
@@ -50,9 +49,12 @@ Trong thời gian bootstrap, bất kỳ email không nằm trong allowlist vẫn
 3. Sao chép secret key (hoặc legacy service-role key) chỉ để dùng làm `SUPABASE_SECRET_KEY` trên Vercel. Không bao giờ dùng tiền tố `VITE_` cho key này.
 4. Sau khi Vercel tạo domain, cập nhật Site URL, Redirect URLs và `APP_URL` bằng domain HTTPS đó.
 
-## 6. Email gửi lời mời và reset mật khẩu
+## 6. Cấp quyền Google trong ứng dụng
 
-Vào **Project Settings** → **Auth** → **SMTP Settings** để thêm SMTP riêng trước khi dùng thật. Dịch vụ email mặc định chỉ phù hợp thử nghiệm và có giới hạn gửi rất thấp; nên dùng SMTP có domain gửi riêng như Resend, SendGrid, Mailgun hoặc SES.
+1. Đăng nhập bằng tài khoản Chủ trung tâm.
+2. Chọn **Phân quyền nhân viên** → nhập họ tên và email → chọn cấp bậc.
+3. Với nhân viên, tick đúng các quyền cần thiết. Với Chủ trung tâm, hệ thống cấp toàn quyền.
+4. Chọn **Cấp quyền Google**. Người được cấp chỉ cần đăng nhập Google bằng đúng email; không nhận email mời và không cần đặt mật khẩu.
 
 ## 7. Nhập dữ liệu Excel riêng tư
 
@@ -65,7 +67,7 @@ Vào **Project Settings** → **Auth** → **SMTP Settings** để thêm SMTP ri
 ## 8. Kiểm tra cuối
 
 1. Đăng nhập Google bằng một owner và kiểm tra có nút quản lý tài khoản.
-2. Mời một email thử nghiệm role `staff`; email mời phải đến hộp thư và cho phép đặt mật khẩu.
+2. Cấp quyền Google cho một email thử nghiệm role `staff`; người đó đăng nhập Google bằng đúng email mà không cần đặt mật khẩu.
 3. Xác nhận staff không mở được phần quản lý tài khoản.
-4. Đăng xuất, thử một email chưa được mời; ứng dụng phải hiển thị trạng thái chưa được cấp quyền.
+4. Đăng xuất, thử một email chưa được cấp quyền; ứng dụng phải hiển thị trạng thái chưa được cấp quyền.
 5. Mở Excel Import / Export và xác nhận báo cáo tổng quan có tổng thu theo tháng/từng lớp; thêm một dòng ở sheet `HỌC PHÍ` của file xuất để kiểm tra công thức tự cộng.
