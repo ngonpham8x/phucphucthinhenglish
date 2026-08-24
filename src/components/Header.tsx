@@ -13,7 +13,8 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
-  Menu
+  Menu,
+  X
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -43,6 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar
 }) => {
   const { language, setLanguage, t } = useLanguage();
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
@@ -91,6 +93,18 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Controls */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowMobileSearch((shown) => !shown)}
+            className="p-2 text-slate-600 hover:bg-slate-100 hover:text-red-700 rounded-xl transition-colors md:hidden"
+            title={showMobileSearch ? 'Ẩn tìm kiếm' : 'Tìm kiếm'}
+            aria-label={showMobileSearch ? 'Ẩn tìm kiếm' : 'Mở tìm kiếm'}
+            aria-expanded={showMobileSearch}
+            aria-controls="mobile-search"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+
           {/* Owner Staff Permission Button shortcut */}
           {currentUser.role === 'owner' && (
             <button
@@ -128,6 +142,31 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {showMobileSearch && (
+        <div id="mobile-search" className="border-t border-slate-100 px-3 pb-2 pt-1.5 md:hidden">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              autoFocus
+              type="text"
+              placeholder={t('search_placeholder')}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-100/80 py-2 pl-10 pr-10 text-sm placeholder-slate-400 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+            <button
+              type="button"
+              onClick={() => setShowMobileSearch(false)}
+              className="absolute right-1.5 top-1.5 rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+              title="Ẩn tìm kiếm"
+              aria-label="Ẩn tìm kiếm"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
