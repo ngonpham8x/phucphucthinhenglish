@@ -12,6 +12,7 @@ interface UserManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
   accessToken: string;
+  onAccountChanged?: () => void;
 }
 
 const EMPTY_STAFF_PERMISSIONS: StaffPermissions = {
@@ -59,7 +60,7 @@ const permissionGroups: { title: string; options: { module: keyof StaffPermissio
   },
 ];
 
-export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, accessToken }) => {
+export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen, onClose, accessToken, onAccountChanged }) => {
   const [members, setMembers] = useState<ManagedUser[]>([]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -124,6 +125,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
       setStaffPermissions(createEmptyPermissions());
       setMessage('Đã cấp quyền. Người này chỉ cần đăng nhập Google bằng đúng email để sử dụng hệ thống.');
       await loadMembers();
+      onAccountChanged?.();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Không thể cấp quyền Google.');
     } finally {

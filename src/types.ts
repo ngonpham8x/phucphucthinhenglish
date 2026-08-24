@@ -136,6 +136,22 @@ export interface ActivityLog {
   details: string;
 }
 
+export type AccountAuditAction =
+  | 'ACCOUNT_PROVISIONED'
+  | 'ACCOUNT_UPDATED'
+  | 'ACCOUNT_LOCKED'
+  | 'ACCOUNT_UNLOCKED';
+
+export interface AccountAuditLog {
+  id: string;
+  occurredAt: string;
+  action: AccountAuditAction;
+  actorName: string;
+  targetName: string;
+  targetRole: UserRole | null;
+  details: string;
+}
+
 export interface SystemBackup {
   id: string;
   filename: string;

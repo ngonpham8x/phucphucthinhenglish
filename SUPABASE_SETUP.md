@@ -8,9 +8,10 @@ Thực hiện trực tiếp trong project Supabase của trung tâm. Không đư
 2. Mở file `supabase/migrations/001_auth_profiles.sql` trong repository, sao chép toàn bộ nội dung vào SQL Editor, rồi chọn **Run**.
 3. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/002_bootstrap_owners.sql`.
 4. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/003_center_data.sql`. Migration này tạo kho dữ liệu trung tâm có RLS; tuyệt đối không dán danh sách học sinh/học phí vào SQL Editor hay GitHub.
-5. Vào **Table Editor** → schema `public` → bảng `owner_bootstrap_allowlist` → **Insert**.
-6. Thêm một dòng cho mỗi trong hai email Chủ trung tâm đã trao đổi, chỉ điền cột `email`; không cần điền `created_at`.
-7. Không chia sẻ ảnh màn hình hoặc export của bảng này. Bảng đã bật RLS và browser không có quyền đọc nó.
+5. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/004_account_audit_logs.sql`. Migration này tạo nhật ký tài khoản chỉ Chủ trung tâm xem được.
+6. Vào **Table Editor** → schema `public` → bảng `owner_bootstrap_allowlist` → **Insert**.
+7. Thêm một dòng cho mỗi trong hai email Chủ trung tâm đã trao đổi, chỉ điền cột `email`; không cần điền `created_at`.
+8. Không chia sẻ ảnh màn hình hoặc export của bảng này. Bảng đã bật RLS và browser không có quyền đọc nó.
 
 Nếu một trong hai chủ đã đăng nhập trước khi được thêm vào allowlist, trigger của migration sẽ tự chuyển profile tương ứng thành `owner` và kích hoạt tài khoản ngay khi bạn lưu dòng đó.
 
@@ -55,6 +56,7 @@ Trong thời gian bootstrap, bất kỳ email không nằm trong allowlist vẫn
 2. Chọn **Phân quyền nhân viên** → nhập họ tên và email → chọn cấp bậc.
 3. Với nhân viên, tick đúng các quyền cần thiết. Với Chủ trung tâm, hệ thống cấp toàn quyền.
 4. Chọn **Cấp quyền Google**. Người được cấp chỉ cần đăng nhập Google bằng đúng email; không nhận email mời và không cần đặt mật khẩu.
+5. Mở **Nhật ký hệ thống** để kiểm tra lịch sử cấp quyền, chỉnh sửa quyền, khóa hoặc mở khóa tài khoản. Nhật ký không hiển thị email.
 
 ## 7. Nhập dữ liệu Excel riêng tư
 

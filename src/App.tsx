@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
   Student,
@@ -11,6 +11,7 @@ import {
   TuitionReceipt,
   UserAccount,
   ActivityLog,
+  AccountAuditLog,
   SystemBackup,
   CenterSettings
 } from './types';
@@ -154,6 +155,9 @@ export default function App() {
   const [receipts, setReceipts] = useState<TuitionReceipt[]>(() => loadStored('receipts', initialTuitionReceipts));
   const [backups, setBackups] = useState<SystemBackup[]>(() => loadStored('backups', initialBackups));
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => loadStored('activityLogs', initialActivityLogs));
+  const [accountAuditLogs, setAccountAuditLogs] = useState<AccountAuditLog[]>([]);
+  const [accountAuditError, setAccountAuditError] = useState<string | null>(null);
+  const [isAccountAuditLoading, setIsAccountAuditLoading] = useState(false);
 
   // Navigation & Layout State
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -305,6 +309,34 @@ export default function App() {
     };
     setActivityLogs(prev => [newLog, ...prev]);
   };
+
+  const loadAccountAuditLogs = useCallback(async () => {
+    if (currentUser?.role !== 'owner' || !session?.access_token) {
+      setAccountAuditLogs([]);
+      setAccountAuditError(null);
+      return;
+    }
+    setIsAccountAuditLoading(true);
+    setAccountAuditError(null);
+    try {
+      const response = await fetch('/api/admin/audit-logs', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: 'no-store',
+      });
+      const payload = await response.json() as { logs?: AccountAuditLog[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || 'Không thể tải nhật ký tài khoản.');
+      setAccountAuditLogs(Array.isArray(payload.logs) ? payload.logs : []);
+    } catch (requestError) {
+      setAccountAuditLogs([]);
+      setAccountAuditError(requestError instanceof Error ? requestError.message : 'Không thể tải nhật ký tài khoản.');
+    } finally {
+      setIsAccountAuditLoading(false);
+    }
+  }, [currentUser?.role, session?.access_token]);
+
+  useEffect(() => {
+    if (activeTab === 'activity-logs') void loadAccountAuditLogs();
+  }, [activeTab, loadAccountAuditLogs]);
 
   // Student CRUD Handlers
   const handleAddStudent = (newStudent: Student) => {
@@ -672,7 +704,13 @@ export default function App() {
           )}
 
           {activeTab === 'activity-logs' && (
-            <ActivityLogView logs={activityLogs} />
+            <ActivityLogView
+              logs={activityLogs}
+              accountLogs={accountAuditLogs}
+              isAccountAuditLoading={isAccountAuditLoading}
+              accountAuditError={accountAuditError}
+              onRefreshAccountLogs={() => void loadAccountAuditLogs()}
+            />
           )}
 
           {activeTab === 'settings' && (
@@ -702,6 +740,7 @@ export default function App() {
         isOpen={isUserManagementOpen}
         onClose={() => setIsUserManagementOpen(false)}
         accessToken={session.access_token}
+        onAccountChanged={() => void loadAccountAuditLogs()}
       />
 
       {isImportExportModalOpen && (

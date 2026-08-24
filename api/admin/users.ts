@@ -18,6 +18,53 @@ const OWNER_PERMISSIONS = {
   report: { view: true, revenue: true },
 };
 
+type AccountAuditAction = 'ACCOUNT_PROVISIONED' | 'ACCOUNT_UPDATED' | 'ACCOUNT_LOCKED' | 'ACCOUNT_UNLOCKED';
+
+function roleLabel(role: 'owner' | 'staff') {
+  return role === 'owner' ? 'Chủ trung tâm' : 'Nhân viên';
+}
+
+function permissionSummary(permissions: Record<string, Record<string, boolean>>) {
+  const labels: Record<string, Record<string, string>> = {
+    student: { view: 'xem học viên', add: 'thêm học viên', edit: 'sửa học viên', delete: 'xóa học viên', export: 'xuất học viên' },
+    teacher: { view: 'xem giáo viên', edit: 'sửa giáo viên', delete: 'xóa giáo viên' },
+    tuition: { view: 'xem học phí', collect: 'thu học phí', delete: 'xóa phiếu thu', showDebt: 'xem công nợ' },
+    grade: { view: 'xem điểm', edit: 'sửa điểm' },
+    excel: { import: 'nhập Excel', export: 'xuất Excel' },
+    report: { view: 'xem báo cáo', revenue: 'xem doanh thu' },
+  };
+  const granted = Object.entries(labels).flatMap(([module, actions]) =>
+    Object.entries(actions)
+      .filter(([action]) => permissions[module]?.[action] === true)
+      .map(([, label]) => label)
+  );
+  return granted.length > 0 ? `Quyền: ${granted.join(', ')}.` : 'Không cấp quyền riêng.';
+}
+
+async function writeAccountAudit(
+  client: any,
+  entry: {
+    action: AccountAuditAction;
+    actorId: string;
+    actorName: string;
+    targetId: string;
+    targetName: string;
+    targetRole: 'owner' | 'staff';
+    details: string;
+  }
+) {
+  const { error } = await client.from('account_audit_logs').insert({
+    action: entry.action,
+    actor_id: entry.actorId,
+    actor_name: entry.actorName.slice(0, 120),
+    target_id: entry.targetId,
+    target_name: entry.targetName.slice(0, 120),
+    target_role: entry.targetRole,
+    details: entry.details.slice(0, 1000),
+  });
+  return !error;
+}
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const recentRequests = new Map<string, { count: number; resetAt: number }>();
 
@@ -113,7 +160,7 @@ async function authorizeOwner(req: any, res: any) {
 
   const { data: profile, error: profileError } = await client
     .from('profiles')
-    .select('id, role, is_active')
+    .select('id, full_name, role, is_active')
     .eq('id', userData.user.id)
     .maybeSingle();
 
@@ -122,7 +169,7 @@ async function authorizeOwner(req: any, res: any) {
     return null;
   }
 
-  return { client, callerId: userData.user.id };
+  return { client, callerId: userData.user.id, callerName: profile.full_name || userData.user.user_metadata?.full_name || 'Chủ trung tâm' };
 }
 
 export default async function handler(req: any, res: any) {
@@ -138,7 +185,7 @@ export default async function handler(req: any, res: any) {
 
   const authorized = await authorizeOwner(req, res);
   if (!authorized) return;
-  const { client, callerId } = authorized;
+  const { client, callerId, callerName } = authorized;
 
   if (req.method === 'GET') {
     const { data, error } = await client
@@ -168,7 +215,7 @@ export default async function handler(req: any, res: any) {
     const permissions = role === 'owner' ? OWNER_PERMISSIONS : normalizeStaffPermissions(body.permissions);
     const { data: existing, error: existingError } = await client
       .from('profiles')
-      .select('id')
+      .select('id, full_name, role, is_active, permissions')
       .eq('email', email)
       .maybeSingle();
     if (existingError) return json(res, 500, { error: 'Không thể kiểm tra tài khoản.' });
@@ -182,6 +229,25 @@ export default async function handler(req: any, res: any) {
         permissions,
       }).eq('id', existing.id);
       if (profileUpdateError) return json(res, 500, { error: 'Không thể cập nhật quyền cho tài khoản.' });
+      const details = `Cập nhật cấp bậc: ${roleLabel(existing.role)} → ${roleLabel(role)}. ${role === 'owner' ? 'Cấp toàn quyền Chủ trung tâm.' : permissionSummary(permissions)}`;
+      const auditRecorded = await writeAccountAudit(client, {
+        action: 'ACCOUNT_UPDATED',
+        actorId: callerId,
+        actorName: callerName,
+        targetId: existing.id,
+        targetName: fullName || existing.full_name || 'Chưa đặt tên',
+        targetRole: role,
+        details,
+      });
+      if (!auditRecorded) {
+        await client.from('profiles').update({
+          full_name: existing.full_name,
+          role: existing.role,
+          is_active: existing.is_active,
+          permissions: existing.permissions,
+        }).eq('id', existing.id);
+        return json(res, 500, { error: 'Không thể ghi nhật ký tài khoản; thay đổi đã được hoàn tác.' });
+      }
       return json(res, 200, { user: { id: existing.id, role }, provisioned: false });
     }
 
@@ -208,6 +274,20 @@ export default async function handler(req: any, res: any) {
       return json(res, 500, { error: 'Không thể hoàn tất việc cấp quyền cho tài khoản.' });
     }
 
+    const auditRecorded = await writeAccountAudit(client, {
+      action: 'ACCOUNT_PROVISIONED',
+      actorId: callerId,
+      actorName: callerName,
+      targetId: provisionedUser.user.id,
+      targetName: fullName,
+      targetRole: role,
+      details: `Cấp quyền Google mới: ${roleLabel(role)}. ${role === 'owner' ? 'Cấp toàn quyền Chủ trung tâm.' : permissionSummary(permissions)}`,
+    });
+    if (!auditRecorded) {
+      await client.auth.admin.deleteUser(provisionedUser.user.id);
+      return json(res, 500, { error: 'Không thể ghi nhật ký tài khoản; tài khoản chưa được cấp quyền.' });
+    }
+
     return json(res, 201, { user: { id: provisionedUser.user.id, role }, provisioned: true });
   }
 
@@ -220,7 +300,7 @@ export default async function handler(req: any, res: any) {
 
   const { data: target, error: targetError } = await client
     .from('profiles')
-    .select('id, role, is_active')
+    .select('id, full_name, role, is_active')
     .eq('id', userId)
     .maybeSingle();
   if (targetError || !target) return json(res, 404, { error: 'Không tìm thấy tài khoản.' });
@@ -238,5 +318,18 @@ export default async function handler(req: any, res: any) {
 
   const { error: updateError } = await client.from('profiles').update({ is_active: active }).eq('id', userId);
   if (updateError) return json(res, 500, { error: 'Không thể cập nhật trạng thái tài khoản.' });
+  const auditRecorded = await writeAccountAudit(client, {
+    action: active ? 'ACCOUNT_UNLOCKED' : 'ACCOUNT_LOCKED',
+    actorId: callerId,
+    actorName: callerName,
+    targetId: target.id,
+    targetName: target.full_name || 'Chưa đặt tên',
+    targetRole: target.role,
+    details: active ? 'Mở khóa tài khoản; có thể đăng nhập Google.' : 'Khóa tài khoản; không thể truy cập hệ thống.',
+  });
+  if (!auditRecorded) {
+    await client.from('profiles').update({ is_active: target.is_active }).eq('id', userId);
+    return json(res, 500, { error: 'Không thể ghi nhật ký tài khoản; thay đổi đã được hoàn tác.' });
+  }
   return json(res, 200, { success: true });
 }

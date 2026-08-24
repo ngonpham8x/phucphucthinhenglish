@@ -1,13 +1,30 @@
 import React, { useState } from 'react';
-import { ActivityLog } from '../types';
-import { History, Search, Filter, ShieldCheck } from 'lucide-react';
+import { AccountAuditLog, ActivityLog } from '../types';
+import { History, Search, Filter, ShieldCheck, RefreshCw } from 'lucide-react';
 import { maskEmail } from '../lib/privacy';
 
 interface ActivityLogViewProps {
   logs: ActivityLog[];
+  accountLogs: AccountAuditLog[];
+  isAccountAuditLoading: boolean;
+  accountAuditError: string | null;
+  onRefreshAccountLogs: () => void;
 }
 
-export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs }) => {
+const accountActionLabels: Record<AccountAuditLog['action'], string> = {
+  ACCOUNT_PROVISIONED: 'Cấp quyền',
+  ACCOUNT_UPDATED: 'Cập nhật quyền',
+  ACCOUNT_LOCKED: 'Khóa tài khoản',
+  ACCOUNT_UNLOCKED: 'Mở khóa',
+};
+
+export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
+  logs,
+  accountLogs,
+  isAccountAuditLoading,
+  accountAuditError,
+  onRefreshAccountLogs,
+}) => {
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
 
@@ -23,6 +40,20 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs }) => {
     return matchesSearch && matchesAction;
   });
 
+  const filteredAccountLogs = accountLogs.filter((log) => {
+    const term = search.toLowerCase();
+    return !term || [log.actorName, log.targetName, log.details, accountActionLabels[log.action]]
+      .some((value) => value.toLowerCase().includes(term));
+  });
+
+  const accountActionClass = (action: AccountAuditLog['action']) => (
+    action === 'ACCOUNT_PROVISIONED' || action === 'ACCOUNT_UNLOCKED'
+      ? 'bg-emerald-100 text-emerald-800'
+      : action === 'ACCOUNT_LOCKED'
+        ? 'bg-rose-100 text-rose-800'
+        : 'bg-amber-100 text-amber-800'
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -33,7 +64,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs }) => {
             Nhật Ký Hệ Thống (Audit Logs)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Ghi lại toàn bộ thao tác Đăng nhập, Thêm, Sửa, Xóa, Export, Backup & Restore
+            Theo dõi thao tác dữ liệu và lịch sử cấp quyền tài khoản. Chỉ Chủ trung tâm được xem.
           </p>
         </div>
 
@@ -64,6 +95,56 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({ logs }) => {
           </select>
         </div>
       </div>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><ShieldCheck className="h-4 w-4 text-red-800" /> Nhật ký tài khoản</h3>
+            <p className="mt-1 text-[11px] text-slate-500">Ghi riêng các lần cấp quyền, cập nhật quyền, khóa và mở khóa tài khoản. Email không hiển thị.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onRefreshAccountLogs}
+            disabled={isAccountAuditLoading}
+            className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60 sm:self-auto"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isAccountAuditLoading ? 'animate-spin' : ''}`} /> Làm mới
+          </button>
+        </div>
+
+        {accountAuditError ? (
+          <p role="alert" className="m-4 rounded-xl bg-red-50 p-3 text-xs text-red-800">{accountAuditError}</p>
+        ) : isAccountAuditLoading && accountLogs.length === 0 ? (
+          <p className="p-5 text-center text-xs text-slate-500">Đang tải nhật ký tài khoản…</p>
+        ) : filteredAccountLogs.length === 0 ? (
+          <p className="p-5 text-center text-xs text-slate-500">Chưa có thay đổi tài khoản nào được ghi nhận.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Thời gian</th>
+                  <th className="px-4 py-3">Tài khoản</th>
+                  <th className="px-4 py-3">Thao tác</th>
+                  <th className="px-4 py-3">Người thực hiện</th>
+                  <th className="px-4 py-3">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredAccountLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-[11px] text-slate-500">{new Date(log.occurredAt).toLocaleString('vi-VN')}</td>
+                    <td className="px-4 py-3"><b className="text-slate-900">{log.targetName || 'Chưa đặt tên'}</b><span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{log.targetRole === 'owner' ? 'Chủ trung tâm' : 'Nhân viên'}</span></td>
+                    <td className="px-4 py-3"><span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${accountActionClass(log.action)}`}>{accountActionLabels[log.action]}</span></td>
+                    <td className="px-4 py-3 font-semibold text-slate-800">{log.actorName || 'Chủ trung tâm'}</td>
+                    <td className="px-4 py-3 leading-5 text-slate-700">{log.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Logs Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">

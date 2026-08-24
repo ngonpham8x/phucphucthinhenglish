@@ -8,7 +8,7 @@ The application now uses Supabase Auth with Google OAuth for identity. The brows
 2. In **Authentication → Providers**, enable Google. Create Google OAuth credentials in Google Cloud and copy the client ID and secret to the Google provider configuration.
 3. In **Authentication → URL configuration**, set Site URL to the final HTTPS Vercel URL and add both the final URL and any preview URL that will be used to the Redirect URLs allow-list.
 4. Disable public sign-ups. Accounts are provisioned only by an active owner through the protected server endpoint and can then sign in with the matching Google email.
-5. Run `001_auth_profiles.sql`, then `002_bootstrap_owners.sql`. Add initial-owner emails directly to the private Supabase allowlist table; do not commit them to GitHub. Future owners are provisioned by an existing owner in the app; no public endpoint can create arbitrary owners. See `SUPABASE_SETUP.md` for the precise Dashboard flow.
+5. Run `001_auth_profiles.sql`, `002_bootstrap_owners.sql`, `003_center_data.sql`, and `004_account_audit_logs.sql`. Add initial-owner emails directly to the private Supabase allowlist table; do not commit them to GitHub. Future owners are provisioned by an existing owner in the app; no public endpoint can create arbitrary owners. See `SUPABASE_SETUP.md` for the precise Dashboard flow.
 
 ## 2. Vercel environment variables
 
@@ -32,6 +32,7 @@ Use `SUPABASE_SERVICE_ROLE_KEY` only for legacy Supabase projects that do not pr
 - Creating, listing, and locking users requires a live Supabase JWT and an active `owner` profile; this is checked again on the Vercel server, not only in the UI.
 - The API validates input, restricts allowed browser origins, does not cache responses, applies a small provisioning rate limit, and prevents locking the final active owner.
 - RLS permits the browser to read only its own active profile. Browser clients cannot grant roles, activate profiles, or provision Google accounts.
+- Account provisioning, role changes, and lock/unlock operations write to a separate RLS-protected audit table. Only the protected server endpoint can write it and only active owners can read it through the API.
 - Vercel headers add CSP, clickjacking, MIME-sniffing, referrer, and device-permission protections.
 
 No internet-facing application can be guaranteed to be “unhackable”. Keep dependencies updated, require a password manager and MFA for owner Google accounts, review Supabase/Vercel audit logs, and rotate the server secret immediately if it is ever exposed.
