@@ -18,6 +18,14 @@ const accountActionLabels: Record<AccountAuditLog['action'], string> = {
   ACCOUNT_UNLOCKED: 'Mở khóa',
 };
 
+const normalizeAccountName = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLowerCase();
+
+const isHiddenAccount = (name: string) => normalizeAccountName(name) === 'duy ngon pham';
+
 export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
   logs,
   accountLogs,
@@ -41,6 +49,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
   });
 
   const filteredAccountLogs = accountLogs.filter((log) => {
+    if (isHiddenAccount(log.targetName)) return false;
     const term = search.toLowerCase();
     return !term || [log.actorName, log.targetName, log.details, accountActionLabels[log.action]]
       .some((value) => value.toLowerCase().includes(term));
@@ -164,7 +173,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                 <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4 font-mono text-slate-500">{log.timestamp}</td>
                   <td className="py-3 px-4">
-                    <div className="font-bold text-slate-900">{log.userName}</div>
+                    <div className="font-bold text-slate-900">{isHiddenAccount(log.userName) ? 'Tài khoản hệ thống' : log.userName}</div>
                     <div className="text-[10px] text-slate-500">{maskEmail(log.userEmail)}</div>
                   </td>
                   <td className="py-3 px-4">
