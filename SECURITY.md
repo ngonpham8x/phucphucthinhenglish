@@ -8,7 +8,7 @@ The application now uses Supabase Auth with Google OAuth for identity. The brows
 2. In **Authentication → Providers**, enable Google. Create Google OAuth credentials in Google Cloud and copy the client ID and secret to the Google provider configuration.
 3. In **Authentication → URL configuration**, set Site URL to the final HTTPS Vercel URL and add both the final URL and any preview URL that will be used to the Redirect URLs allow-list.
 4. Disable public sign-ups. Accounts are provisioned only by an active owner through the protected server endpoint and can then sign in with the matching Google email.
-5. Run `001_auth_profiles.sql`, `002_bootstrap_owners.sql`, `003_center_data.sql`, and `004_account_audit_logs.sql`. Add initial-owner emails directly to the private Supabase allowlist table; do not commit them to GitHub. Future owners are provisioned by an existing owner in the app; no public endpoint can create arbitrary owners. See `SUPABASE_SETUP.md` for the precise Dashboard flow.
+5. Run `001_auth_profiles.sql`, `002_bootstrap_owners.sql`, `003_center_data.sql`, `004_account_audit_logs.sql`, and `005_backfill_owner_account_audit_logs.sql`. Add initial-owner emails directly to the private Supabase allowlist table; do not commit them to GitHub. Future owners are provisioned by an existing owner in the app; no public endpoint can create arbitrary owners. See `SUPABASE_SETUP.md` for the precise Dashboard flow.
 
 ## 2. Vercel environment variables
 

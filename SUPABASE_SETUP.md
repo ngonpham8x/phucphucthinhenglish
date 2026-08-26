@@ -9,9 +9,10 @@ Thực hiện trực tiếp trong project Supabase của trung tâm. Không đư
 3. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/002_bootstrap_owners.sql`.
 4. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/003_center_data.sql`. Migration này tạo kho dữ liệu trung tâm có RLS; tuyệt đối không dán danh sách học sinh/học phí vào SQL Editor hay GitHub.
 5. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/004_account_audit_logs.sql`. Migration này tạo nhật ký tài khoản chỉ Chủ trung tâm xem được.
-6. Vào **Table Editor** → schema `public` → bảng `owner_bootstrap_allowlist` → **Insert**.
-7. Thêm một dòng cho mỗi trong hai email Chủ trung tâm đã trao đổi, chỉ điền cột `email`; không cần điền `created_at`.
-8. Không chia sẻ ảnh màn hình hoặc export của bảng này. Bảng đã bật RLS và browser không có quyền đọc nó.
+6. Tạo query mới, chạy tiếp toàn bộ `supabase/migrations/005_backfill_owner_account_audit_logs.sql` để khởi tạo lịch sử cho các Chủ trung tâm hiện có mà không hiển thị email.
+7. Vào **Table Editor** → schema `public` → bảng `owner_bootstrap_allowlist` → **Insert**.
+8. Thêm một dòng cho mỗi trong hai email Chủ trung tâm đã trao đổi, chỉ điền cột `email`; không cần điền `created_at`.
+9. Không chia sẻ ảnh màn hình hoặc export của bảng này. Bảng đã bật RLS và browser không có quyền đọc nó.
 
 Nếu một trong hai chủ đã đăng nhập trước khi được thêm vào allowlist, trigger của migration sẽ tự chuyển profile tương ứng thành `owner` và kích hoạt tài khoản ngay khi bạn lưu dòng đó.
 
