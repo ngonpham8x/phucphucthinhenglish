@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
-import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2 } from 'lucide-react';
+import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2, Filter, RotateCcw } from 'lucide-react';
 import logoImg from '../assets/images/regenerated_image_1786351687546.png';
 import { paymentKindLabel, paymentMethodLabel, paymentPeriodLabel } from '../lib/tuition';
 
@@ -72,16 +72,58 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chưa xác định');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [collectError, setCollectError] = useState<string | null>(null);
+  const [receiptQuery, setReceiptQuery] = useState('');
+  const [filterClassId, setFilterClassId] = useState('all');
+  const [filterPaymentKind, setFilterPaymentKind] = useState<'all' | 'monthly' | 'course'>('all');
+  const [filterReceiptStatus, setFilterReceiptStatus] = useState<'all' | 'paid' | 'debt'>('all');
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
+  const [filterMonth, setFilterMonth] = useState('all');
 
   const canCollect = isOwner || permissions.tuition.collect;
   const canDelete = isOwner || permissions.tuition.delete;
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
   const totalDebt = receipts.reduce((sum, r) => sum + r.debtAmount, 0);
+  const monthlyCollected = receipts.filter((receipt) => receipt.paymentKind !== 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+  const courseCollected = receipts.filter((receipt) => receipt.paymentKind === 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+  const receiptMonths: string[] = [...new Set<string>(receipts.map((receipt) => receipt.paymentDate.slice(0, 7)).filter(Boolean))].sort().reverse();
   const coursePeriodOptions = [...new Set(receipts
     .filter((receipt) => receipt.paymentKind === 'course')
     .map((receipt) => receipt.billingPeriod?.trim())
     .filter((period): period is string => Boolean(period)))];
+  const filteredReceipts = useMemo(() => {
+    const normalizedQuery = receiptQuery.trim().toLocaleLowerCase('vi-VN');
+    return [...receipts]
+      .filter((receipt) => {
+        const student = students.find((item) => item.id === receipt.studentId);
+        const status = receiptStatus(receipt);
+        const matchesQuery = !normalizedQuery || [receipt.code, student?.code, student?.name, paymentPeriodLabel(receipt)]
+          .filter(Boolean)
+          .some((value) => String(value).toLocaleLowerCase('vi-VN').includes(normalizedQuery));
+        const matchesClass = filterClassId === 'all' || receipt.classId === filterClassId;
+        const matchesKind = filterPaymentKind === 'all' || (filterPaymentKind === 'course' ? receipt.paymentKind === 'course' : receipt.paymentKind !== 'course');
+        const matchesStatus = filterReceiptStatus === 'all' || (filterReceiptStatus === 'paid' ? status === 'paid' : receipt.debtAmount > 0);
+        const matchesMethod = filterPaymentMethod === 'all' || paymentMethodLabel(receipt.paymentMethod) === filterPaymentMethod;
+        const matchesMonth = filterMonth === 'all' || receipt.paymentDate.startsWith(filterMonth);
+        return matchesQuery && matchesClass && matchesKind && matchesStatus && matchesMethod && matchesMonth;
+      })
+      .sort((left, right) => right.paymentDate.localeCompare(left.paymentDate) || right.code.localeCompare(left.code));
+  }, [filterClassId, filterMonth, filterPaymentKind, filterPaymentMethod, filterReceiptStatus, receiptQuery, receipts, students]);
+
+  const resetReceiptFilters = () => {
+    setReceiptQuery('');
+    setFilterClassId('all');
+    setFilterPaymentKind('all');
+    setFilterReceiptStatus('all');
+    setFilterPaymentMethod('all');
+    setFilterMonth('all');
+  };
+
+  const showReceiptDetail = (preset: 'all' | 'debt' | 'monthly' | 'course') => {
+    resetReceiptFilters();
+    if (preset === 'debt') setFilterReceiptStatus('debt');
+    if (preset === 'monthly' || preset === 'course') setFilterPaymentKind(preset);
+  };
 
   const handleOpenCollect = () => {
     setEditingReceipt(null);
@@ -228,30 +270,78 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-emerald-800 text-white p-5 rounded-2xl shadow-md flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <button type="button" onClick={() => showReceiptDetail('all')} className="bg-emerald-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
           <div>
             <div className="text-xs uppercase font-bold text-emerald-200">Tổng Thực Thu Học Phí</div>
             <div className="text-2xl font-extrabold mt-1">{totalCollected.toLocaleString('vi-VN')} đ</div>
             <div className="text-[11px] text-emerald-100 mt-1">Đã cấp phiếu thu hóa đơn chính thức</div>
           </div>
           <CheckCircle className="w-10 h-10 text-emerald-300 opacity-80" />
-        </div>
+        </button>
 
-        <div className="bg-rose-800 text-white p-5 rounded-2xl shadow-md flex items-center justify-between">
+        <button type="button" onClick={() => showReceiptDetail('debt')} className="bg-rose-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2">
           <div>
             <div className="text-xs uppercase font-bold text-rose-200">Tổng Công Nợ Còn Lại</div>
             <div className="text-2xl font-extrabold mt-1">{totalDebt.toLocaleString('vi-VN')} đ</div>
-            <div className="text-[11px] text-rose-100 mt-1">Cần thu hồi từ các học sinh nợ đợt 2</div>
+            <div className="text-[11px] text-rose-100 mt-1">Bấm để xem các phiếu còn nợ</div>
           </div>
           <AlertCircle className="w-10 h-10 text-rose-300 opacity-80" />
-        </div>
+        </button>
+
+        <button type="button" onClick={() => showReceiptDetail('monthly')} className="bg-blue-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          <div>
+            <div className="text-xs uppercase font-bold text-blue-200">Đã thu học phí tháng</div>
+            <div className="text-2xl font-extrabold mt-1">{monthlyCollected.toLocaleString('vi-VN')} đ</div>
+            <div className="text-[11px] text-blue-100 mt-1">Bấm để xem chi tiết phiếu tháng</div>
+          </div>
+          <DollarSign className="w-10 h-10 text-blue-300 opacity-80" />
+        </button>
+
+        <button type="button" onClick={() => showReceiptDetail('course')} className="bg-violet-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2">
+          <div>
+            <div className="text-xs uppercase font-bold text-violet-200">Đã thu học phí khóa</div>
+            <div className="text-2xl font-extrabold mt-1">{courseCollected.toLocaleString('vi-VN')} đ</div>
+            <div className="text-[11px] text-violet-100 mt-1">Bấm để xem chi tiết phiếu khóa</div>
+          </div>
+          <FileText className="w-10 h-10 text-violet-300 opacity-80" />
+        </button>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-800"><Filter className="h-4 w-4 text-red-700" /> Lọc phiếu thu nhanh</h3>
+          <button type="button" onClick={resetReceiptFilters} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 hover:text-red-800"><RotateCcw className="h-3.5 w-3.5" /> Xóa bộ lọc</button>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <label className="relative xl:col-span-2">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input value={receiptQuery} onChange={(event) => setReceiptQuery(event.target.value)} placeholder="Mã phiếu, mã/tên học sinh, kỳ thu..." className="w-full rounded-xl border border-slate-300 py-2 pl-9 pr-3 text-xs outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100" />
+          </label>
+          <select value={filterClassId} onChange={(event) => setFilterClassId(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+            <option value="all">Tất cả lớp</option>
+            {classes.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.code} · {classroom.name}</option>)}
+          </select>
+          <select value={filterPaymentKind} onChange={(event) => setFilterPaymentKind(event.target.value as 'all' | 'monthly' | 'course')} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+            <option value="all">Tất cả khoản thu</option><option value="monthly">Học phí tháng</option><option value="course">Học phí khóa</option>
+          </select>
+          <select value={filterReceiptStatus} onChange={(event) => setFilterReceiptStatus(event.target.value as 'all' | 'paid' | 'debt')} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+            <option value="all">Tất cả tình trạng</option><option value="paid">Đã đóng đủ</option><option value="debt">Còn nợ / đóng thiếu</option>
+          </select>
+          <select value={filterMonth} onChange={(event) => setFilterMonth(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+            <option value="all">Tất cả tháng thu</option>{receiptMonths.map((month) => <option key={month} value={month}>Tháng {month.slice(5)}/{month.slice(0, 4)}</option>)}
+          </select>
+          <select value={filterPaymentMethod} onChange={(event) => setFilterPaymentMethod(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+            <option value="all">Tất cả hình thức</option><option value="Tiền mặt">Tiền mặt</option><option value="Chuyển khoản">Chuyển khoản</option><option value="Thẻ">Thẻ</option><option value="TM/CK">TM/CK</option>
+          </select>
+        </div>
+      </section>
 
       {/* Receipts History Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-800 text-slate-200 font-bold text-xs uppercase flex justify-between items-center">
-          <span>Lịch Sử Phiếu Thu Học Phí ({receipts.length})</span>
+          <span>Lịch Sử Phiếu Thu Học Phí ({filteredReceipts.length}/{receipts.length})</span>
+          <span className="normal-case font-medium text-slate-400">Bấm vào một dòng để xem/in chi tiết</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -272,12 +362,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {receipts.map((rc) => {
+              {filteredReceipts.map((rc) => {
                 const student = students.find(s => s.id === rc.studentId);
                 const status = receiptStatus(rc);
 
                 return (
-                  <tr key={rc.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={rc.id} onClick={() => setSelectedReceipt(rc)} className="cursor-pointer hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4 font-bold text-red-800">{rc.code}</td>
                     <td className="py-3 px-4 font-bold text-slate-900">{student?.name} ({student?.code})</td>
                     <td className="py-3 px-4">{rc.courseFee > 0 ? `${rc.courseFee.toLocaleString('vi-VN')} đ` : '—'}</td>
@@ -294,14 +384,14 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                       <div className="flex justify-end gap-1.5">
                       {canCollect && <button
                         type="button"
-                        onClick={() => handleOpenEditReceipt(rc)}
+                        onClick={(event) => { event.stopPropagation(); handleOpenEditReceipt(rc); }}
                         className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1"
                         title="Sửa và cập nhật phiếu thu"
                       >
                         <Edit className="w-3.5 h-3.5" /> Sửa
                       </button>}
                       <button
-                        onClick={() => setSelectedReceipt(rc)}
+                        onClick={(event) => { event.stopPropagation(); setSelectedReceipt(rc); }}
                         className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1"
                       >
                         <Printer className="w-3.5 h-3.5 text-amber-600" />
@@ -309,7 +399,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                       </button>
                       {canDelete && <button
                         type="button"
-                        onClick={() => setPendingReceiptAction({ type: 'delete', receipt: rc })}
+                        onClick={(event) => { event.stopPropagation(); setPendingReceiptAction({ type: 'delete', receipt: rc }); }}
                         className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1"
                         title="Xóa phiếu thu"
                       >
@@ -320,6 +410,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   </tr>
                 );
               })}
+              {!filteredReceipts.length && <tr><td colSpan={11} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">Không tìm thấy phiếu thu phù hợp với bộ lọc hiện tại.</td></tr>}
             </tbody>
           </table>
         </div>
