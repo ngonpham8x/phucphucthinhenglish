@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Teacher, ClassRoom, StaffPermissions } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { TeacherAvatar } from './TeacherAvatar';
 import {
   GraduationCap,
   Plus,
@@ -115,11 +116,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
               <div className="p-5">
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={teacher.avatar}
-                      alt={teacher.name}
-                      className="w-14 h-14 rounded-full object-cover border-2 border-red-700 shadow-xs"
-                    />
+                    <TeacherAvatar teacher={teacher} className="h-14 w-14 text-sm shadow-xs" />
                     <div>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                         {teacher.id}
@@ -227,11 +224,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
 
             {/* Modal Header Profile */}
             <div className="flex flex-col sm:flex-row items-center gap-4 pb-5 border-b border-slate-200">
-              <img
-                src={viewingTeacherDetails.avatar}
-                alt={viewingTeacherDetails.name}
-                className="w-20 h-20 rounded-full object-cover border-4 border-red-700 shadow-md"
-              />
+              <TeacherAvatar teacher={viewingTeacherDetails} className="h-20 w-20 text-xl shadow-md" />
               <div className="text-center sm:text-left flex-1">
                 <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">

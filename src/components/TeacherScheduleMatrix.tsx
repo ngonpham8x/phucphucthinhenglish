@@ -1,6 +1,7 @@
 import React from 'react';
 import { Teacher, TimetableSlot, ClassRoom, Room } from '../types';
 import { CalendarCheck, Printer, FileSpreadsheet, GraduationCap } from 'lucide-react';
+import { TeacherAvatar } from './TeacherAvatar';
 
 interface TeacherScheduleMatrixProps {
   teachers: Teacher[];
@@ -82,7 +83,7 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
                 <tr key={teacher.id} className="teacher-print-row hover:bg-slate-50">
                   <td className="py-3 px-4 bg-slate-100 font-bold text-slate-900 border-r border-slate-300">
                     <div className="flex items-center gap-2">
-                      <img src={teacher.avatar} alt={teacher.name} className="w-7 h-7 rounded-full object-cover border border-red-700" />
+                      <TeacherAvatar teacher={teacher} className="h-7 w-7 text-[9px]" />
                       <div>
                         <div>{teacher.name}</div>
                         <div className="text-[10px] text-red-800">{teacher.specialty}</div>
