@@ -10,6 +10,12 @@ export const paymentKindLabel = (receipt: Pick<TuitionReceipt, 'paymentKind'>) =
   paymentKindOf(receipt) === 'course' ? 'Học phí khóa' : 'Học phí tháng'
 );
 
+// "Chưa xác định" is an internal value. Documents should display the
+// conventional cash/bank-transfer placeholder instead of an unfinished state.
+export const paymentMethodLabel = (method?: TuitionReceipt['paymentMethod']) => (
+  !method || method === 'Chưa xác định' ? 'TM/CK' : method
+);
+
 export const paymentPeriodLabel = (receipt: Pick<TuitionReceipt, 'paymentKind' | 'billingPeriod' | 'paymentDate'>) => {
   const period = receipt.billingPeriod?.trim();
   if (paymentKindOf(receipt) === 'monthly' && period && /^\d{4}-\d{2}$/.test(period)) {

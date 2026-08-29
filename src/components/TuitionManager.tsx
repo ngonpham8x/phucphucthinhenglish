@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
 import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2 } from 'lucide-react';
 import logoImg from '../assets/images/regenerated_image_1786351687546.png';
-import { paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
+import { paymentKindLabel, paymentMethodLabel, paymentPeriodLabel } from '../lib/tuition';
 
 const receiptStatus = (receipt: Pick<TuitionReceipt, 'paidAmount' | 'debtAmount' | 'status'>) => {
   if (receipt.debtAmount > 0) return receipt.paidAmount > 0 ? 'partial' as const : 'debt' as const;
@@ -48,6 +48,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   onUpdateReceipt,
   onDeleteReceipt
 }) => {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const defaultCoursePeriod = `Khóa ${new Date().getFullYear()}`;
   const [selectedReceipt, setSelectedReceipt] = useState<TuitionReceipt | null>(null);
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
   const [editingReceipt, setEditingReceipt] = useState<TuitionReceipt | null>(null);
@@ -61,10 +63,13 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [courseFeeInput, setCourseFeeInput] = useState<number>(0);
   const [monthlyFeeInput, setMonthlyFeeInput] = useState<number>(0);
   const [paymentKind, setPaymentKind] = useState<'course' | 'monthly'>('monthly');
-  const [billingPeriod, setBillingPeriod] = useState<string>(new Date().toISOString().slice(0, 7));
+  // A course label is invalid for <input type="month">. Retaining the two
+  // values prevents the period field from appearing blank when switching kind.
+  const [monthlyBillingPeriod, setMonthlyBillingPeriod] = useState<string>(currentMonth);
+  const [courseBillingPeriod, setCourseBillingPeriod] = useState<string>(defaultCoursePeriod);
   const [paidAmountInput, setPaidAmountInput] = useState<number>(0);
   const [discountInput, setDiscountInput] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chuyển khoản');
+  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chưa xác định');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [collectError, setCollectError] = useState<string | null>(null);
 
@@ -73,8 +78,6 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
   const totalDebt = receipts.reduce((sum, r) => sum + r.debtAmount, 0);
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const defaultCoursePeriod = `Khóa ${new Date().getFullYear()}`;
   const coursePeriodOptions = [...new Set(receipts
     .filter((receipt) => receipt.paymentKind === 'course')
     .map((receipt) => receipt.billingPeriod?.trim())
@@ -89,9 +92,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCourseFeeInput(0);
     setMonthlyFeeInput(suggestedMonthlyFee);
     setPaymentKind('monthly');
-    setBillingPeriod(currentMonth);
+    setMonthlyBillingPeriod(currentMonth);
+    setCourseBillingPeriod(coursePeriodOptions[0] || defaultCoursePeriod);
     setPaidAmountInput(suggestedMonthlyFee);
     setDiscountInput(0);
+    setPaymentMethod('Chưa xác định');
+    setPaymentNotes('');
     setCollectError(null);
     setIsCollectModalOpen(true);
   };
@@ -101,11 +107,17 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCollectingStudentId(receipt.studentId);
     setCourseFeeInput(receipt.courseFee || 0);
     setMonthlyFeeInput(receipt.monthlyFee || 0);
-    setPaymentKind(receipt.paymentKind === 'course' ? 'course' : 'monthly');
-    setBillingPeriod(receipt.billingPeriod || (receipt.paymentKind === 'course' ? defaultCoursePeriod : receipt.paymentDate.slice(0, 7)));
+    const receiptKind = receipt.paymentKind === 'course' ? 'course' : 'monthly';
+    setPaymentKind(receiptKind);
+    setMonthlyBillingPeriod(receiptKind === 'monthly'
+      ? (receipt.billingPeriod || receipt.paymentDate.slice(0, 7))
+      : receipt.paymentDate.slice(0, 7));
+    setCourseBillingPeriod(receiptKind === 'course'
+      ? (receipt.billingPeriod || defaultCoursePeriod)
+      : (coursePeriodOptions[0] || defaultCoursePeriod));
     setPaidAmountInput(receipt.paidAmount);
     setDiscountInput(receipt.discount || 0);
-    setPaymentMethod(receipt.paymentMethod);
+    setPaymentMethod(receipt.paymentMethod || 'Chưa xác định');
     setPaymentNotes(receipt.notes || '');
     setCollectError(null);
     setIsCollectModalOpen(true);
@@ -118,7 +130,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
     const selectedFee = paymentKind === 'monthly' ? monthlyFeeInput : courseFeeInput;
     const finalPrice = Math.max(selectedFee - discountInput, 0);
-    const cleanBillingPeriod = billingPeriod.trim();
+    const cleanBillingPeriod = (paymentKind === 'monthly' ? monthlyBillingPeriod : courseBillingPeriod).trim();
     if (selectedFee <= 0) {
       setCollectError(`Nhập học phí ${paymentKind === 'monthly' ? 'tháng' : 'khóa'} lớn hơn 0 trước khi lập phiếu.`);
       return;
@@ -277,7 +289,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     </td>
                     <td className="py-3 px-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>
                     <td className="py-3 px-4">{rc.paymentDate}</td>
-                    <td className="py-3 px-4">{rc.paymentMethod}</td>
+                    <td className="py-3 px-4">{paymentMethodLabel(rc.paymentMethod)}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex justify-end gap-1.5">
                       {canCollect && <button
@@ -366,8 +378,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     onChange={(e) => {
                       const nextKind = e.target.value as 'course' | 'monthly';
                       setPaymentKind(nextKind);
-                      setPaidAmountInput(nextKind === 'monthly' ? monthlyFeeInput : courseFeeInput);
-                      setBillingPeriod(nextKind === 'monthly' ? currentMonth : (coursePeriodOptions[0] || defaultCoursePeriod));
+                      // Keep each amount and period exactly as the operator
+                      // entered it. Switching kind must not wipe the edit form.
                       setCollectError(null);
                     }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl"
@@ -379,10 +391,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">{paymentKind === 'monthly' ? 'Kỳ Học Phí' : 'Mốc Thời Gian Khóa'}</label>
                   {paymentKind === 'monthly' ? (
-                    <input type="month" value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
+                    <input type="month" value={monthlyBillingPeriod} onChange={(e) => setMonthlyBillingPeriod(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
                   ) : (
                     <>
-                      <input type="text" value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} list="course-period-options" placeholder="Ví dụ: Khóa 09/2026–12/2026" className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
+                      <input type="text" value={courseBillingPeriod} onChange={(e) => setCourseBillingPeriod(e.target.value)} list="course-period-options" placeholder="Ví dụ: Khóa 09/2026–12/2026" className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
                       <datalist id="course-period-options">
                         {coursePeriodOptions.map((period) => <option key={period} value={period} />)}
                         <option value={defaultCoursePeriod} />
@@ -458,7 +470,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   <option value="Chuyển khoản">Chuyển khoản Ngân hàng</option>
                   <option value="Tiền mặt">Tiền mặt tại trung tâm</option>
                   <option value="Thẻ">Quẹt thẻ POS</option>
-                  <option value="Chưa xác định">Chưa xác định</option>
+                  <option value="Chưa xác định">TM/CK (chưa xác định)</option>
                 </select>
               </div>
 
@@ -523,9 +535,9 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
             {/* Receipt Content */}
             <div className="border-2 border-red-900 p-6 rounded-xl space-y-4">
-              <div className="flex flex-nowrap items-center justify-center gap-3 border-b-2 border-red-900 pb-4 text-center">
-                <img src={logoImg} onError={(event) => { event.currentTarget.src = '/phuc-phuc-thinh-logo.png'; }} alt="Logo Phúc Phúc Thịnh English" className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover" />
-                <div className="min-w-0">
+              <div className="relative border-b-2 border-red-900 pb-4 text-center">
+                <img src={logoImg} onError={(event) => { event.currentTarget.src = '/phuc-phuc-thinh-logo.png'; }} alt="Logo Phúc Phúc Thịnh English" className="absolute left-2 top-0 h-14 w-14 rounded-full border border-slate-200 bg-white object-cover" />
+                <div className="min-h-14 px-16">
                   <h2 className="whitespace-nowrap font-extrabold text-red-900 text-[13px] uppercase tracking-tight">{settings.name}</h2>
                   <p className="text-xs text-slate-600">{settings.address}</p>
                   <p className="text-xs text-slate-600">Hotline: {settings.phone}</p>
@@ -550,7 +562,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <div>Số tiền thực đóng: <strong className="text-base text-red-800">{selectedReceipt.paidAmount.toLocaleString('vi-VN')} đ</strong></div>
                     {selectedReceipt.debtAmount > 0 && <div>Số tiền còn thiếu: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>}
                     <div>Tình trạng: <strong>{receiptStatusLabel[receiptStatus(selectedReceipt)]}</strong></div>
-                    <div>Hình thức thanh toán: <strong>{selectedReceipt.paymentMethod}</strong></div>
+                    <div>Hình thức thanh toán: <strong>{paymentMethodLabel(selectedReceipt.paymentMethod)}</strong></div>
                     <div>Ngày lập phiếu: <strong>{selectedReceipt.paymentDate}</strong></div>
                     <div>Ghi chú: <em>{selectedReceipt.notes || 'Đã hoàn tất thanh toán'}</em></div>
                   </div>

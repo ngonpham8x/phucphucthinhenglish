@@ -65,11 +65,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`bg-white text-slate-800 transition-all duration-300 flex flex-col justify-between z-20 border-r border-slate-200 shadow-sm ${
+      className={`self-start bg-white text-slate-800 transition-all duration-300 z-20 border-r border-slate-200 shadow-sm ${
         collapsed ? 'w-16' : 'w-60'
       }`}
     >
-      <div className="py-2.5 px-2 flex-1 overflow-y-auto custom-scrollbar">
+      <div className="px-2 py-2.5">
         {/* Navigation Menu */}
         <nav className="space-y-1.5">
           {menuItems.filter(item => item.visible).map((item) => {

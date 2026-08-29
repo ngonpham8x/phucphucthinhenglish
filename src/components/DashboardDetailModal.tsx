@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, ChevronRight, ReceiptText, X } from 'lucide-react';
 import { ClassRoom, CourseProgram, Room, Student, Teacher, TuitionReceipt } from '../types';
-import { debtBreakdown, paymentKindLabel, paymentKindOf, paymentPeriodLabel } from '../lib/tuition';
+import { debtBreakdown, paymentKindLabel, paymentKindOf, paymentMethodLabel, paymentPeriodLabel } from '../lib/tuition';
 
 export type DashboardDetailType =
   | 'students'
@@ -354,7 +354,7 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
                       <div className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-100 text-xs">
                         {studentReceipts.map((receipt) => (
                           <div key={receipt.id} className="flex items-center justify-between gap-2 px-2.5 py-2">
-                            <div className="min-w-0"><p className="font-semibold text-slate-700">{receipt.code} · {paymentKindLabel(receipt)}</p><p className="text-[10px] text-slate-500">{paymentPeriodLabel(receipt)} · {receipt.paymentDate} · {receipt.paymentMethod}</p></div>
+                            <div className="min-w-0"><p className="font-semibold text-slate-700">{receipt.code} · {paymentKindLabel(receipt)}</p><p className="text-[10px] text-slate-500">{paymentPeriodLabel(receipt)} · {receipt.paymentDate} · {paymentMethodLabel(receipt.paymentMethod)}</p></div>
                             <div className="shrink-0 text-right"><p className="font-bold text-emerald-700">{formatCurrency(receipt.paidAmount)}</p>{canViewDebt && receipt.debtAmount > 0 && <p className="mt-0.5 text-[10px] font-bold text-rose-700">Nợ {formatCurrency(receipt.debtAmount)}</p>}</div>
                           </div>
                         ))}

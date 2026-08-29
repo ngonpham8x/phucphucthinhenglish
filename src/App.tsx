@@ -668,7 +668,7 @@ export default function App() {
       />
 
       {/* Main Workspace Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex flex-1 items-start">
         {/* Sidebar Navigation */}
         <Sidebar
           activeTab={activeTab}
@@ -680,7 +680,7 @@ export default function App() {
         />
 
         {/* Content View Container */}
-        <main ref={contentViewportRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+        <main ref={contentViewportRef} className="min-w-0 flex-1 p-4 sm:p-6">
           {activeTab === 'dashboard' && (
             <DashboardView
               students={students}
