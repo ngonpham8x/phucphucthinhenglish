@@ -1,5 +1,5 @@
 // Service Worker for Trung Tâm Anh Ngữ Phúc Phúc Thịnh PWA
-const CACHE_NAME = 'phuc-phuc-thinh-v2';
+const CACHE_NAME = 'phuc-phuc-thinh-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -12,7 +12,8 @@ self.addEventListener('install', (event) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
+  // Do not take over an open application immediately. A waiting update is
+  // activated on the next launch so active forms/tabs are never interrupted.
 });
 
 self.addEventListener('activate', (event) => {
@@ -27,7 +28,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { debtBreakdown, paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
 import {
   Student,
   CourseProgram,
@@ -44,7 +45,7 @@ import {
   UserCheck
 } from 'lucide-react';
 
-const FeeStatusBadge: React.FC<{ feeStatus: FeeStatus; outstandingAmount?: number }> = ({ feeStatus, outstandingAmount = 0 }) => {
+const FeeStatusBadge: React.FC<{ feeStatus: FeeStatus; monthlyDebt?: number; courseDebt?: number }> = ({ feeStatus, monthlyDebt = 0, courseDebt = 0 }) => {
   const isPaid = feeStatus === 'paid';
   const isUnpaid = feeStatus === 'unpaid';
   const label = isPaid ? 'Đã đóng đủ' : isUnpaid ? 'Chưa đóng' : 'Đóng thiếu';
@@ -60,9 +61,8 @@ const FeeStatusBadge: React.FC<{ feeStatus: FeeStatus; outstandingAmount?: numbe
       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${className}`}>
         <Icon className="w-3 h-3 mr-1" /> {label}
       </span>
-      {outstandingAmount > 0 && (
-        <div className="text-[10px] font-bold text-rose-700">Còn thiếu: {outstandingAmount.toLocaleString('vi-VN')} đ</div>
-      )}
+      {monthlyDebt > 0 && <div className="text-[10px] font-bold text-rose-700">Nợ tháng: {monthlyDebt.toLocaleString('vi-VN')} đ</div>}
+      {courseDebt > 0 && <div className="text-[10px] font-bold text-rose-700">Nợ khóa: {courseDebt.toLocaleString('vi-VN')} đ</div>}
     </div>
   );
 };
@@ -115,9 +115,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const canDelete = isOwner || permissions.student.delete;
   // Báo cáo workbook có cả dữ liệu học phí, nên chỉ quyền Excel mới được mở.
   const canExport = isOwner || permissions.excel.import || permissions.excel.export;
-  const outstandingForStudent = (studentId: string) => receipts
-    .filter(receipt => receipt.studentId === studentId)
-    .reduce((total, receipt) => total + Math.max(receipt.debtAmount, 0), 0);
+  const debtForStudent = (studentId: string) => debtBreakdown(receipts.filter((receipt) => receipt.studentId === studentId));
 
   // Filtered list
   const filteredStudents = students.filter(s => {
@@ -327,7 +325,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 ) : (
                   filteredStudents.map((st) => {
                     const program = programs.find(p => p.id === st.programId);
-                    const outstandingAmount = outstandingForStudent(st.id);
+                    const debt = debtForStudent(st.id);
 
                     return (
                       <tr key={st.id} className="hover:bg-slate-50 transition-colors">
@@ -392,7 +390,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          <FeeStatusBadge feeStatus={st.feeStatus} outstandingAmount={outstandingAmount} />
+                          <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} />
                         </td>
 
                         <td className="py-3 px-4">
@@ -471,7 +469,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
             filteredStudents.map((st) => {
               const program = programs.find(p => p.id === st.programId);
               const cls = classes.find(c => c.id === st.classId);
-              const outstandingAmount = outstandingForStudent(st.id);
+              const debt = debtForStudent(st.id);
 
               const classNameText = cls ? cls.name : (st.classId || 'Chưa xếp lớp');
               const scheduleText = cls ? `${cls.scheduleTime} (${cls.days.join(', ')})` : 'T2-T4-T6 (18:00 - 19:30)';
@@ -512,7 +510,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
                       {/* Fee Badge */}
                       <div className="shrink-0 text-right">
-                        <FeeStatusBadge feeStatus={st.feeStatus} outstandingAmount={outstandingAmount} />
+                        <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} />
                       </div>
                     </div>
 
@@ -771,7 +769,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   <div className="mt-1">
                     <FeeStatusBadge
                       feeStatus={viewingStudent.feeStatus}
-                      outstandingAmount={outstandingForStudent(viewingStudent.id)}
+                      monthlyDebt={debtForStudent(viewingStudent.id).monthly}
+                      courseDebt={debtForStudent(viewingStudent.id).course}
                     />
                   </div>
                 </div>
@@ -780,6 +779,23 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   <div className="italic text-slate-700 font-medium">{viewingStudent.notes || 'Không có ghi chú đặc biệt'}</div>
                 </div>
               </div>
+              {(() => {
+                const debtReceipts = receipts.filter((receipt) => receipt.studentId === viewingStudent.id && receipt.debtAmount > 0);
+                if (!debtReceipts.length) return null;
+                return (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-950">
+                    <div className="font-extrabold">Các khoản còn thiếu cần thu</div>
+                    <div className="mt-2 space-y-1.5">
+                      {debtReceipts.map((receipt) => (
+                        <div key={receipt.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-rose-200 pt-1.5 first:border-t-0 first:pt-0">
+                          <span className="font-semibold">{paymentKindLabel(receipt)} · {paymentPeriodLabel(receipt)}</span>
+                          <strong>{receipt.debtAmount.toLocaleString('vi-VN')} đ</strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="mt-6 pt-4 border-t border-slate-200 flex justify-between items-center">

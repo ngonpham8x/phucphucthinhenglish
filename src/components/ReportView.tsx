@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Student, Teacher, ClassRoom, TuitionReceipt } from '../types';
 import { BarChart3, Calendar, Download, Printer, DollarSign, Users, BookOpen } from 'lucide-react';
+import { debtBreakdown } from '../lib/tuition';
 
 interface ReportViewProps {
   students: Student[];
@@ -17,8 +18,21 @@ export const ReportView: React.FC<ReportViewProps> = ({
 }) => {
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('month');
 
-  const totalRevenue = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
-  const totalDebt = receipts.reduce((sum, r) => sum + r.debtAmount, 0);
+  const reportDate = [...receipts.map((receipt) => receipt.paymentDate).filter(Boolean)].sort().at(-1) || new Date().toISOString().slice(0, 10);
+  const referenceDate = new Date(`${reportDate}T00:00:00`);
+  const weekStart = new Date(referenceDate);
+  weekStart.setDate(referenceDate.getDate() - ((referenceDate.getDay() + 6) % 7));
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+  const reportReceipts = receipts.filter((receipt) => {
+    if (timeFilter === 'day') return receipt.paymentDate === reportDate;
+    if (timeFilter === 'week') return receipt.paymentDate >= isoDay(weekStart) && receipt.paymentDate <= isoDay(weekEnd);
+    return receipt.paymentDate.startsWith(reportDate.slice(0, 7));
+  });
+  const totalRevenue = reportReceipts.reduce((sum, r) => sum + r.paidAmount, 0);
+  const totalDebtBreakdown = debtBreakdown(reportReceipts);
+  const totalDebt = totalDebtBreakdown.total;
   const activeCount = students.filter(s => s.status === 'active').length;
   const reservedCount = students.filter(s => s.status === 'reserved').length;
 
@@ -93,13 +107,13 @@ export const ReportView: React.FC<ReportViewProps> = ({
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
             <div className="text-slate-500 font-semibold uppercase">Tổng Doanh Thu</div>
             <div className="text-xl font-bold text-amber-700 mt-1">{totalRevenue.toLocaleString('vi-VN')} đ</div>
-            <div className="text-[11px] text-slate-500">Đã thu thực tế</div>
+            <div className="text-[11px] text-slate-500">Theo {timeFilter === 'day' ? 'ngày' : timeFilter === 'week' ? 'tuần' : 'tháng'} có dữ liệu gần nhất</div>
           </div>
 
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
             <div className="text-slate-500 font-semibold uppercase">Tổng Công Nợ</div>
             <div className="text-xl font-bold text-rose-700 mt-1">{totalDebt.toLocaleString('vi-VN')} đ</div>
-            <div className="text-[11px] text-rose-600 font-medium">Cần đôn đốc thu</div>
+            <div className="text-[11px] text-rose-600 font-medium">Tháng: {totalDebtBreakdown.monthly.toLocaleString('vi-VN')} đ · Khóa: {totalDebtBreakdown.course.toLocaleString('vi-VN')} đ</div>
           </div>
 
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
@@ -121,15 +135,16 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <th className="p-2.5">Tên Lớp Học</th>
                   <th className="p-2.5">Sĩ Số</th>
                   <th className="p-2.5">Doanh Thu Thu</th>
-                  <th className="p-2.5">Còn Nợ</th>
+                  <th className="p-2.5">Nợ Tháng</th>
+                  <th className="p-2.5">Nợ Khóa</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
                 {classes.map((cls, idx) => {
                   const classStudents = students.filter(s => s.classId === cls.id);
-                  const classReceipts = receipts.filter(r => classStudents.some(st => st.id === r.studentId));
+                  const classReceipts = reportReceipts.filter((receipt) => receipt.classId === cls.id);
                   const paid = classReceipts.reduce((s, r) => s + r.paidAmount, 0);
-                  const debt = classReceipts.reduce((s, r) => s + r.debtAmount, 0);
+                  const debt = debtBreakdown(classReceipts);
 
                   return (
                     <tr key={cls.id}>
@@ -138,7 +153,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
                       <td className="p-2.5 font-bold text-slate-900">{cls.name}</td>
                       <td className="p-2.5">{classStudents.length} / {cls.capacity > 0 ? cls.capacity : 'Chưa cập nhật'} HS</td>
                       <td className="p-2.5 font-bold text-emerald-700">{paid.toLocaleString('vi-VN')} đ</td>
-                      <td className="p-2.5 font-bold text-rose-700">{debt.toLocaleString('vi-VN')} đ</td>
+                      <td className="p-2.5 font-bold text-rose-700">{debt.monthly > 0 ? `${debt.monthly.toLocaleString('vi-VN')} đ` : '—'}</td>
+                      <td className="p-2.5 font-bold text-rose-700">{debt.course > 0 ? `${debt.course.toLocaleString('vi-VN')} đ` : '—'}</td>
                     </tr>
                   );
                 })}

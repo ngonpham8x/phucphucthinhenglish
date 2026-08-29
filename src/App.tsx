@@ -50,6 +50,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { UserManagementModal } from './components/UserManagementModal';
 import { profileToAccount, ProfileRow } from './lib/auth';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { feeStatusForReceipts } from './lib/tuition';
 import type { CenterWorkbookData } from './services/excelService';
 
 const ImportExportModal = lazy(() => import('./components/ImportExportModal').then((module) => ({ default: module.ImportExportModal })));
@@ -70,6 +71,7 @@ interface CenterDataPayload {
 }
 
 const DATA_SCHEMA_VERSION = 'secure-supabase-import-v1';
+const ACTIVE_TAB_STORAGE_KEY = 'PHUC_PHUC_THINH_ACTIVE_TAB';
 const DATA_STORE_KEYS = [
   'settings',
   'teachers',
@@ -118,26 +120,26 @@ const withClassScheduleSummary = (classroom: ClassRoom, slots: TimetableSlot[]):
 };
 
 const feeStatusFromReceipts = (studentId: string, receipts: TuitionReceipt[]): Student['feeStatus'] => {
-  const studentReceipts = receipts.filter((receipt) => receipt.studentId === studentId);
-  const totalPaid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
-  const totalDebt = studentReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);
-  if (totalDebt > 0) return totalPaid > 0 ? 'partial' : 'debt';
-  return totalPaid > 0 ? 'paid' : 'unpaid';
+  return feeStatusForReceipts(receipts.filter((receipt) => receipt.studentId === studentId));
 };
 
 const normaliseReceipt = (receipt: TuitionReceipt): TuitionReceipt => {
-  const isLegacyReceipt = !receipt.paymentKind;
+  const paymentKind = receipt.paymentKind === 'course' ? 'course' : 'monthly';
   const recordedAmount = Math.max(receipt.paidAmount + receipt.debtAmount + receipt.discount, 0);
-  const status = receipt.debtAmount <= 0 && receipt.paidAmount > 0 ? 'paid' : (receipt.paidAmount > 0 ? 'partial' : 'unpaid');
+  const status: NonNullable<TuitionReceipt['status']> = receipt.debtAmount > 0
+    ? (receipt.paidAmount > 0 ? 'partial' : 'debt')
+    : (receipt.paidAmount > 0 ? 'paid' : 'unpaid');
   return {
     ...receipt,
-    // All historic payments were monthly tuition. Course tuition is only set
-    // for receipts created after the new collection flow is in use.
-    courseFee: isLegacyReceipt ? 0 : receipt.courseFee,
-    monthlyFee: isLegacyReceipt ? recordedAmount : (receipt.monthlyFee ?? 0),
-    paymentKind: receipt.paymentKind || 'monthly',
+    // All historic payments are monthly tuition. A monthly receipt cannot
+    // carry a course fee, even if an old UI/export wrote one accidentally.
+    courseFee: paymentKind === 'course' ? receipt.courseFee : 0,
+    monthlyFee: paymentKind === 'monthly' ? Math.max(receipt.monthlyFee ?? 0, recordedAmount) : 0,
+    paymentKind,
     billingPeriod: receipt.billingPeriod || receipt.paymentDate.slice(0, 7),
-    status: receipt.status || status,
+    // Status is derived from amounts so stale imported/manual labels cannot
+    // disagree with the outstanding balance shown elsewhere.
+    status,
   };
 };
 
@@ -201,7 +203,14 @@ export default function App() {
   const [isAccountAuditLoading, setIsAccountAuditLoading] = useState(false);
 
   // Navigation & Layout State
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const tabFromUrl = new URLSearchParams(window.location.search).get('tab');
+      return tabFromUrl || sessionStorage.getItem(ACTIVE_TAB_STORAGE_KEY) || 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const contentViewportRef = useRef<HTMLElement>(null);
@@ -216,6 +225,21 @@ export default function App() {
       contentViewportRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     });
     return () => window.cancelAnimationFrame(frameId);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'owner' && !canAccessTab(activeTab, currentUser)) setActiveTab('dashboard');
+  }, [activeTab, currentUser]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', activeTab);
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch (error) {
+      console.warn('Không thể lưu trang đang mở:', error);
+    }
   }, [activeTab]);
 
   // Modals state
@@ -695,6 +719,7 @@ export default function App() {
               rooms={rooms}
               programs={programs}
               students={students}
+              receipts={receipts}
               timetableSlots={timetableSlots}
               permissions={currentUser.permissions}
               isOwner={currentUser.role === 'owner'}

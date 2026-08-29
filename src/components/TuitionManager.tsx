@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
 import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign } from 'lucide-react';
+import logoImg from '../assets/images/regenerated_image_1786351687546.png';
+import { paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
 
 const receiptStatus = (receipt: Pick<TuitionReceipt, 'paidAmount' | 'debtAmount' | 'status'>) => {
-  if (receipt.status) return receipt.status;
-  if (receipt.debtAmount <= 0 && receipt.paidAmount > 0) return 'paid' as const;
-  if (receipt.paidAmount > 0) return 'partial' as const;
-  return 'unpaid' as const;
+  if (receipt.debtAmount > 0) return receipt.paidAmount > 0 ? 'partial' as const : 'debt' as const;
+  return receipt.paidAmount > 0 ? 'paid' as const : 'unpaid' as const;
 };
 
 const receiptStatusLabel: Record<'paid' | 'partial' | 'unpaid' | 'debt', string> = {
@@ -56,11 +56,18 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [discountInput, setDiscountInput] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chuyển khoản');
   const [paymentNotes, setPaymentNotes] = useState('');
+  const [collectError, setCollectError] = useState<string | null>(null);
 
   const canCollect = isOwner || permissions.tuition.collect;
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
   const totalDebt = receipts.reduce((sum, r) => sum + r.debtAmount, 0);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const defaultCoursePeriod = `Khóa ${new Date().getFullYear()}`;
+  const coursePeriodOptions = [...new Set(receipts
+    .filter((receipt) => receipt.paymentKind === 'course')
+    .map((receipt) => receipt.billingPeriod?.trim())
+    .filter((period): period is string => Boolean(period)))];
 
   const handleOpenCollect = () => {
     setCollectingStudentId(students[0]?.id || '');
@@ -70,9 +77,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCourseFeeInput(0);
     setMonthlyFeeInput(suggestedMonthlyFee);
     setPaymentKind('monthly');
-    setBillingPeriod(new Date().toISOString().slice(0, 7));
+    setBillingPeriod(currentMonth);
     setPaidAmountInput(suggestedMonthlyFee);
     setDiscountInput(0);
+    setCollectError(null);
     setIsCollectModalOpen(true);
   };
 
@@ -83,18 +91,35 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
     const selectedFee = paymentKind === 'monthly' ? monthlyFeeInput : courseFeeInput;
     const finalPrice = Math.max(selectedFee - discountInput, 0);
+    const cleanBillingPeriod = billingPeriod.trim();
+    if (selectedFee <= 0) {
+      setCollectError(`Nhập học phí ${paymentKind === 'monthly' ? 'tháng' : 'khóa'} lớn hơn 0 trước khi lập phiếu.`);
+      return;
+    }
+    if (!cleanBillingPeriod) {
+      setCollectError('Nhập kỳ học phí hoặc mốc thời gian của khóa.');
+      return;
+    }
+    if (discountInput > selectedFee) {
+      setCollectError('Giảm giá không thể lớn hơn học phí.');
+      return;
+    }
+    if (paidAmountInput > finalPrice) {
+      setCollectError('Số tiền đóng không thể lớn hơn số tiền cần thu sau giảm giá.');
+      return;
+    }
     const debtAmount = Math.max(finalPrice - paidAmountInput, 0);
-    const status = paidAmountInput >= finalPrice && finalPrice > 0 ? 'paid' : (paidAmountInput > 0 ? 'partial' : 'unpaid');
+    const status = debtAmount > 0 ? (paidAmountInput > 0 ? 'partial' : 'debt') : 'paid';
 
     const newReceipt: TuitionReceipt = {
       id: `TR_${Date.now()}`,
-      code: `PT-2026-${(receipts.length + 1).toString().padStart(3, '0')}`,
+      code: `PT-${new Date().getFullYear()}-${(receipts.length + 1).toString().padStart(3, '0')}`,
       studentId: student.id,
       classId: student.classId,
-      courseFee: courseFeeInput,
-      monthlyFee: monthlyFeeInput,
+      courseFee: paymentKind === 'course' ? courseFeeInput : 0,
+      monthlyFee: paymentKind === 'monthly' ? monthlyFeeInput : 0,
       paymentKind,
-      billingPeriod,
+      billingPeriod: cleanBillingPeriod,
       discount: discountInput,
       paidAmount: paidAmountInput,
       debtAmount,
@@ -192,9 +217,9 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   <tr key={rc.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4 font-bold text-red-800">{rc.code}</td>
                     <td className="py-3 px-4 font-bold text-slate-900">{student?.name} ({student?.code})</td>
-                    <td className="py-3 px-4">{rc.courseFee.toLocaleString('vi-VN')} đ</td>
-                    <td className="py-3 px-4">{(rc.monthlyFee || 0).toLocaleString('vi-VN')} đ</td>
-                    <td className="py-3 px-4"><span className="font-semibold text-slate-700">{rc.paymentKind === 'monthly' ? `Tháng ${rc.billingPeriod || 'chưa chọn'}` : 'Học phí khóa'}</span></td>
+                    <td className="py-3 px-4">{rc.courseFee > 0 ? `${rc.courseFee.toLocaleString('vi-VN')} đ` : '—'}</td>
+                    <td className="py-3 px-4">{(rc.monthlyFee || 0) > 0 ? `${(rc.monthlyFee || 0).toLocaleString('vi-VN')} đ` : '—'}</td>
+                    <td className="py-3 px-4"><span className="font-semibold text-slate-700">{paymentKindLabel(rc)} · {paymentPeriodLabel(rc)}</span></td>
                     <td className="py-3 px-4 font-bold text-emerald-700">{rc.paidAmount.toLocaleString('vi-VN')} đ</td>
                     <td className="py-3 px-4 font-bold text-rose-700">
                       {rc.debtAmount > 0 ? `${rc.debtAmount.toLocaleString('vi-VN')} đ` : '—'}
@@ -242,6 +267,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   value={collectingStudentId}
                   onChange={(e) => {
                     setCollectingStudentId(e.target.value);
+                    setCollectError(null);
                     const st = students.find(s => s.id === e.target.value);
                     const prog = programs.find(p => p.id === st?.programId);
                     if (prog) {
@@ -271,7 +297,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     min="0"
                     value={courseFeeInput}
                     onChange={(e) => setCourseFeeInput(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800"
+                    disabled={paymentKind !== 'course'}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                     required
                   />
                 </div>
@@ -283,7 +310,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     min="0"
                     value={monthlyFeeInput}
                     onChange={(e) => setMonthlyFeeInput(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    disabled={paymentKind !== 'monthly'}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </div>
               </div>
@@ -297,6 +325,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                       const nextKind = e.target.value as 'course' | 'monthly';
                       setPaymentKind(nextKind);
                       setPaidAmountInput(nextKind === 'monthly' ? monthlyFeeInput : courseFeeInput);
+                      setBillingPeriod(nextKind === 'monthly' ? currentMonth : (coursePeriodOptions[0] || defaultCoursePeriod));
+                      setCollectError(null);
                     }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl"
                   >
@@ -305,8 +335,18 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Kỳ Học Phí</label>
-                  <input type="month" value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
+                  <label className="block font-semibold text-slate-700 mb-1">{paymentKind === 'monthly' ? 'Kỳ Học Phí' : 'Mốc Thời Gian Khóa'}</label>
+                  {paymentKind === 'monthly' ? (
+                    <input type="month" value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
+                  ) : (
+                    <>
+                      <input type="text" value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} list="course-period-options" placeholder="Ví dụ: Khóa 09/2026–12/2026" className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
+                      <datalist id="course-period-options">
+                        {coursePeriodOptions.map((period) => <option key={period} value={period} />)}
+                        <option value={defaultCoursePeriod} />
+                      </datalist>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -333,13 +373,15 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     </div>
                     {remaining > 0 && (
                       <div className="mt-2 flex items-center justify-between border-t border-amber-200 pt-2 text-amber-900">
-                        <span className="font-semibold">Còn thiếu cần thu</span>
+                        <span className="font-semibold">Còn thiếu {paymentKind === 'monthly' ? 'học phí tháng' : 'học phí khóa'} cần thu</span>
                         <strong>{remaining.toLocaleString('vi-VN')} đ</strong>
                       </div>
                     )}
                   </div>
                 );
               })()}
+
+              {collectError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">{collectError}</p>}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Hình Thức Thanh Toán</label>
@@ -399,12 +441,15 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
             {/* Receipt Content */}
             <div className="border-2 border-red-900 p-6 rounded-xl space-y-4">
-              <div className="text-center border-b-2 border-red-900 pb-4">
-                <h2 className="font-extrabold text-red-900 text-lg uppercase tracking-wider">{settings.name}</h2>
-                <p className="text-xs text-slate-600">{settings.address}</p>
-                <p className="text-xs text-slate-600">Hotline: {settings.phone}</p>
-                <h3 className="text-xl font-black text-slate-900 uppercase mt-3 tracking-widest">PHIẾU THU HỌC PHÍ</h3>
-                <p className="text-xs font-bold text-red-800">Số: {selectedReceipt.code}</p>
+              <div className="flex items-center justify-center gap-3 border-b-2 border-red-900 pb-4 text-center">
+                <img src={logoImg} onError={(event) => { event.currentTarget.src = '/phuc-phuc-thinh-logo.png'; }} alt="Logo Phúc Phúc Thịnh English" className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover" />
+                <div>
+                  <h2 className="font-extrabold text-red-900 text-lg uppercase tracking-wider">{settings.name}</h2>
+                  <p className="text-xs text-slate-600">{settings.address}</p>
+                  <p className="text-xs text-slate-600">Hotline: {settings.phone}</p>
+                  <h3 className="text-xl font-black text-slate-900 uppercase mt-3 tracking-widest">PHIẾU THU HỌC PHÍ</h3>
+                  <p className="text-xs font-bold text-red-800">Số: {selectedReceipt.code}</p>
+                </div>
               </div>
 
               {(() => {
@@ -416,9 +461,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <div>Họ và tên học sinh: <strong className="text-sm">{student?.name}</strong> (Mã HS: {student?.code})</div>
                     <div>Phụ huynh đại diện: <strong>{student?.parentName}</strong> - SĐT: <strong>{student?.parentPhone}</strong></div>
                     <div>Lớp đăng ký học: <strong>{cls?.name}</strong></div>
-                    <div>Số tiền học phí khóa: <strong>{selectedReceipt.courseFee.toLocaleString('vi-VN')} đ</strong></div>
-                    <div>Số tiền học phí tháng: <strong>{(selectedReceipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</strong></div>
-                    <div>Khoản thu: <strong>{selectedReceipt.paymentKind === 'monthly' ? `Học phí tháng ${selectedReceipt.billingPeriod || ''}` : 'Học phí khóa'}</strong></div>
+                    {selectedReceipt.paymentKind === 'course'
+                      ? <div>Số tiền học phí khóa: <strong>{selectedReceipt.courseFee.toLocaleString('vi-VN')} đ</strong></div>
+                      : <div>Số tiền học phí tháng: <strong>{(selectedReceipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</strong></div>}
+                    <div>Khoản thu: <strong>{paymentKindLabel(selectedReceipt)} · {paymentPeriodLabel(selectedReceipt)}</strong></div>
                     <div>Số tiền thực đóng: <strong className="text-base text-red-800">{selectedReceipt.paidAmount.toLocaleString('vi-VN')} đ</strong></div>
                     {selectedReceipt.debtAmount > 0 && <div>Số tiền còn thiếu: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>}
                     <div>Tình trạng: <strong>{receiptStatusLabel[receiptStatus(selectedReceipt)]}</strong></div>

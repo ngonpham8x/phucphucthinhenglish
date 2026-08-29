@@ -3,6 +3,7 @@ import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis
 import { AlertTriangle, Building2, CheckCircle2, DollarSign, GraduationCap, Users, UserCheck, UserMinus } from 'lucide-react';
 import { ClassRoom, CourseProgram, Room, Student, Teacher, TuitionReceipt, UserAccount } from '../types';
 import { DashboardDetailModal, DashboardDetailType } from './DashboardDetailModal';
+import { debtBreakdown } from '../lib/tuition';
 
 interface DashboardViewProps {
   students: Student[];
@@ -33,9 +34,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
   const reservedStudents = students.filter((student) => student.status === 'reserved');
   const droppedStudents = students.filter((student) => student.status === 'dropped');
   const paidStudents = students.filter((student) => student.feeStatus === 'paid');
-  const debtStudents = students.filter((student) => student.feeStatus === 'debt' || student.feeStatus === 'unpaid');
+  const debtStudents = students.filter((student) => debtBreakdown(receipts.filter((receipt) => receipt.studentId === student.id)).total > 0);
   const totalCollected = receipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
-  const totalDebt = receipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);
+  const totalDebtBreakdown = debtBreakdown(receipts);
+  const totalDebt = totalDebtBreakdown.total;
   const latestReceiptMonth = receipts.map((receipt) => receipt.paymentDate.slice(0, 7)).filter(Boolean).sort().at(-1) || '';
   const monthlyRevenue = receipts.filter((receipt) => receipt.paymentDate.startsWith(latestReceiptMonth)).reduce((sum, receipt) => sum + receipt.paidAmount, 0);
   const classById = new Map(classes.map((classroom) => [classroom.id, classroom]));
@@ -55,20 +57,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
     { name: 'Còn nợ / chưa đóng', value: debtStudents.length, color: '#dc2626' },
     { name: 'Bảo lưu', value: reservedStudents.length, color: '#d97706' }
   ] : []).filter((item) => item.value > 0);
-  const classMonthlyData = (showRevenue ? classes : []).map((classroom) => ({
-    classroom,
-    collected: receipts.filter((receipt) => receipt.classId === classroom.id && receipt.paymentDate.startsWith(latestReceiptMonth)).reduce((sum, receipt) => sum + receipt.paidAmount, 0),
-    debt: receipts.filter((receipt) => receipt.classId === classroom.id).reduce((sum, receipt) => sum + receipt.debtAmount, 0)
-  })).sort((a, b) => b.collected - a.collected || b.debt - a.debt);
+  const classMonthlyData = (showRevenue ? classes : []).map((classroom) => {
+    const monthReceipts = receipts.filter((receipt) => receipt.classId === classroom.id && receipt.paymentDate.startsWith(latestReceiptMonth));
+    return {
+      classroom,
+      collected: monthReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0),
+      debt: debtBreakdown(monthReceipts)
+    };
+  }).sort((a, b) => b.collected - a.collected || b.debt.total - a.debt.total);
   const studentRows = (canViewStudents ? students : []).slice(0, 8).map((student) => ({
     ...student,
     classroom: classById.get(student.classId),
     program: programById.get(student.programId),
-    debt: receipts.filter((receipt) => receipt.studentId === student.id).reduce((sum, receipt) => sum + receipt.debtAmount, 0)
+    debt: debtBreakdown(receipts.filter((receipt) => receipt.studentId === student.id))
   }));
 
   const Card = ({ label, value, icon: Icon, color, detail, subtitle }: { label: string; value: string | number; icon: React.ElementType; color: string; detail: DashboardDetailType; subtitle?: string }) => {
-    const canOpen = detail === 'students' || detail === 'active' || detail === 'dropped'
+    const canOpen = detail === 'students' || detail === 'active' || detail === 'reserved' || detail === 'dropped'
       ? canViewStudents
       : detail === 'teachers'
         ? canViewTeachers
@@ -101,7 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
 
       <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Card label="Đang học" value={activeStudents.length} icon={UserCheck} color="bg-emerald-100 text-emerald-600" detail="active" />
-        <Card label="Bảo lưu" value={reservedStudents.length} icon={UserMinus} color="bg-amber-100 text-amber-600" detail="dropped" />
+        <Card label="Bảo lưu" value={reservedStudents.length} icon={UserMinus} color="bg-amber-100 text-amber-600" detail="reserved" />
         <Card label="Còn nợ học phí" value={showDebt ? debtStudents.length : '—'} icon={AlertTriangle} color="bg-orange-100 text-orange-600" detail="debt" />
         <Card label="Đã đóng đủ" value={paidStudents.length} icon={CheckCircle2} color="bg-emerald-100 text-emerald-600" detail="paid" />
       </section>
@@ -113,11 +118,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"><div className="flex items-center justify-between border-b border-slate-100 p-4"><div><h2 className="text-sm font-bold text-slate-800">Tổng thu từng lớp — {monthLabel(latestReceiptMonth)}</h2><p className="mt-1 text-[11px] text-slate-500">Tính trực tiếp từ ngày thu trên phiếu.</p></div><button onClick={() => onNavigateTab('tuition')} className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800">Quản lý học phí</button></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Lớp</th><th className="px-4 py-3 text-right">Đã thu</th>{showDebt && <th className="px-4 py-3 text-right">Công nợ</th>}</tr></thead><tbody className="divide-y divide-slate-100">{classMonthlyData.map(({ classroom, collected, debt }) => <tr key={classroom.id}><td className="px-4 py-3"><b className="text-slate-900">{classroom.code}</b><span className="ml-2 text-slate-500">{classroom.name}</span></td><td className="px-4 py-3 text-right font-bold text-emerald-700">{currency(collected)}</td>{showDebt && <td className="px-4 py-3 text-right font-bold text-rose-700">{currency(debt)}</td>}</tr>)}</tbody></table></div></div>
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"><div className="flex items-center justify-between border-b border-slate-100 p-4"><div><h2 className="text-sm font-bold text-slate-800">Danh sách học sinh</h2><p className="mt-1 text-[11px] text-slate-500">Dữ liệu từ file đã chuẩn hoá.</p></div><button onClick={() => onNavigateTab('students')} className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800">Xem tất cả</button></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Mã</th><th className="px-4 py-3">Học sinh</th><th className="px-4 py-3">Lớp</th>{showDebt && <th className="px-4 py-3 text-right">Nợ</th>}</tr></thead><tbody className="divide-y divide-slate-100">{studentRows.map((student) => <tr key={student.id}><td className="px-4 py-3 font-bold text-slate-700">{student.code}</td><td className="px-4 py-3"><b className="text-slate-900">{student.name}</b><span className="mt-0.5 block text-[11px] text-slate-500">{student.status === 'reserved' ? 'Bảo lưu' : 'Đang học'}</span></td><td className="px-4 py-3 text-slate-600">{student.classroom?.code || 'Chưa xếp'}</td>{showDebt && <td className="px-4 py-3 text-right font-bold text-rose-700">{currency(student.debt)}</td>}</tr>)}</tbody></table></div></div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"><div className="flex items-center justify-between border-b border-slate-100 p-4"><div><h2 className="text-sm font-bold text-slate-800">Tổng thu từng lớp — {monthLabel(latestReceiptMonth)}</h2><p className="mt-1 text-[11px] text-slate-500">Đã thu và nợ của các phiếu thu trong tháng này.</p></div><button onClick={() => onNavigateTab('tuition')} className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800">Quản lý học phí</button></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Lớp</th><th className="px-4 py-3 text-right">Đã thu</th>{showDebt && <th className="px-4 py-3 text-right">Công nợ theo loại</th>}</tr></thead><tbody className="divide-y divide-slate-100">{classMonthlyData.map(({ classroom, collected, debt }) => <tr key={classroom.id}><td className="px-4 py-3"><b className="text-slate-900">{classroom.code}</b><span className="ml-2 text-slate-500">{classroom.name}</span></td><td className="px-4 py-3 text-right font-bold text-emerald-700">{currency(collected)}</td>{showDebt && <td className="px-4 py-3 text-right font-bold text-rose-700">{debt.total > 0 ? <><div>{currency(debt.total)}</div>{debt.monthly > 0 && <div className="mt-0.5 text-[10px]">Tháng: {currency(debt.monthly)}</div>}{debt.course > 0 && <div className="mt-0.5 text-[10px]">Khóa: {currency(debt.course)}</div>}</> : '—'}</td>}</tr>)}</tbody></table></div></div>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"><div className="flex items-center justify-between border-b border-slate-100 p-4"><div><h2 className="text-sm font-bold text-slate-800">Danh sách học sinh</h2><p className="mt-1 text-[11px] text-slate-500">Dữ liệu từ hồ sơ và phiếu thu đã chuẩn hoá.</p></div><button onClick={() => onNavigateTab('students')} className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-800">Xem tất cả</button></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Mã</th><th className="px-4 py-3">Học sinh</th><th className="px-4 py-3">Lớp</th>{showDebt && <th className="px-4 py-3 text-right">Nợ theo loại</th>}</tr></thead><tbody className="divide-y divide-slate-100">{studentRows.map((student) => <tr key={student.id}><td className="px-4 py-3 font-bold text-slate-700">{student.code}</td><td className="px-4 py-3"><b className="text-slate-900">{student.name}</b><span className="mt-0.5 block text-[11px] text-slate-500">{student.status === 'reserved' ? 'Bảo lưu' : student.status === 'dropped' ? 'Nghỉ học' : 'Đang học'}</span></td><td className="px-4 py-3 text-slate-600">{student.classroom?.code || 'Chưa xếp'}</td>{showDebt && <td className="px-4 py-3 text-right font-bold text-rose-700">{student.debt.total > 0 ? <><div>{currency(student.debt.total)}</div>{student.debt.monthly > 0 && <div className="mt-0.5 text-[10px]">Tháng: {currency(student.debt.monthly)}</div>}{student.debt.course > 0 && <div className="mt-0.5 text-[10px]">Khóa: {currency(student.debt.course)}</div>}</> : '—'}</td>}</tr>)}</tbody></table></div></div>
       </section>
 
-      {showDebt && <section className="grid grid-cols-1 gap-4 sm:grid-cols-3"><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Tổng phải thu</p><p className="mt-1 text-xl font-extrabold">{currency(totalCollected + totalDebt)}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Đã thu</p><p className="mt-1 text-xl font-extrabold text-emerald-700">{currency(totalCollected)}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Công nợ</p><p className="mt-1 text-xl font-extrabold text-rose-700">{currency(totalDebt)}</p></div></section>}
+      {showDebt && <section className="grid grid-cols-1 gap-4 sm:grid-cols-4"><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Tổng phải thu</p><p className="mt-1 text-xl font-extrabold">{currency(totalCollected + totalDebt)}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Đã thu</p><p className="mt-1 text-xl font-extrabold text-emerald-700">{currency(totalCollected)}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Nợ học phí tháng</p><p className="mt-1 text-xl font-extrabold text-rose-700">{currency(totalDebtBreakdown.monthly)}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold text-slate-500">Nợ học phí khóa</p><p className="mt-1 text-xl font-extrabold text-rose-700">{currency(totalDebtBreakdown.course)}</p></div></section>}
 
       <DashboardDetailModal detail={selectedDetail} students={students} teachers={teachers} classes={classes} rooms={rooms} receipts={receipts} programs={programs} revenueMonth={latestReceiptMonth || null} canViewDebt={showDebt} onClose={() => setSelectedDetail(null)} onViewFull={onNavigateTab} />
     </div>

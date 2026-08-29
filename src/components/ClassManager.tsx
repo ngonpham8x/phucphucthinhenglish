@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ClassRoom, Teacher, Room, CourseProgram, Student, StaffPermissions, TimetableSlot } from '../types';
+import { ClassRoom, Teacher, Room, CourseProgram, Student, StaffPermissions, TimetableSlot, TuitionReceipt } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { debtBreakdown } from '../lib/tuition';
 import {
   BookOpen,
   Plus,
@@ -22,6 +23,7 @@ interface ClassManagerProps {
   rooms: Room[];
   programs: CourseProgram[];
   students: Student[];
+  receipts: TuitionReceipt[];
   timetableSlots: TimetableSlot[];
   permissions: StaffPermissions;
   isOwner: boolean;
@@ -60,6 +62,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
   rooms,
   programs,
   students,
+  receipts,
   timetableSlots,
   permissions,
   isOwner,
@@ -374,24 +377,31 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
               ) : (
                 students
                   .filter(s => s.classId === viewingClassStudents.id)
-                  .map((st, idx) => (
-                    <div key={st.id} className="py-2.5 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-slate-400 w-5 text-center">{idx + 1}</span>
-                        <img src={st.avatar} alt={st.name} className="w-8 h-8 rounded-full object-cover" />
-                        <div>
-                          <div className="font-bold text-slate-900">{st.name}</div>
-                          <div className="text-[10px] text-slate-500">{st.code} • Phụ huynh: {st.parentName} ({st.parentPhone})</div>
+                  .map((st, idx) => {
+                    const debt = debtBreakdown(receipts.filter((receipt) => receipt.studentId === st.id));
+                    return (
+                      <div key={st.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-slate-400 w-5 text-center">{idx + 1}</span>
+                          <img src={st.avatar} alt={st.name} className="w-8 h-8 rounded-full object-cover" />
+                          <div>
+                            <div className="font-bold text-slate-900">{st.name}</div>
+                            <div className="text-[10px] text-slate-500">{st.code} • Phụ huynh: {st.parentName} ({st.parentPhone})</div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                            debt.total > 0 ? 'bg-rose-100 text-rose-800' : st.feeStatus === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {debt.total > 0 ? 'Đóng thiếu' : st.feeStatus === 'paid' ? 'Đã đóng đủ' : 'Chưa có phiếu'}
+                          </span>
+                          {debt.monthly > 0 && <div className="mt-1 text-[10px] font-bold text-rose-700">Tháng: {debt.monthly.toLocaleString('vi-VN')} đ</div>}
+                          {debt.course > 0 && <div className="mt-1 text-[10px] font-bold text-rose-700">Khóa: {debt.course.toLocaleString('vi-VN')} đ</div>}
                         </div>
                       </div>
-
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                        st.feeStatus === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {st.feeStatus === 'paid' ? 'Đã đóng đủ' : 'Còn nợ'}
-                      </span>
-                    </div>
-                  ))
+                    );
+                  })
               )}
             </div>
 
