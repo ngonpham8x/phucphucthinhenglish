@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult } from '../services/excelService';
-import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings, StaffPermissions } from '../types';
+import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings, StaffPermissions, CourseProgram } from '../types';
 import { FileSpreadsheet, FileUp, FileDown, CheckCircle2, AlertTriangle, Download, Upload, X, RefreshCw } from 'lucide-react';
 
 interface ImportExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   students: Student[];
+  programs: CourseProgram[];
   teachers: Teacher[];
   rooms: Room[];
   classes: ClassRoom[];
@@ -24,6 +25,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   isOpen,
   onClose,
   students,
+  programs,
   teachers,
   rooms,
   classes,
@@ -55,6 +57,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     try {
       const blob = await generateMasterExcelWorkbook({
         centerName: settings.name,
+        programs,
         students,
         classes,
         teachers,

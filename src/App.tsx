@@ -117,6 +117,32 @@ const withClassScheduleSummary = (classroom: ClassRoom, slots: TimetableSlot[]):
   };
 };
 
+const feeStatusFromReceipts = (studentId: string, receipts: TuitionReceipt[]): Student['feeStatus'] => {
+  const studentReceipts = receipts.filter((receipt) => receipt.studentId === studentId);
+  const totalPaid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+  const totalDebt = studentReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);
+  if (totalDebt > 0) return totalPaid > 0 ? 'partial' : 'debt';
+  return totalPaid > 0 ? 'paid' : 'unpaid';
+};
+
+const normaliseReceipt = (receipt: TuitionReceipt): TuitionReceipt => {
+  const isLegacyReceipt = !receipt.paymentKind;
+  const recordedAmount = Math.max(receipt.paidAmount + receipt.debtAmount + receipt.discount, 0);
+  const status = receipt.debtAmount <= 0 && receipt.paidAmount > 0 ? 'paid' : (receipt.paidAmount > 0 ? 'partial' : 'unpaid');
+  return {
+    ...receipt,
+    // All historic payments were monthly tuition. Course tuition is only set
+    // for receipts created after the new collection flow is in use.
+    courseFee: isLegacyReceipt ? 0 : receipt.courseFee,
+    monthlyFee: isLegacyReceipt ? recordedAmount : (receipt.monthlyFee ?? 0),
+    paymentKind: receipt.paymentKind || 'monthly',
+    billingPeriod: receipt.billingPeriod || receipt.paymentDate.slice(0, 7),
+    status: receipt.status || status,
+  };
+};
+
+const normaliseReceipts = (receipts: TuitionReceipt[]) => receipts.map(normaliseReceipt);
+
 export default function App() {
   // Persistence Helper with localStorage
   const ensureDataSchema = () => {
@@ -167,7 +193,7 @@ export default function App() {
   const [students, setStudents] = useState<Student[]>(() => loadStored('students', initialStudents));
   const [timetableSlots, setTimetableSlots] = useState<TimetableSlot[]>(() => loadStored('timetableSlots', initialTimetableSlots));
   const [grades, setGrades] = useState<Grade[]>(() => loadStored('grades', initialGrades));
-  const [receipts, setReceipts] = useState<TuitionReceipt[]>(() => loadStored('receipts', initialTuitionReceipts));
+  const [receipts, setReceipts] = useState<TuitionReceipt[]>(() => normaliseReceipts(loadStored('receipts', initialTuitionReceipts)));
   const [backups, setBackups] = useState<SystemBackup[]>(() => loadStored('backups', initialBackups));
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => loadStored('activityLogs', initialActivityLogs));
   const [accountAuditLogs, setAccountAuditLogs] = useState<AccountAuditLog[]>([]);
@@ -211,6 +237,19 @@ export default function App() {
   useEffect(() => saveStored('receipts', receipts), [receipts]);
   useEffect(() => saveStored('backups', backups), [backups]);
   useEffect(() => saveStored('activityLogs', activityLogs), [activityLogs]);
+
+  useEffect(() => {
+    setStudents((previousStudents) => {
+      let changed = false;
+      const nextStudents = previousStudents.map((student) => {
+        const feeStatus = feeStatusFromReceipts(student.id, receipts);
+        if (feeStatus === student.feeStatus) return student;
+        changed = true;
+        return { ...student, feeStatus };
+      });
+      return changed ? nextStudents : previousStudents;
+    });
+  }, [receipts]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -263,10 +302,11 @@ export default function App() {
           if (Array.isArray(payload.teachers)) setTeachers(payload.teachers);
           if (Array.isArray(payload.rooms)) setRooms(payload.rooms);
           if (Array.isArray(payload.classes)) setClasses(payload.classes);
-          if (Array.isArray(payload.students)) setStudents(payload.students);
+          const normalizedReceipts = Array.isArray(payload.receipts) ? normaliseReceipts(payload.receipts) : [];
+          if (Array.isArray(payload.students)) setStudents(payload.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) })));
           if (Array.isArray(payload.timetableSlots)) setTimetableSlots(payload.timetableSlots);
           if (Array.isArray(payload.grades)) setGrades(payload.grades);
-          if (Array.isArray(payload.receipts)) setReceipts(payload.receipts);
+          if (Array.isArray(payload.receipts)) setReceipts(normalizedReceipts);
           if (Array.isArray(payload.backups)) setBackups(payload.backups);
           if (Array.isArray(payload.activityLogs)) setActivityLogs(payload.activityLogs);
         }
@@ -384,10 +424,11 @@ export default function App() {
     setTeachers(data.teachers);
     setRooms(data.rooms);
     setClasses(data.classes);
-    setStudents(data.students);
+    const normalizedReceipts = normaliseReceipts(data.receipts);
+    setStudents(data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) })));
     setTimetableSlots(data.timetableSlots);
     setGrades(data.grades);
-    setReceipts(data.receipts);
+    setReceipts(normalizedReceipts);
     setBackups([]);
     setHasCenterData(true);
     setActivityLogs(currentUser ? [{
@@ -427,6 +468,11 @@ export default function App() {
   const handleUpdateClass = (c: ClassRoom) => {
     setClasses(prev => prev.map(item => item.id === c.id ? c : item));
     addLog('SỬA', 'Lớp học', `Cập nhật lớp học ${c.name} (${c.code})`);
+  };
+
+  const handleCreateProgram = (program: CourseProgram) => {
+    setPrograms(prev => [...prev, program]);
+    addLog('THÊM', 'Chương trình học', `Tạo chương trình ${program.name}`);
   };
 
   const handleDeleteClass = (id: string) => {
@@ -507,22 +553,6 @@ export default function App() {
   const handleAddReceipt = (r: TuitionReceipt) => {
     setReceipts(prev => [r, ...prev]);
 
-    const studentReceipts = [r, ...receipts].filter((receipt) => receipt.studentId === r.studentId);
-    const totalPaid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
-    const totalDebt = studentReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);
-
-    // Keep the student-level status consistent with every receipt, not only
-    // the latest payment that was entered.
-    setStudents(prev => prev.map(s => {
-      if (s.id === r.studentId) {
-        return {
-          ...s,
-          feeStatus: totalDebt === 0 ? (totalPaid > 0 ? 'paid' : 'unpaid') : (totalPaid > 0 ? 'partial' : 'unpaid')
-        };
-      }
-      return s;
-    }));
-
     addLog('THÊM', 'Học phí', `Lập phiếu thu ${r.code} số tiền ${r.paidAmount.toLocaleString('vi-VN')} đ`);
   };
 
@@ -537,10 +567,11 @@ export default function App() {
     setTeachers(data.teachers);
     setRooms(data.rooms);
     setClasses(data.classes);
-    setStudents(data.students);
+    const normalizedReceipts = normaliseReceipts(data.receipts);
+    setStudents(data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) })));
     setTimetableSlots(data.timetableSlots);
     setGrades(data.grades);
-    setReceipts(data.receipts);
+    setReceipts(normalizedReceipts);
     setBackups(data.backups.slice(0, 30));
     setActivityLogs(data.activityLogs);
     setHasCenterData(true);
@@ -631,6 +662,8 @@ export default function App() {
               students={students}
               programs={programs}
               classes={classes}
+              receipts={receipts}
+              timetableSlots={timetableSlots}
               teachers={teachers}
               rooms={rooms}
               permissions={currentUser.permissions}
@@ -669,6 +702,8 @@ export default function App() {
               onUpdateClass={handleUpdateClass}
               onDeleteClass={handleDeleteClass}
               onReplaceClassSchedule={handleReplaceClassSchedule}
+              onCreateRoom={handleAddRoom}
+              onCreateProgram={handleCreateProgram}
             />
           )}
 
@@ -819,6 +854,7 @@ export default function App() {
             isOpen={isImportExportModalOpen}
             onClose={() => setIsImportExportModalOpen(false)}
             students={students}
+            programs={programs}
             teachers={teachers}
             rooms={rooms}
             classes={classes}

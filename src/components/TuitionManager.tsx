@@ -10,10 +10,10 @@ const receiptStatus = (receipt: Pick<TuitionReceipt, 'paidAmount' | 'debtAmount'
 };
 
 const receiptStatusLabel: Record<'paid' | 'partial' | 'unpaid' | 'debt', string> = {
-  paid: 'Đã thanh toán',
-  partial: 'Đóng một phần',
+  paid: 'Đã đóng đủ',
+  partial: 'Đóng thiếu',
   unpaid: 'Chưa đóng',
-  debt: 'Còn nợ',
+  debt: 'Đóng thiếu',
 };
 
 const receiptStatusClass: Record<'paid' | 'partial' | 'unpaid' | 'debt', string> = {
@@ -50,7 +50,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [collectingStudentId, setCollectingStudentId] = useState<string>(students[0]?.id || '');
   const [courseFeeInput, setCourseFeeInput] = useState<number>(0);
   const [monthlyFeeInput, setMonthlyFeeInput] = useState<number>(0);
-  const [paymentKind, setPaymentKind] = useState<'course' | 'monthly'>('course');
+  const [paymentKind, setPaymentKind] = useState<'course' | 'monthly'>('monthly');
   const [billingPeriod, setBillingPeriod] = useState<string>(new Date().toISOString().slice(0, 7));
   const [paidAmountInput, setPaidAmountInput] = useState<number>(0);
   const [discountInput, setDiscountInput] = useState<number>(0);
@@ -66,12 +66,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCollectingStudentId(students[0]?.id || '');
     const st = students[0];
     const program = programs.find(p => p.id === st?.programId);
-    const suggestedCourseFee = program?.tuitionFee ?? 0;
-    setCourseFeeInput(suggestedCourseFee);
-    setMonthlyFeeInput(0);
-    setPaymentKind('course');
+    const suggestedMonthlyFee = program?.tuitionFee ?? 0;
+    setCourseFeeInput(0);
+    setMonthlyFeeInput(suggestedMonthlyFee);
+    setPaymentKind('monthly');
     setBillingPeriod(new Date().toISOString().slice(0, 7));
-    setPaidAmountInput(suggestedCourseFee);
+    setPaidAmountInput(suggestedMonthlyFee);
     setDiscountInput(0);
     setIsCollectModalOpen(true);
   };
@@ -176,7 +176,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 <th className="py-3 px-4">Học Phí Tháng</th>
                 <th className="py-3 px-4">Khoản Thu</th>
                 <th className="py-3 px-4">Đã Đóng (VNĐ)</th>
-                <th className="py-3 px-4">Còn Nợ (VNĐ)</th>
+                <th className="py-3 px-4">Còn Thiếu (VNĐ)</th>
                 <th className="py-3 px-4">Tình Trạng</th>
                 <th className="py-3 px-4">Ngày Thu</th>
                 <th className="py-3 px-4">Hình Thức</th>
@@ -197,7 +197,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <td className="py-3 px-4"><span className="font-semibold text-slate-700">{rc.paymentKind === 'monthly' ? `Tháng ${rc.billingPeriod || 'chưa chọn'}` : 'Học phí khóa'}</span></td>
                     <td className="py-3 px-4 font-bold text-emerald-700">{rc.paidAmount.toLocaleString('vi-VN')} đ</td>
                     <td className="py-3 px-4 font-bold text-rose-700">
-                      {rc.debtAmount > 0 ? `${rc.debtAmount.toLocaleString('vi-VN')} đ` : 'Đã đủ'}
+                      {rc.debtAmount > 0 ? `${rc.debtAmount.toLocaleString('vi-VN')} đ` : '—'}
                     </td>
                     <td className="py-3 px-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>
                     <td className="py-3 px-4">{rc.paymentDate}</td>
@@ -245,8 +245,13 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     const st = students.find(s => s.id === e.target.value);
                     const prog = programs.find(p => p.id === st?.programId);
                     if (prog) {
-                      setCourseFeeInput(prog.tuitionFee);
-                      if (paymentKind === 'course') setPaidAmountInput(prog.tuitionFee);
+                      if (paymentKind === 'monthly') {
+                        setMonthlyFeeInput(prog.tuitionFee);
+                        setPaidAmountInput(prog.tuitionFee);
+                      } else {
+                        setCourseFeeInput(prog.tuitionFee);
+                        setPaidAmountInput(prog.tuitionFee);
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900"
@@ -307,7 +312,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Số Tiền Đóng (VNĐ) *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Số Tiền Đóng Lần Này (VNĐ) *</label>
                   <input type="number" min="0" value={paidAmountInput} onChange={(e) => setPaidAmountInput(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-emerald-800" required />
                 </div>
                 <div>
@@ -318,8 +323,22 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
               {(() => {
                 const due = Math.max((paymentKind === 'monthly' ? monthlyFeeInput : courseFeeInput) - discountInput, 0);
+                const remaining = Math.max(due - paidAmountInput, 0);
                 const previewStatus = paidAmountInput >= due && due > 0 ? 'paid' : (paidAmountInput > 0 ? 'partial' : 'unpaid');
-                return <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="font-semibold text-slate-700">Tình trạng phiếu</span><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[previewStatus]}`}>{receiptStatusLabel[previewStatus]}</span></div>;
+                return (
+                  <div className={`rounded-xl border px-3 py-2.5 ${remaining > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-slate-700">Tình trạng phiếu</span>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[previewStatus]}`}>{receiptStatusLabel[previewStatus]}</span>
+                    </div>
+                    {remaining > 0 && (
+                      <div className="mt-2 flex items-center justify-between border-t border-amber-200 pt-2 text-amber-900">
+                        <span className="font-semibold">Còn thiếu cần thu</span>
+                        <strong>{remaining.toLocaleString('vi-VN')} đ</strong>
+                      </div>
+                    )}
+                  </div>
+                );
               })()}
 
               <div>
@@ -401,7 +420,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <div>Số tiền học phí tháng: <strong>{(selectedReceipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</strong></div>
                     <div>Khoản thu: <strong>{selectedReceipt.paymentKind === 'monthly' ? `Học phí tháng ${selectedReceipt.billingPeriod || ''}` : 'Học phí khóa'}</strong></div>
                     <div>Số tiền thực đóng: <strong className="text-base text-red-800">{selectedReceipt.paidAmount.toLocaleString('vi-VN')} đ</strong></div>
-                    <div>Số tiền còn nợ: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>
+                    {selectedReceipt.debtAmount > 0 && <div>Số tiền còn thiếu: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>}
                     <div>Tình trạng: <strong>{receiptStatusLabel[receiptStatus(selectedReceipt)]}</strong></div>
                     <div>Hình thức thanh toán: <strong>{selectedReceipt.paymentMethod}</strong></div>
                     <div>Ngày lập phiếu: <strong>{selectedReceipt.paymentDate}</strong></div>

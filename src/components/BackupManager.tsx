@@ -120,6 +120,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
     try {
       const blob = await generateMasterExcelWorkbook({
         centerName: settings.name,
+        programs,
         students,
         classes,
         teachers,

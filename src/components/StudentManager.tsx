@@ -6,6 +6,8 @@ import {
   ClassRoom,
   Teacher,
   Room,
+  TuitionReceipt,
+  TimetableSlot,
   StaffPermissions,
   StudentStatus,
   FeeStatus
@@ -42,10 +44,35 @@ import {
   UserCheck
 } from 'lucide-react';
 
+const FeeStatusBadge: React.FC<{ feeStatus: FeeStatus; outstandingAmount?: number }> = ({ feeStatus, outstandingAmount = 0 }) => {
+  const isPaid = feeStatus === 'paid';
+  const isUnpaid = feeStatus === 'unpaid';
+  const label = isPaid ? 'Đã đóng đủ' : isUnpaid ? 'Chưa đóng' : 'Đóng thiếu';
+  const className = isPaid
+    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+    : isUnpaid
+      ? 'bg-rose-100 text-rose-800 border-rose-300'
+      : 'bg-amber-100 text-amber-800 border-amber-300';
+  const Icon = isPaid ? CheckCircle : isUnpaid ? XCircle : AlertCircle;
+
+  return (
+    <div className="space-y-1">
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${className}`}>
+        <Icon className="w-3 h-3 mr-1" /> {label}
+      </span>
+      {outstandingAmount > 0 && (
+        <div className="text-[10px] font-bold text-rose-700">Còn thiếu: {outstandingAmount.toLocaleString('vi-VN')} đ</div>
+      )}
+    </div>
+  );
+};
+
 interface StudentManagerProps {
   students: Student[];
   programs: CourseProgram[];
   classes: ClassRoom[];
+  receipts: TuitionReceipt[];
+  timetableSlots: TimetableSlot[];
   teachers?: Teacher[];
   rooms?: Room[];
   permissions: StaffPermissions;
@@ -61,6 +88,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   students,
   programs,
   classes,
+  receipts,
+  timetableSlots,
   teachers = [],
   rooms = [],
   permissions,
@@ -86,6 +115,9 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const canDelete = isOwner || permissions.student.delete;
   // Báo cáo workbook có cả dữ liệu học phí, nên chỉ quyền Excel mới được mở.
   const canExport = isOwner || permissions.excel.import || permissions.excel.export;
+  const outstandingForStudent = (studentId: string) => receipts
+    .filter(receipt => receipt.studentId === studentId)
+    .reduce((total, receipt) => total + Math.max(receipt.debtAmount, 0), 0);
 
   // Filtered list
   const filteredStudents = students.filter(s => {
@@ -295,6 +327,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 ) : (
                   filteredStudents.map((st) => {
                     const program = programs.find(p => p.id === st.programId);
+                    const outstandingAmount = outstandingForStudent(st.id);
 
                     return (
                       <tr key={st.id} className="hover:bg-slate-50 transition-colors">
@@ -359,26 +392,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          {st.feeStatus === 'paid' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              <CheckCircle className="w-3 h-3 mr-1" /> {t('student.status_paid')}
-                            </span>
-                          )}
-                          {st.feeStatus === 'unpaid' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-300">
-                              <XCircle className="w-3 h-3 mr-1" /> {t('student.status_unpaid')}
-                            </span>
-                          )}
-                          {st.feeStatus === 'debt' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                              <AlertCircle className="w-3 h-3 mr-1" /> {t('student.status_debt')}
-                            </span>
-                          )}
-                          {st.feeStatus === 'partial' && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
-                              <AlertCircle className="w-3 h-3 mr-1" /> {t('student.status_partial')}
-                            </span>
-                          )}
+                          <FeeStatusBadge feeStatus={st.feeStatus} outstandingAmount={outstandingAmount} />
                         </td>
 
                         <td className="py-3 px-4">
@@ -457,6 +471,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
             filteredStudents.map((st) => {
               const program = programs.find(p => p.id === st.programId);
               const cls = classes.find(c => c.id === st.classId);
+              const outstandingAmount = outstandingForStudent(st.id);
 
               const classNameText = cls ? cls.name : (st.classId || 'Chưa xếp lớp');
               const scheduleText = cls ? `${cls.scheduleTime} (${cls.days.join(', ')})` : 'T2-T4-T6 (18:00 - 19:30)';
@@ -496,22 +511,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       </div>
 
                       {/* Fee Badge */}
-                      <div className="shrink-0">
-                        {st.feeStatus === 'paid' && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            Đã đóng
-                          </span>
-                        )}
-                        {st.feeStatus === 'debt' && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">
-                            Còn nợ
-                          </span>
-                        )}
-                        {st.feeStatus === 'unpaid' && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-800 border border-red-300">
-                            Chưa đóng
-                          </span>
-                        )}
+                      <div className="shrink-0 text-right">
+                        <FeeStatusBadge feeStatus={st.feeStatus} outstandingAmount={outstandingAmount} />
                       </div>
                     </div>
 
@@ -635,9 +636,14 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
               const program = programs.find(p => p.id === viewingStudent.programId);
               const teacher = teachers.find(t => t.id === cls?.teacherId);
               const room = rooms.find(r => r.id === cls?.roomId);
+              const classSlots = timetableSlots
+                .filter((slot) => slot.classId === viewingStudent.classId)
+                .sort((left, right) => left.startTime.localeCompare(right.startTime));
 
-              const activeDays = cls ? cls.days : ['Thứ 2', 'Thứ 4', 'Thứ 6'];
-              const timeSlot = cls ? cls.scheduleTime : '18:00 - 19:30';
+              const activeDays = classSlots.length ? [...new Set(classSlots.map((slot) => slot.dayOfWeek))] : (cls ? cls.days : ['Thứ 2', 'Thứ 4', 'Thứ 6']);
+              const scheduleSummary = classSlots.length
+                ? classSlots.map((slot) => `${slot.dayOfWeek}: ${slot.startTime}–${slot.endTime}`).join(' · ')
+                : (cls?.scheduleTime || '18:00 - 19:30');
               const className = cls ? cls.name : (viewingStudent.classId || 'Chưa xếp lớp');
 
               const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
@@ -662,7 +668,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-700">
                         <Clock className="w-4 h-4 text-purple-600 shrink-0" />
-                        <span>Khung giờ ca học: <strong className="text-purple-800 font-extrabold">{timeSlot}</strong></span>
+                        <span>Khung giờ ca học: <strong className="text-purple-800 font-extrabold">{scheduleSummary}</strong></span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-700">
                         <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -693,7 +699,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-7 gap-1.5 text-center">
                       {daysOfWeek.map((day) => {
-                        const isStudyDay = activeDays.includes(day);
+                        const daySlots = classSlots.filter((slot) => slot.dayOfWeek === day);
+                        const isStudyDay = daySlots.length > 0 || (classSlots.length === 0 && activeDays.includes(day));
                         return (
                           <div
                             key={day}
@@ -706,7 +713,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                             <div className="text-[10px] uppercase font-bold opacity-80">{day}</div>
                             {isStudyDay ? (
                               <div className="text-[11px] mt-1 font-extrabold text-amber-300">
-                                {timeSlot.split('-')[0] || '18:00'}
+                                {daySlots[0]?.startTime || '18:00'}
+                                {daySlots[0] && <div className="text-[9px] font-medium text-white/90">đến {daySlots[0].endTime}</div>}
                                 <div className="text-[9px] font-medium text-white/90 truncate">{className}</div>
                               </div>
                             ) : (
@@ -760,11 +768,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-amber-50/60 p-3.5 rounded-xl border border-amber-200 text-xs">
                 <div>
                   <div className="text-slate-500 font-medium">Trạng thái đóng phí:</div>
-                  <div className="font-extrabold text-sm mt-0.5">
-                    {viewingStudent.feeStatus === 'paid' && <span className="text-emerald-700">✅ Đã hoàn thành học phí</span>}
-                    {viewingStudent.feeStatus === 'debt' && <span className="text-amber-800">⚠️ Còn nợ học phí</span>}
-                    {viewingStudent.feeStatus === 'unpaid' && <span className="text-rose-700">❌ Chưa đóng học phí</span>}
-                    {viewingStudent.feeStatus === 'partial' && <span className="text-blue-700">ℹ️ Đóng một phần học phí</span>}
+                  <div className="mt-1">
+                    <FeeStatusBadge
+                      feeStatus={viewingStudent.feeStatus}
+                      outstandingAmount={outstandingForStudent(viewingStudent.id)}
+                    />
                   </div>
                 </div>
                 <div className="text-right">
@@ -998,13 +1006,17 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   <select
                     value={editingStudent.feeStatus}
                     onChange={(e) => setEditingStudent({ ...editingStudent, feeStatus: e.target.value as FeeStatus })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold"
+                    disabled={receipts.some(receipt => receipt.studentId === editingStudent.id)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   >
                     <option value="paid" className="text-emerald-700 font-bold">🟢 Đã đóng đủ</option>
                     <option value="unpaid" className="text-red-700 font-bold">🔴 Chưa đóng học phí</option>
-                    <option value="debt" className="text-amber-700 font-bold">🟡 Còn nợ học phí</option>
-                    <option value="partial" className="text-blue-700 font-bold">🔵 Đóng một phần</option>
+                    <option value="debt" className="text-amber-700 font-bold">🟡 Đóng thiếu</option>
+                    <option value="partial" className="text-blue-700 font-bold">🔵 Đóng thiếu</option>
                   </select>
+                  {receipts.some(receipt => receipt.studentId === editingStudent.id) && (
+                    <p className="mt-1 text-[10px] text-slate-500">Trạng thái được tính tự động từ các phiếu thu của học sinh này.</p>
+                  )}
                 </div>
               </div>
 

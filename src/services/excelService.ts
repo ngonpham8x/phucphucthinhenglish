@@ -3,6 +3,7 @@ import { ClassRoom, CourseProgram, Grade, Room, Student, Teacher, TimetableSlot,
 
 export interface ExcelExportData {
   centerName: string;
+  programs: CourseProgram[];
   students: Student[];
   classes: ClassRoom[];
   teachers: Teacher[];
@@ -121,6 +122,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   const months = [...new Set(data.receipts.map(receiptPeriod).filter(Boolean))].sort();
   const classSheetNames = new Map(data.classes.map((classroom) => [classroom.id, classSheetName(classroom)]));
   const classById = new Map(data.classes.map((classroom) => [classroom.id, classroom]));
+  const programById = new Map(data.programs.map((program) => [program.id, program]));
   const studentById = new Map(data.students.map((student) => [student.id, student]));
   const teacherById = new Map(data.teachers.map((teacher) => [teacher.id, teacher]));
   const roomById = new Map(data.rooms.map((room) => [room.id, room]));
@@ -237,7 +239,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const receiptLink = firstReceiptRowByStudentId.has(student.id) ? `#'HỌC PHÍ'!A${firstReceiptRowByStudentId.get(student.id)}` : undefined;
     const row = studentsSheet.getRow(rowNumber);
     const classLink = classroom ? `#'${classSheetNames.get(classroom.id)}'!A1` : undefined;
-    row.values = [index + 1, student.code, student.name, student.gender, student.dob, student.programId, classLink ? { text: classroom?.code || '', hyperlink: classLink } : (classroom?.code || ''), student.phone, student.parentPhone, student.address, studentStatusLabel(student.status), student.notes || '', { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, student.id];
+    row.values = [index + 1, student.code, student.name, student.gender, student.dob, programById.get(student.programId)?.name || student.programId, classLink ? { text: classroom?.code || '', hyperlink: classLink } : (classroom?.code || ''), student.phone, student.parentPhone, student.address, studentStatusLabel(student.status), student.notes || '', { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, student.id];
     styleData(row, index);
     row.getCell(13).numFmt = moneyFormat;
     row.getCell(14).numFmt = moneyFormat;
@@ -256,24 +258,24 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   studentsSheet.getColumn(15).hidden = true;
 
   const classSheet = workbook.addWorksheet('LỚP HỌC');
-  styleTitle(classSheet, 'A1:I2', `${data.centerName.toUpperCase()}\nDANH SÁCH LỚP HỌC`);
-  applyBackLink(classSheet, 'I');
-  const classHeaders = ['STT', 'Mã lớp', 'Tên lớp', 'Giáo viên', 'Lịch học', 'Phòng', 'Sức chứa', 'Sĩ số', 'Sheet chi tiết'];
+  styleTitle(classSheet, 'A1:J2', `${data.centerName.toUpperCase()}\nDANH SÁCH LỚP HỌC`);
+  applyBackLink(classSheet, 'J');
+  const classHeaders = ['STT', 'Mã lớp', 'Tên lớp', 'Chương trình', 'Giáo viên', 'Lịch học', 'Phòng', 'Sức chứa', 'Sĩ số', 'Sheet chi tiết'];
   classSheet.getRow(5).values = classHeaders;
   styleHeader(classSheet.getRow(5));
   data.classes.forEach((classroom, index) => {
     const rowNumber = 6 + index;
     const row = classSheet.getRow(rowNumber);
     const teacher = teacherById.get(classroom.teacherId);
-    row.values = [index + 1, classroom.code, classroom.name, teacher?.name || 'Chưa cập nhật', classroom.scheduleTime || classroom.days.join(', '), roomById.get(classroom.roomId)?.name || classroom.roomId || 'Chưa cập nhật', classroom.capacity || 'Chưa cập nhật', { formula: `COUNTIF('HỌC SINH'!$G:$G,B${rowNumber})` }, { text: `→ ${classSheetNames.get(classroom.id)}`, hyperlink: `#'${classSheetNames.get(classroom.id)}'!A1` }];
+    row.values = [index + 1, classroom.code, classroom.name, programById.get(classroom.programId)?.name || classroom.programId, teacher?.name || 'Chưa cập nhật', classroom.scheduleTime || classroom.days.join(', '), roomById.get(classroom.roomId)?.name || classroom.roomId || 'Chưa cập nhật', classroom.capacity || 'Chưa cập nhật', { formula: `COUNTIF('HỌC SINH'!$G:$G,B${rowNumber})` }, { text: `→ ${classSheetNames.get(classroom.id)}`, hyperlink: `#'${classSheetNames.get(classroom.id)}'!A1` }];
     styleData(row, index);
-    row.getCell(9).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
+    row.getCell(10).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
   });
   const classFooterRow = 6 + data.classes.length;
-  writeFooter(classSheet, classFooterRow, classHeaders.length, { 3: `COUNTA(B6:B${classFooterRow - 1})`, 8: `SUM(H6:H${classFooterRow - 1})` });
-  classSheet.autoFilter = { from: 'A5', to: `I${classFooterRow - 1}` };
+  writeFooter(classSheet, classFooterRow, classHeaders.length, { 3: `COUNTA(B6:B${classFooterRow - 1})`, 9: `SUM(I6:I${classFooterRow - 1})` });
+  classSheet.autoFilter = { from: 'A5', to: `J${classFooterRow - 1}` };
   classSheet.views = [{ state: 'frozen', ySplit: 5 }];
-  classSheet.columns = [{ width: 8 }, { width: 18 }, { width: 32 }, { width: 26 }, { width: 32 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 28 }];
+  classSheet.columns = [{ width: 8 }, { width: 18 }, { width: 32 }, { width: 26 }, { width: 26 }, { width: 32 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 28 }];
 
   const tuitionSheet = workbook.addWorksheet('HỌC PHÍ');
   styleTitle(tuitionSheet, 'A1:S2', `${data.centerName.toUpperCase()}\nSỔ THU HỌC PHÍ`);
@@ -290,7 +292,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const classLink = classroom ? { text: `→ ${classroom.code}`, hyperlink: `#'${classSheetNames.get(classroom.id)}'!A1` } : '—';
     const period = receiptPeriod(receipt);
     const status = receipt.status || (receipt.debtAmount <= 0 && receipt.paidAmount > 0 ? 'paid' : (receipt.paidAmount > 0 ? 'partial' : 'unpaid'));
-    row.values = [index + 1, receipt.code, receipt.studentId, student?.code || '', student?.name || '', classroom?.code || '', receipt.courseFee, receipt.monthlyFee || 0, receipt.paymentKind === 'monthly' ? 'Học phí tháng' : 'Học phí khóa', dateFromIso(`${period || monthKey(receipt.paymentDate)}-01`), receipt.discount, receipt.paidAmount, receipt.debtAmount, status === 'paid' ? 'Đã thanh toán' : (status === 'partial' ? 'Đóng một phần' : 'Chưa đóng'), dateFromIso(receipt.paymentDate), receipt.paymentMethod, receipt.notes || '', studentLink, classLink];
+    row.values = [index + 1, receipt.code, receipt.studentId, student?.code || '', student?.name || '', classroom?.code || '', receipt.courseFee, receipt.monthlyFee || 0, receipt.paymentKind === 'monthly' ? 'Học phí tháng' : 'Học phí khóa', dateFromIso(`${period || monthKey(receipt.paymentDate)}-01`), receipt.discount, receipt.paidAmount, receipt.debtAmount, status === 'paid' ? 'Đã đóng đủ' : ((status === 'partial' || status === 'debt') ? 'Đóng thiếu' : 'Chưa đóng'), dateFromIso(receipt.paymentDate), receipt.paymentMethod, receipt.notes || '', studentLink, classLink];
     styleData(row, index);
     [7, 8, 11, 12, 13].forEach((column) => { row.getCell(column).numFmt = moneyFormat; });
     row.getCell(10).numFmt = 'mm/yyyy';
@@ -545,6 +547,7 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
   const importedClasses = classRecords.map((record, index) => {
     const code = cellText(getByAliases(record, ['malop', 'classcode']));
     const name = cellText(getByAliases(record, ['tenlop', 'classname']));
+    const programName = cellText(getByAliases(record, ['chuongtrinh', 'program', 'programname']));
     const teacherName = cellText(getByAliases(record, ['giaovien', 'teacher']));
     const roomName = cellText(getByAliases(record, ['phong', 'room']));
     const schedule = cellText(getByAliases(record, ['lichhoc', 'schedule']));
@@ -555,7 +558,7 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       : (timeMatch ? schedule.slice(0, timeMatch.index).trim() : schedule).split(',').map((item) => item.trim()).filter(Boolean);
     if (teacherName && !teacherName.toLocaleLowerCase('vi-VN').includes('chưa')) teacherNames.add(teacherName);
     if (roomName && !roomName.toLocaleLowerCase('vi-VN').includes('chưa')) roomNames.add(roomName);
-    return { id: `CLASS-IMP-${String(index + 1).padStart(2, '0')}`, code, name, teacherName, roomName, days, scheduleTime: individualSlots.length ? schedule : (timeMatch?.[1] || ''), capacity: numberValue(getByAliases(record, ['succhua', 'capacity'])), studentIds: [] as string[] };
+    return { id: `CLASS-IMP-${String(index + 1).padStart(2, '0')}`, code, name, programName, teacherName, roomName, days, scheduleTime: individualSlots.length ? schedule : (timeMatch?.[1] || ''), capacity: numberValue(getByAliases(record, ['succhua', 'capacity'])), studentIds: [] as string[] };
   }).filter((item) => item.code && item.name);
 
   const teachers: Teacher[] = [...teacherNames].map((name, index) => ({
@@ -567,10 +570,25 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     id: `ROOM-IMP-${String(index + 1).padStart(2, '0')}`,
     name, capacity: 0, status: 'available', notes: 'Sức chứa chưa được nhập từ báo cáo.'
   }));
-  const programs: CourseProgram[] = [{ id: 'PROG-IMPORTED', code: 'IMPORTED', name: 'Chương trình nhập từ Excel', category: 'Khác', tuitionFee: 0 }];
-  const classes: ClassRoom[] = importedClasses.map(({ teacherName, roomName, ...classroom }) => ({
+  const programs: CourseProgram[] = [];
+  const ensureProgram = (rawName: string) => {
+    const name = rawName.trim() || 'Chương trình nhập từ Excel';
+    const existing = programs.find((program) => program.name.toLocaleLowerCase('vi-VN') === name.toLocaleLowerCase('vi-VN'));
+    if (existing) return existing;
+    const program: CourseProgram = {
+      id: `PROG-IMP-${String(programs.length + 1).padStart(3, '0')}`,
+      code: `IMP-${String(programs.length + 1).padStart(3, '0')}`,
+      name,
+      category: 'Khác',
+      tuitionFee: 0,
+      description: 'Nhập từ báo cáo Excel.',
+    };
+    programs.push(program);
+    return program;
+  };
+  const classes: ClassRoom[] = importedClasses.map(({ teacherName, roomName, programName, ...classroom }) => ({
     ...classroom,
-    programId: 'PROG-IMPORTED',
+    programId: ensureProgram(programName).id,
     teacherId: teachers.find((teacher) => teacher.name === teacherName)?.id || '',
     roomId: rooms.find((room) => room.name === roomName)?.id || ''
   }));
@@ -586,12 +604,15 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       const classCode = cellText(getByAliases(record, ['malop', 'classcode']));
       const classroom = classes.find((item) => item.code === classCode);
       if (!code || !name || !classroom) return;
+      const programName = cellText(getByAliases(record, ['chuongtrinh', 'program', 'programname']));
+      const program = programName ? ensureProgram(programName) : null;
+      if (program) classroom.programId = program.id;
       const id = cellText(getByAliases(record, ['idhethong', 'systemid'])) || `STU-IMP-MASTER-${String(index + 1).padStart(3, '0')}`;
       students.push({
         id, code, name,
         dob: cellText(getByAliases(record, ['ngaysinh', 'dob'])),
         gender: cellText(getByAliases(record, ['gioitinh', 'gender'])) === 'Nam' ? 'Nam' : (cellText(getByAliases(record, ['gioitinh', 'gender'])) === 'Nữ' ? 'Nữ' : 'Chưa xác định'),
-        school: '', gradeLevel: '', programId: classroom.programId, classId: classroom.id,
+        school: '', gradeLevel: '', programId: program?.id || classroom.programId, classId: classroom.id,
         address: cellText(getByAliases(record, ['diachi', 'address'])), email: '',
         phone: cellText(getByAliases(record, ['sdthocsinh', 'phone'])), parentName: '',
         parentPhone: cellText(getByAliases(record, ['sdtphuhuynh', 'parentphone'])), enrollDate: '', notes: cellText(getByAliases(record, ['ghichu', 'notes'])),
@@ -632,12 +653,15 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     const student = students.find((item) => item.id === studentId);
     const paidAmount = numberValue(getByAliases(record, ['dathuvnd', 'dathu', 'paidamount']));
     const debtAmount = numberValue(getByAliases(record, ['congnovnd', 'congno', 'debtamount']));
-    const courseFee = numberValue(getByAliases(record, ['hocphikhoavnd', 'hocphikhoa', 'coursefee'])) || (paidAmount + debtAmount);
-    const monthlyFee = numberValue(getByAliases(record, ['hocphithangvnd', 'hocphithang', 'monthlyfee']));
     const paymentKindLabel = cellText(getByAliases(record, ['khoanthu', 'paymentkind'])).toLocaleLowerCase('vi-VN');
-    const paymentKind: TuitionReceipt['paymentKind'] = paymentKindLabel.includes('tháng') ? 'monthly' : 'course';
+    const paymentKind: TuitionReceipt['paymentKind'] = paymentKindLabel.includes('khóa') ? 'course' : 'monthly';
+    const discount = numberValue(getByAliases(record, ['giamgiavnd', 'giamgia', 'discount']));
+    const rawCourseFee = numberValue(getByAliases(record, ['hocphikhoavnd', 'hocphikhoa', 'coursefee']));
+    const rawMonthlyFee = numberValue(getByAliases(record, ['hocphithangvnd', 'hocphithang', 'monthlyfee']));
+    const courseFee = paymentKind === 'course' ? rawCourseFee : 0;
+    const monthlyFee = paymentKind === 'monthly' ? (rawMonthlyFee || (paidAmount + debtAmount + discount)) : rawMonthlyFee;
     const billingPeriod = monthKey(isoDate(getByAliases(record, ['kyhocphi', 'billingperiod', 'period']) || getByAliases(record, ['ngaythu', 'paymentdate'])));
-    const receiptStatus: TuitionReceipt['status'] = debtAmount <= 0 && paidAmount > 0 ? 'paid' : (paidAmount > 0 ? 'partial' : 'unpaid');
+    const receiptStatus: TuitionReceipt['status'] = debtAmount > 0 ? (paidAmount > 0 ? 'partial' : 'debt') : (paidAmount > 0 ? 'paid' : 'unpaid');
     const paymentMethod = cellText(getByAliases(record, ['hinhthuc', 'paymentmethod']));
     const normalizedPaymentMethod: TuitionReceipt['paymentMethod'] = paymentMethod === 'Tiền mặt' || paymentMethod === 'Chuyển khoản' || paymentMethod === 'Thẻ' ? paymentMethod : 'Chưa xác định';
     return {
@@ -649,7 +673,7 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       monthlyFee,
       paymentKind,
       billingPeriod,
-      discount: numberValue(getByAliases(record, ['giamgiavnd', 'giamgia', 'discount'])),
+      discount,
       paidAmount,
       debtAmount,
       status: receiptStatus,
@@ -663,7 +687,7 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     const studentReceipts = receipts.filter((receipt) => receipt.studentId === student.id);
     const debt = studentReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);
     const paid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
-    student.feeStatus = debt > 0 ? (paid > 0 ? 'debt' : 'unpaid') : (paid > 0 ? 'paid' : 'unpaid');
+    student.feeStatus = debt > 0 ? (paid > 0 ? 'partial' : 'debt') : (paid > 0 ? 'paid' : 'unpaid');
   });
   const timetableSlots = classes.flatMap((classroom) => {
     const individualSlots = [...classroom.scheduleTime.matchAll(/(Thứ [2-7]|Chủ Nhật)\s*:\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/g)];

@@ -29,6 +29,8 @@ interface ClassManagerProps {
   onUpdateClass: (c: ClassRoom) => void;
   onDeleteClass: (id: string) => void;
   onReplaceClassSchedule: (classId: string, slots: TimetableSlot[]) => void;
+  onCreateRoom: (room: Room) => void;
+  onCreateProgram: (program: CourseProgram) => void;
 }
 
 type ScheduleDraft = Pick<TimetableSlot, 'dayOfWeek' | 'startTime' | 'endTime'>;
@@ -65,6 +67,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
   onUpdateClass,
   onDeleteClass,
   onReplaceClassSchedule,
+  onCreateRoom,
+  onCreateProgram,
 }) => {
   const { t, language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,6 +76,10 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
   const [viewingClassStudents, setViewingClassStudents] = useState<ClassRoom | null>(null);
   const [scheduleEntries, setScheduleEntries] = useState<ScheduleDraft[]>([]);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [programInput, setProgramInput] = useState('');
+  const [isQuickRoomOpen, setIsQuickRoomOpen] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomCapacity, setNewRoomCapacity] = useState(0);
 
   // Quản lý lớp thay đổi lịch, phòng và phân công nên chỉ Chủ trung tâm được sửa.
   const canEdit = isOwner;
@@ -91,6 +99,10 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
     });
     setScheduleEntries([]);
     setScheduleError(null);
+    setProgramInput('');
+    setIsQuickRoomOpen(false);
+    setNewRoomName('');
+    setNewRoomCapacity(0);
     setIsModalOpen(true);
   };
 
@@ -100,12 +112,16 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
       .map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime }));
     const legacyRange = classroom.scheduleTime.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
     setEditingClass(classroom);
+    setProgramInput(programs.find((program) => program.id === classroom.programId)?.name || '');
     setScheduleEntries(existingSlots.length ? existingSlots : classroom.days.map((dayOfWeek) => ({
       dayOfWeek,
       startTime: legacyRange?.[1] || '18:00',
       endTime: legacyRange?.[2] || '19:30',
     })));
     setScheduleError(null);
+    setIsQuickRoomOpen(false);
+    setNewRoomName('');
+    setNewRoomCapacity(0);
     setIsModalOpen(true);
   };
 
@@ -123,8 +139,24 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
     }
     const validEntries = normalisedEntries as Array<ScheduleDraft & { startTime: string; endTime: string }>;
 
+    const programName = programInput.trim();
+    const matchingProgram = programs.find((program) => (
+      program.name.trim().toLocaleLowerCase('vi-VN') === programName.toLocaleLowerCase('vi-VN')
+      || program.code.trim().toLocaleLowerCase('vi-VN') === programName.toLocaleLowerCase('vi-VN')
+    ));
+    const createdProgram = programName && !matchingProgram ? {
+      id: `PROG_${Date.now()}`,
+      code: `CT-${String(programs.length + 1).padStart(3, '0')}`,
+      name: programName,
+      category: 'Khác' as const,
+      tuitionFee: 0,
+      description: 'Tạo trực tiếp khi lập lớp học.',
+    } : null;
+    if (createdProgram) onCreateProgram(createdProgram);
+
     const savedClass: ClassRoom = {
       ...editingClass,
+      programId: matchingProgram?.id || createdProgram?.id || editingClass.programId,
       days: sortSchedule(validEntries).map((entry) => entry.dayOfWeek),
       scheduleTime: scheduleDescription(validEntries),
     };
@@ -148,6 +180,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
     setEditingClass(null);
     setScheduleEntries([]);
     setScheduleError(null);
+    setProgramInput('');
+    setIsQuickRoomOpen(false);
   };
 
   const toggleDay = (dayStr: string) => {
@@ -165,6 +199,23 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
       return;
     }
     setEditingClass({ ...editingClass, code });
+  };
+
+  const handleCreateRoom = () => {
+    if (!editingClass || !newRoomName.trim()) return;
+    const existingRoom = rooms.find((room) => room.name.trim().toLocaleLowerCase('vi-VN') === newRoomName.trim().toLocaleLowerCase('vi-VN'));
+    const room = existingRoom || {
+      id: `ROOM_${Date.now()}`,
+      name: newRoomName.trim(),
+      capacity: Math.max(0, newRoomCapacity),
+      status: 'available' as const,
+      notes: 'Tạo nhanh khi lập lớp học.',
+    };
+    if (!existingRoom) onCreateRoom(room);
+    setEditingClass({ ...editingClass, roomId: room.id });
+    setNewRoomName('');
+    setNewRoomCapacity(0);
+    setIsQuickRoomOpen(false);
   };
 
   return (
@@ -366,6 +417,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                 setEditingClass(null);
                 setScheduleEntries([]);
                 setScheduleError(null);
+                setProgramInput('');
+                setIsQuickRoomOpen(false);
               }}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
             >
@@ -420,15 +473,18 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Chương Trình Học</label>
-                <select
-                  value={editingClass.programId}
-                  onChange={(e) => setEditingClass({ ...editingClass, programId: e.target.value })}
+                <input
+                  type="text"
+                  value={programInput}
+                  onChange={(e) => setProgramInput(e.target.value)}
+                  list="program-options"
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl"
-                >
-                  {programs.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                  placeholder="Chọn chương trình đã import hoặc nhập mới"
+                />
+                <datalist id="program-options">
+                  {programs.map((program) => <option key={program.id} value={program.name}>{program.code}</option>)}
+                </datalist>
+                <p className="mt-1 text-[10px] text-slate-500">Có thể chọn chương trình từ Excel hoặc gõ tên mới; tên mới sẽ được lưu để dùng cho các lớp sau.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -456,8 +512,20 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
+                  <button type="button" onClick={() => setIsQuickRoomOpen((open) => !open)} className="mt-1.5 text-[11px] font-bold text-blue-700 hover:text-blue-900">+ Tạo phòng học mới</button>
                 </div>
               </div>
+
+              {isQuickRoomOpen && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <div className="mb-2 text-xs font-bold text-blue-900">Tạo phòng học mới</div>
+                  <div className="grid grid-cols-[1fr_100px_auto] gap-2">
+                    <input type="text" value={newRoomName} onChange={(event) => setNewRoomName(event.target.value)} placeholder="Tên phòng, ví dụ P02" className="min-w-0 rounded-lg border border-blue-200 bg-white px-2 py-1.5" />
+                    <input type="number" min="0" value={newRoomCapacity} onChange={(event) => setNewRoomCapacity(Number(event.target.value))} placeholder="Sức chứa" className="min-w-0 rounded-lg border border-blue-200 bg-white px-2 py-1.5" />
+                    <button type="button" onClick={handleCreateRoom} className="rounded-lg bg-blue-700 px-3 py-1.5 font-bold text-white hover:bg-blue-800">Thêm</button>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Chọn Ngày Học</label>
@@ -487,7 +555,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                   <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-amber-900"><CalendarDays className="h-4 w-4" /> Ca học theo từng buổi</div>
                   <div className="space-y-2">
                     {sortSchedule(scheduleEntries).map((entry) => (
-                      <div key={entry.dayOfWeek} className="grid grid-cols-[1fr_minmax(76px,110px)_minmax(76px,110px)] items-center gap-2">
+                      <div key={entry.dayOfWeek} className="grid grid-cols-[minmax(0,1fr)_5rem_5rem] items-center gap-2">
                         <span className="font-semibold text-slate-700">{entry.dayOfWeek}</span>
                         <label className="relative">
                           <span className="sr-only">Giờ bắt đầu {entry.dayOfWeek}</span>
@@ -496,7 +564,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                           inputMode="numeric"
                           value={entry.startTime}
                           onChange={(event) => setScheduleEntries((current) => current.map((item) => item.dayOfWeek === entry.dayOfWeek ? { ...item, startTime: event.target.value } : item))}
-                          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-slate-800"
+                          className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-slate-800"
                           aria-label={`Giờ bắt đầu ${entry.dayOfWeek}`}
                           placeholder="Từ 17:00"
                         />
@@ -508,7 +576,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                           inputMode="numeric"
                           value={entry.endTime}
                           onChange={(event) => setScheduleEntries((current) => current.map((item) => item.dayOfWeek === entry.dayOfWeek ? { ...item, endTime: event.target.value } : item))}
-                          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-slate-800"
+                          className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-slate-800"
                           aria-label={`Giờ kết thúc ${entry.dayOfWeek}`}
                           placeholder="Đến 19:00"
                         />
@@ -530,6 +598,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                     setEditingClass(null);
                     setScheduleEntries([]);
                     setScheduleError(null);
+                    setProgramInput('');
+                    setIsQuickRoomOpen(false);
                   }}
                   className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-semibold"
                 >
