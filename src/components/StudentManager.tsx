@@ -452,7 +452,6 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               title="Xem chi tiết & Lịch học"
                             >
                               <Eye className="w-3.5 h-3.5 text-blue-600" />
-                              <span>Xem chi tiết</span>
                             </button>
 
                             {canEdit && (

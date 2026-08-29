@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Student, Teacher, ClassRoom, TuitionReceipt } from '../types';
-import { BarChart3, Calendar, Download, Printer, DollarSign, Users, BookOpen } from 'lucide-react';
+import { BarChart3, Calendar, Download, Printer, DollarSign, Users, BookOpen, X } from 'lucide-react';
 import { debtBreakdown } from '../lib/tuition';
 
 interface ReportViewProps {
@@ -8,15 +8,18 @@ interface ReportViewProps {
   teachers: Teacher[];
   classes: ClassRoom[];
   receipts: TuitionReceipt[];
+  onNavigateTab: (tab: string) => void;
 }
 
 export const ReportView: React.FC<ReportViewProps> = ({
   students,
   teachers,
   classes,
-  receipts
+  receipts,
+  onNavigateTab
 }) => {
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('month');
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
   const reportDate = [...receipts.map((receipt) => receipt.paymentDate).filter(Boolean)].sort().at(-1) || new Date().toISOString().slice(0, 10);
   const referenceDate = new Date(`${reportDate}T00:00:00`);
@@ -35,6 +38,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const totalDebt = totalDebtBreakdown.total;
   const activeCount = students.filter(s => s.status === 'active').length;
   const reservedCount = students.filter(s => s.status === 'reserved').length;
+  const selectedClass = classes.find((classroom) => classroom.id === selectedClassId) || null;
+  const selectedClassStudents = selectedClass ? students.filter((student) => student.classId === selectedClass.id) : [];
+  const selectedClassReceipts = selectedClass ? reportReceipts.filter((receipt) => receipt.classId === selectedClass.id) : [];
+  const selectedClassDebt = debtBreakdown(selectedClassReceipts);
+  const selectedClassPaid = selectedClassReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
 
   const handlePrint = () => {
     window.print();
@@ -98,29 +106,29 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
         {/* 4 Summary Boxes */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+          <button type="button" onClick={() => onNavigateTab('students')} className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-left transition hover:border-red-300 hover:bg-red-50/30">
             <div className="text-slate-500 font-semibold uppercase">Tổng Học Sinh</div>
             <div className="text-xl font-bold text-slate-900 mt-1">{students.length} HS</div>
             <div className="text-[11px] text-emerald-700 font-medium">{activeCount} đang học • {reservedCount} bảo lưu</div>
-          </div>
+          </button>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+          <button type="button" onClick={() => onNavigateTab('tuition')} className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-left transition hover:border-red-300 hover:bg-red-50/30">
             <div className="text-slate-500 font-semibold uppercase">Tổng Doanh Thu</div>
             <div className="text-xl font-bold text-amber-700 mt-1">{totalRevenue.toLocaleString('vi-VN')} đ</div>
             <div className="text-[11px] text-slate-500">Theo {timeFilter === 'day' ? 'ngày' : timeFilter === 'week' ? 'tuần' : 'tháng'} có dữ liệu gần nhất</div>
-          </div>
+          </button>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+          <button type="button" onClick={() => onNavigateTab('tuition')} className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-left transition hover:border-red-300 hover:bg-red-50/30">
             <div className="text-slate-500 font-semibold uppercase">Tổng Công Nợ</div>
             <div className="text-xl font-bold text-rose-700 mt-1">{totalDebt.toLocaleString('vi-VN')} đ</div>
             <div className="text-[11px] text-rose-600 font-medium">Tháng: {totalDebtBreakdown.monthly.toLocaleString('vi-VN')} đ · Khóa: {totalDebtBreakdown.course.toLocaleString('vi-VN')} đ</div>
-          </div>
+          </button>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+          <button type="button" onClick={() => onNavigateTab('classes')} className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-left transition hover:border-red-300 hover:bg-red-50/30">
             <div className="text-slate-500 font-semibold uppercase">Số Lớp Đang Mở</div>
             <div className="text-xl font-bold text-blue-700 mt-1">{classes.length} Lớp</div>
             <div className="text-[11px] text-slate-500">{teachers.length} giáo viên phụ trách</div>
-          </div>
+          </button>
         </div>
 
         {/* Classes Table */}
@@ -147,7 +155,12 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   const debt = debtBreakdown(classReceipts);
 
                   return (
-                    <tr key={cls.id}>
+                    <tr
+                      key={cls.id}
+                      onClick={() => setSelectedClassId(cls.id)}
+                      className="cursor-pointer transition-colors hover:bg-red-50/50"
+                      title="Bấm để xem chi tiết lớp, học viên và học phí"
+                    >
                       <td className="p-2.5 font-bold text-slate-400">{idx + 1}</td>
                       <td className="p-2.5 font-bold text-red-800">{cls.code}</td>
                       <td className="p-2.5 font-bold text-slate-900">{cls.name}</td>
@@ -163,6 +176,47 @@ export const ReportView: React.FC<ReportViewProps> = ({
           </div>
         </div>
       </div>
+
+      {selectedClass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="relative max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setSelectedClassId(null)}
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Đóng chi tiết lớp"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="pr-9">
+              <p className="text-xs font-bold text-red-700">{selectedClass.code}</p>
+              <h3 className="mt-1 text-lg font-extrabold text-slate-900">{selectedClass.name}</h3>
+              <p className="mt-1 text-xs text-slate-500">Chi tiết sĩ số, phiếu thu và công nợ theo kỳ báo cáo đang chọn.</p>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-slate-500">Sĩ số</p><b className="mt-1 block text-slate-900">{selectedClassStudents.length} / {selectedClass.capacity || 'Chưa cập nhật'} HS</b></div>
+              <div className="rounded-xl bg-emerald-50 p-3"><p className="text-emerald-700">Đã thu</p><b className="mt-1 block text-emerald-800">{selectedClassPaid.toLocaleString('vi-VN')} đ</b></div>
+              <div className="rounded-xl bg-rose-50 p-3"><p className="text-rose-700">Nợ tháng</p><b className="mt-1 block text-rose-800">{selectedClassDebt.monthly.toLocaleString('vi-VN')} đ</b></div>
+              <div className="rounded-xl bg-violet-50 p-3"><p className="text-violet-700">Nợ khóa</p><b className="mt-1 block text-violet-800">{selectedClassDebt.course.toLocaleString('vi-VN')} đ</b></div>
+            </div>
+
+            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-800 text-[10px] uppercase text-slate-100"><tr><th className="px-3 py-2.5">Mã HS</th><th className="px-3 py-2.5">Học viên</th><th className="px-3 py-2.5 text-right">Đã thu</th><th className="px-3 py-2.5 text-right">Nợ tháng</th><th className="px-3 py-2.5 text-right">Nợ khóa</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedClassStudents.length === 0 ? <tr><td colSpan={5} className="px-3 py-7 text-center text-slate-500">Chưa có học viên trong lớp.</td></tr> : selectedClassStudents.map((student) => {
+                    const studentReceipts = selectedClassReceipts.filter((receipt) => receipt.studentId === student.id);
+                    const studentDebt = debtBreakdown(studentReceipts);
+                    const studentPaid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+                    return <tr key={student.id}><td className="px-3 py-2.5 font-bold text-red-800">{student.code}</td><td className="px-3 py-2.5 font-semibold text-slate-800">{student.name}</td><td className="px-3 py-2.5 text-right font-bold text-emerald-700">{studentPaid.toLocaleString('vi-VN')} đ</td><td className="px-3 py-2.5 text-right font-bold text-rose-700">{studentDebt.monthly > 0 ? `${studentDebt.monthly.toLocaleString('vi-VN')} đ` : '—'}</td><td className="px-3 py-2.5 text-right font-bold text-violet-700">{studentDebt.course > 0 ? `${studentDebt.course.toLocaleString('vi-VN')} đ` : '—'}</td></tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

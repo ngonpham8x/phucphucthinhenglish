@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`self-start bg-white text-slate-800 transition-all duration-300 z-20 border-r border-slate-200 shadow-sm ${
+      className={`sticky top-[52px] self-start h-[calc(100vh-52px)] overflow-y-auto bg-white text-slate-800 transition-all duration-300 z-20 border-r border-slate-200 shadow-sm ${
         collapsed ? 'w-16' : 'w-60'
       }`}
     >

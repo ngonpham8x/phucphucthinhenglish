@@ -833,6 +833,7 @@ export default function App() {
               teachers={teachers}
               classes={classes}
               receipts={receipts}
+              onNavigateTab={navigateTo}
             />
           )}
 
