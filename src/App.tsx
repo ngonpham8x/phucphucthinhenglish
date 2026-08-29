@@ -214,6 +214,7 @@ export default function App() {
   });
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [classEditRequest, setClassEditRequest] = useState<ClassRoom | null>(null);
   const contentViewportRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -724,6 +725,10 @@ export default function App() {
               onAddTeacher={handleAddTeacher}
               onUpdateTeacher={handleUpdateTeacher}
               onDeleteTeacher={handleDeleteTeacher}
+              onEditClass={(classroom) => {
+                setClassEditRequest(classroom);
+                navigateTo('classes');
+              }}
             />
           )}
 
@@ -744,6 +749,8 @@ export default function App() {
               onReplaceClassSchedule={handleReplaceClassSchedule}
               onCreateRoom={handleAddRoom}
               onCreateProgram={handleCreateProgram}
+              editRequest={classEditRequest}
+              onEditRequestHandled={() => setClassEditRequest(null)}
             />
           )}
 

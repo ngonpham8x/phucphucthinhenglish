@@ -121,7 +121,10 @@
     "view_list": "View Student List",
     "teacher": "Teacher:",
     "room": "Room:",
-    "schedule": "Schedule:"
+    "schedule": "Schedule:",
+    "schedule_time": "Schedule:",
+    "capacity": "Enrollment:",
+    "view_roster": "View roster"
   },
   "room": {
     "title": "Classroom Management",

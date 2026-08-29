@@ -121,7 +121,10 @@
     "view_list": "Xem danh sách học sinh",
     "teacher": "GV:",
     "room": "Phòng:",
-    "schedule": "Lịch học:"
+    "schedule": "Lịch học:",
+    "schedule_time": "Lịch học:",
+    "capacity": "Sĩ số:",
+    "view_roster": "Xem danh sách"
   },
   "room": {
     "title": "Quản lý Phòng Học",

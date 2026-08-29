@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ClassRoom, Teacher, Room, CourseProgram, Student, StaffPermissions, TimetableSlot, TuitionReceipt } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { debtBreakdown } from '../lib/tuition';
@@ -16,6 +16,7 @@ import {
   Save,
   Eye
 } from 'lucide-react';
+import { TeacherAvatar } from './TeacherAvatar';
 
 interface ClassManagerProps {
   classes: ClassRoom[];
@@ -33,6 +34,8 @@ interface ClassManagerProps {
   onReplaceClassSchedule: (classId: string, slots: TimetableSlot[]) => void;
   onCreateRoom: (room: Room) => void;
   onCreateProgram: (program: CourseProgram) => void;
+  editRequest?: ClassRoom | null;
+  onEditRequestHandled?: () => void;
 }
 
 type ScheduleDraft = Pick<TimetableSlot, 'dayOfWeek' | 'startTime' | 'endTime'>;
@@ -72,6 +75,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
   onReplaceClassSchedule,
   onCreateRoom,
   onCreateProgram,
+  editRequest,
+  onEditRequestHandled,
 }) => {
   const { t, language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -86,6 +91,12 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
 
   // Quản lý lớp thay đổi lịch, phòng và phân công nên chỉ Chủ trung tâm được sửa.
   const canEdit = isOwner;
+
+  useEffect(() => {
+    if (!editRequest) return;
+    handleOpenEdit(editRequest);
+    onEditRequestHandled?.();
+  }, [editRequest]);
 
   const handleOpenAdd = () => {
     setEditingClass({
@@ -383,7 +394,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                       <div key={st.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
                         <div className="flex items-center gap-3">
                           <span className="font-bold text-slate-400 w-5 text-center">{idx + 1}</span>
-                          <img src={st.avatar} alt={st.name} className="w-8 h-8 rounded-full object-cover" />
+                          <TeacherAvatar teacher={st} className="h-8 w-8 text-[9px]" />
                           <div>
                             <div className="font-bold text-slate-900">{st.name}</div>
                             <div className="text-[10px] text-slate-500">{st.code} • Phụ huynh: {st.parentName} ({st.parentPhone})</div>

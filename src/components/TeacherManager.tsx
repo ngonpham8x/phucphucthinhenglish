@@ -30,6 +30,7 @@ interface TeacherManagerProps {
   onAddTeacher: (t: Teacher) => void;
   onUpdateTeacher: (t: Teacher) => void;
   onDeleteTeacher: (id: string) => void;
+  onEditClass: (classroom: ClassRoom) => void;
 }
 
 export const TeacherManager: React.FC<TeacherManagerProps> = ({
@@ -39,7 +40,8 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
   isOwner,
   onAddTeacher,
   onUpdateTeacher,
-  onDeleteTeacher
+  onDeleteTeacher,
+  onEditClass
 }) => {
   const { t, language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -295,6 +297,15 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
                           <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Sĩ số: <span className="font-bold text-slate-800">{cls.studentIds ? cls.studentIds.length : 0} / {cls.capacity > 0 ? cls.capacity : 'Chưa cập nhật'} học sinh</span>
                         </div>
                       </div>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={() => onEditClass(cls)}
+                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-800 transition-colors hover:bg-amber-100"
+                        >
+                          <Edit className="h-3.5 w-3.5" /> Sửa / cập nhật lớp
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
