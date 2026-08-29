@@ -108,7 +108,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const [filterProgram, setFilterProgram] = useState<string>('all');
   const [filterClass, setFilterClass] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
+  // On phones, cards are readable without horizontal scrolling; desktops keep
+  // the denser table as the default.
+  const [viewMode, setViewMode] = useState<'table' | 'card'>(() => (
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'card' : 'table'
+  ));
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);

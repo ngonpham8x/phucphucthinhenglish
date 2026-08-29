@@ -113,7 +113,10 @@ const writeFooter = (sheet: ExcelJS.Worksheet, rowNumber: number, columns: numbe
 };
 const studentStatusLabel = (status: Student['status']) => status === 'reserved' ? 'Bảo lưu' : (status === 'dropped' ? 'Nghỉ học' : 'Đang học');
 const classSheetName = (classroom: ClassRoom) => `Lớp ${classroom.code}`.slice(0, 31);
-const withWorksheetLink = (target: string | undefined, formula: string) => target ? `HYPERLINK("${target}",${formula})` : formula;
+// Keep calculation cells as plain formulas.  Embedding HYPERLINK around
+// dynamic-array / SUMIFS formulas can make Excel repair an otherwise valid
+// workbook on open.  Dedicated text-link cells still provide sheet navigation.
+const withWorksheetLink = (_target: string | undefined, formula: string) => formula;
 const styleFormulaLink = (cell: ExcelJS.Cell) => {
   cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: COLOR.link }, underline: true };
 };
@@ -434,7 +437,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       8: dynamicLedgerTotal('M', 'N'),
       9: dynamicDebtByKind('monthly'),
       10: dynamicDebtByKind('course'),
-      11: `IFERROR(HYPERLINK("#'HỌC PHÍ'!A1",IF(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${studentFilter})<>"","→ Học phí","")),"")`,
+      11: `IFERROR(IF(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${studentFilter})<>"","→ Học phí",""),"")`,
       12: dynamicStudentColumn('K'),
       13: dynamicStudentColumn('W')
     };
@@ -495,7 +498,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     1: `IFERROR(SEQUENCE(ROWS(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter}))),"")`,
     2: lookupMasterColumn('B'), 3: lookupMasterColumn('C'), 4: lookupMasterColumn('H'), 5: lookupMasterColumn('I'), 6: lookupMasterColumn('J'),
     7: lookupLedgerTotal('L', 'M'), 8: lookupLedgerTotal('M', 'N'), 9: lookupDebtByKind('monthly'), 10: lookupDebtByKind('course'),
-    11: `IFERROR(HYPERLINK("#'HỌC PHÍ'!A1",IF(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter})<>"","→ Học phí","")),"")`,
+    11: `IFERROR(IF(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter})<>"","→ Học phí",""),"")`,
     12: lookupMasterColumn('K'), 13: lookupMasterColumn('W')
   };
   Object.entries(lookupDetailFormulaByColumn).forEach(([column, formula]) => { classLookup.getCell(11, Number(column)).value = { formula }; });
