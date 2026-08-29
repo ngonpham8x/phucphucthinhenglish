@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
-import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign } from 'lucide-react';
+import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2 } from 'lucide-react';
 import logoImg from '../assets/images/regenerated_image_1786351687546.png';
 import { paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
 
@@ -32,6 +32,8 @@ interface TuitionManagerProps {
   settings: CenterSettings;
   isOwner: boolean;
   onAddReceipt: (r: TuitionReceipt) => void;
+  onUpdateReceipt: (r: TuitionReceipt) => void;
+  onDeleteReceipt: (id: string) => void;
 }
 
 export const TuitionManager: React.FC<TuitionManagerProps> = ({
@@ -42,10 +44,18 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   permissions,
   settings,
   isOwner,
-  onAddReceipt
+  onAddReceipt,
+  onUpdateReceipt,
+  onDeleteReceipt
 }) => {
   const [selectedReceipt, setSelectedReceipt] = useState<TuitionReceipt | null>(null);
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
+  const [editingReceipt, setEditingReceipt] = useState<TuitionReceipt | null>(null);
+  const [pendingReceiptAction, setPendingReceiptAction] = useState<
+    | { type: 'save'; receipt: TuitionReceipt; isUpdate: boolean }
+    | { type: 'delete'; receipt: TuitionReceipt }
+    | null
+  >(null);
 
   const [collectingStudentId, setCollectingStudentId] = useState<string>(students[0]?.id || '');
   const [courseFeeInput, setCourseFeeInput] = useState<number>(0);
@@ -59,6 +69,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [collectError, setCollectError] = useState<string | null>(null);
 
   const canCollect = isOwner || permissions.tuition.collect;
+  const canDelete = isOwner || permissions.tuition.delete;
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
   const totalDebt = receipts.reduce((sum, r) => sum + r.debtAmount, 0);
@@ -70,6 +81,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     .filter((period): period is string => Boolean(period)))];
 
   const handleOpenCollect = () => {
+    setEditingReceipt(null);
     setCollectingStudentId(students[0]?.id || '');
     const st = students[0];
     const program = programs.find(p => p.id === st?.programId);
@@ -80,6 +92,21 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setBillingPeriod(currentMonth);
     setPaidAmountInput(suggestedMonthlyFee);
     setDiscountInput(0);
+    setCollectError(null);
+    setIsCollectModalOpen(true);
+  };
+
+  const handleOpenEditReceipt = (receipt: TuitionReceipt) => {
+    setEditingReceipt(receipt);
+    setCollectingStudentId(receipt.studentId);
+    setCourseFeeInput(receipt.courseFee || 0);
+    setMonthlyFeeInput(receipt.monthlyFee || 0);
+    setPaymentKind(receipt.paymentKind === 'course' ? 'course' : 'monthly');
+    setBillingPeriod(receipt.billingPeriod || (receipt.paymentKind === 'course' ? defaultCoursePeriod : receipt.paymentDate.slice(0, 7)));
+    setPaidAmountInput(receipt.paidAmount);
+    setDiscountInput(receipt.discount || 0);
+    setPaymentMethod(receipt.paymentMethod);
+    setPaymentNotes(receipt.notes || '');
     setCollectError(null);
     setIsCollectModalOpen(true);
   };
@@ -111,9 +138,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     const debtAmount = Math.max(finalPrice - paidAmountInput, 0);
     const status = debtAmount > 0 ? (paidAmountInput > 0 ? 'partial' : 'debt') : 'paid';
 
-    const newReceipt: TuitionReceipt = {
-      id: `TR_${Date.now()}`,
-      code: `PT-${new Date().getFullYear()}-${(receipts.length + 1).toString().padStart(3, '0')}`,
+    const nextReceipt: TuitionReceipt = {
+      ...(editingReceipt ?? {}),
+      id: editingReceipt?.id || `TR_${Date.now()}`,
+      code: editingReceipt?.code || `PT-${new Date().getFullYear()}-${(receipts.length + 1).toString().padStart(3, '0')}`,
       studentId: student.id,
       classId: student.classId,
       courseFee: paymentKind === 'course' ? courseFeeInput : 0,
@@ -124,15 +152,28 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       paidAmount: paidAmountInput,
       debtAmount,
       status,
-      paymentDate: new Date().toISOString().split('T')[0],
-      collectorName: isOwner ? 'Chủ trung tâm' : 'Nhân viên',
+      paymentDate: editingReceipt?.paymentDate || new Date().toISOString().split('T')[0],
+      collectorName: editingReceipt?.collectorName || (isOwner ? 'Chủ trung tâm' : 'Nhân viên'),
       paymentMethod,
       notes: paymentNotes || 'Thu học phí'
     };
 
-    onAddReceipt(newReceipt);
-    setIsCollectModalOpen(false);
-    setSelectedReceipt(newReceipt); // Open receipt preview for instant printing
+    setPendingReceiptAction({ type: 'save', receipt: nextReceipt, isUpdate: Boolean(editingReceipt) });
+  };
+
+  const handleConfirmReceiptAction = () => {
+    if (!pendingReceiptAction) return;
+    if (pendingReceiptAction.type === 'save') {
+      if (pendingReceiptAction.isUpdate) onUpdateReceipt(pendingReceiptAction.receipt);
+      else onAddReceipt(pendingReceiptAction.receipt);
+      setIsCollectModalOpen(false);
+      setEditingReceipt(null);
+      setSelectedReceipt(pendingReceiptAction.receipt);
+    } else {
+      onDeleteReceipt(pendingReceiptAction.receipt.id);
+      if (selectedReceipt?.id === pendingReceiptAction.receipt.id) setSelectedReceipt(null);
+    }
+    setPendingReceiptAction(null);
   };
 
   const handlePrintReceipt = () => {
@@ -215,7 +256,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 <th className="py-3 px-4">Tình Trạng</th>
                 <th className="py-3 px-4">Ngày Thu</th>
                 <th className="py-3 px-4">Hình Thức</th>
-                <th className="py-3 px-4 text-right">In Phiếu</th>
+                <th className="py-3 px-4 text-right">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -238,6 +279,15 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <td className="py-3 px-4">{rc.paymentDate}</td>
                     <td className="py-3 px-4">{rc.paymentMethod}</td>
                     <td className="py-3 px-4 text-right">
+                      <div className="flex justify-end gap-1.5">
+                      {canCollect && <button
+                        type="button"
+                        onClick={() => handleOpenEditReceipt(rc)}
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1"
+                        title="Sửa và cập nhật phiếu thu"
+                      >
+                        <Edit className="w-3.5 h-3.5" /> Sửa
+                      </button>}
                       <button
                         onClick={() => setSelectedReceipt(rc)}
                         className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1"
@@ -245,6 +295,15 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                         <Printer className="w-3.5 h-3.5 text-amber-600" />
                         In Phiếu Thu
                       </button>
+                      {canDelete && <button
+                        type="button"
+                        onClick={() => setPendingReceiptAction({ type: 'delete', receipt: rc })}
+                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1"
+                        title="Xóa phiếu thu"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Xóa
+                      </button>}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -259,7 +318,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-h-[90vh] max-w-md w-full overflow-y-auto p-6 shadow-xl border border-slate-200 relative custom-scrollbar">
             <button
-              onClick={() => setIsCollectModalOpen(false)}
+              onClick={() => { setIsCollectModalOpen(false); setEditingReceipt(null); }}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
             >
               <X className="w-5 h-5" />
@@ -267,7 +326,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
             <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-red-700" />
-              Lập Phiếu Thu Học Phí
+              {editingReceipt ? `Sửa Phiếu Thu ${editingReceipt.code}` : 'Lập Phiếu Thu Học Phí'}
             </h3>
 
             <form onSubmit={handleSaveCollect} className="space-y-3 text-xs">
@@ -417,7 +476,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsCollectModalOpen(false)}
+                  onClick={() => { setIsCollectModalOpen(false); setEditingReceipt(null); }}
                   className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-semibold"
                 >
                   Hủy
@@ -426,11 +485,28 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   type="submit"
                   className="px-5 py-2 bg-red-800 text-white rounded-xl font-bold hover:bg-red-900 flex items-center gap-1.5"
                 >
-                  <Save className="w-4 h-4 text-amber-400" /> Xác Nhận Thu & In Phiếu
+                  <Save className="w-4 h-4 text-amber-400" /> {editingReceipt ? 'Hoàn Thành Cập Nhật' : 'Hoàn Thành Lập Phiếu'}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {pendingReceiptAction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-label="Xác nhận thao tác phiếu thu" className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-extrabold text-slate-900">{pendingReceiptAction.type === 'delete' ? 'Xóa phiếu thu?' : pendingReceiptAction.isUpdate ? 'Hoàn thành cập nhật?' : 'Hoàn thành lập phiếu?'}</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              {pendingReceiptAction.type === 'delete'
+                ? `Bạn có chắc muốn xóa ${pendingReceiptAction.receipt.code}? Công nợ của học viên sẽ được tính lại ngay.`
+                : `${pendingReceiptAction.isUpdate ? 'Cập nhật' : 'Lưu'} ${pendingReceiptAction.receipt.code} cho ${students.find((student) => student.id === pendingReceiptAction.receipt.studentId)?.name || 'học viên'}?`}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setPendingReceiptAction(null)} className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Không</button>
+              <button type="button" onClick={handleConfirmReceiptAction} className={`rounded-xl px-4 py-2 text-xs font-bold text-white ${pendingReceiptAction.type === 'delete' ? 'bg-rose-700 hover:bg-rose-800' : 'bg-emerald-700 hover:bg-emerald-800'}`}>Có, {pendingReceiptAction.type === 'delete' ? 'xóa' : 'hoàn thành'}</button>
+            </div>
+          </section>
         </div>
       )}
 

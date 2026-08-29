@@ -74,6 +74,7 @@ const DATA_SCHEMA_VERSION = 'secure-supabase-import-v1';
 const ACTIVE_TAB_STORAGE_KEY = 'PHUC_PHUC_THINH_ACTIVE_TAB';
 const DATA_STORE_KEYS = [
   'settings',
+  'programs',
   'teachers',
   'rooms',
   'classes',
@@ -188,7 +189,7 @@ export default function App() {
   const [canSyncCenterData, setCanSyncCenterData] = useState(false);
   const [hasCenterData, setHasCenterData] = useState(false);
 
-  const [programs, setPrograms] = useState<CourseProgram[]>(() => isSupabaseConfigured ? [] : initialPrograms);
+  const [programs, setPrograms] = useState<CourseProgram[]>(() => loadStored('programs', initialPrograms));
   const [teachers, setTeachers] = useState<Teacher[]>(() => loadStored('teachers', initialTeachers));
   const [rooms, setRooms] = useState<Room[]>(() => loadStored('rooms', initialRooms));
   const [classes, setClasses] = useState<ClassRoom[]>(() => loadStored('classes', initialClasses));
@@ -252,6 +253,7 @@ export default function App() {
 
   // Sync to LocalStorage
   useEffect(() => saveStored('settings', settings), [settings]);
+  useEffect(() => saveStored('programs', programs), [programs]);
   useEffect(() => saveStored('teachers', teachers), [teachers]);
   useEffect(() => saveStored('rooms', rooms), [rooms]);
   useEffect(() => saveStored('classes', classes), [classes]);
@@ -580,6 +582,17 @@ export default function App() {
     addLog('THÊM', 'Học phí', `Lập phiếu thu ${r.code} số tiền ${r.paidAmount.toLocaleString('vi-VN')} đ`);
   };
 
+  const handleUpdateReceipt = (updatedReceipt: TuitionReceipt) => {
+    setReceipts(prev => prev.map((receipt) => receipt.id === updatedReceipt.id ? updatedReceipt : receipt));
+    addLog('SỬA', 'Học phí', `Cập nhật phiếu thu ${updatedReceipt.code} (${updatedReceipt.paymentKind === 'course' ? 'học phí khóa' : 'học phí tháng'})`);
+  };
+
+  const handleDeleteReceipt = (id: string) => {
+    const receipt = receipts.find((item) => item.id === id);
+    setReceipts(prev => prev.filter((item) => item.id !== id));
+    if (receipt) addLog('XÓA', 'Học phí', `Xóa phiếu thu ${receipt.code} (${receipt.paymentKind === 'course' ? 'học phí khóa' : 'học phí tháng'})`);
+  };
+
   const handleBackupCreated = (backup: SystemBackup) => {
     setBackups(prev => [backup, ...prev].slice(0, 30));
     addLog('BACKUP', 'Sao lưu', `Đã xuất tệp sao lưu ${backup.filename} (${backup.sizeKb} KB)`);
@@ -698,6 +711,7 @@ export default function App() {
               onDeleteStudent={handleDeleteStudent}
               onOpenImportExportModal={() => setIsImportExportModalOpen(true)}
               onOpenTuition={() => navigateTo('tuition')}
+              onCreateProgram={handleCreateProgram}
             />
           )}
 
@@ -788,6 +802,8 @@ export default function App() {
               settings={settings}
               isOwner={currentUser.role === 'owner'}
               onAddReceipt={handleAddReceipt}
+              onUpdateReceipt={handleUpdateReceipt}
+              onDeleteReceipt={handleDeleteReceipt}
             />
           )}
 

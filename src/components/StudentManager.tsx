@@ -83,6 +83,7 @@ interface StudentManagerProps {
   onDeleteStudent: (id: string) => void;
   onOpenImportExportModal: () => void;
   onOpenTuition: () => void;
+  onCreateProgram: (program: CourseProgram) => void;
 }
 
 export const StudentManager: React.FC<StudentManagerProps> = ({
@@ -100,7 +101,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   onUpdateStudent,
   onDeleteStudent,
   onOpenImportExportModal,
-  onOpenTuition
+  onOpenTuition,
+  onCreateProgram
 }) => {
   const { t, language } = useLanguage();
   const [filterProgram, setFilterProgram] = useState<string>('all');
@@ -111,6 +113,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [programEntryMode, setProgramEntryMode] = useState<'catalog' | 'manual'>('catalog');
+  const [manualProgramName, setManualProgramName] = useState('');
 
   const canAdd = isOwner || permissions.student.add;
   const canEdit = isOwner || permissions.student.edit;
@@ -159,6 +163,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       status: 'active',
       feeStatus: 'unpaid'
     });
+    setProgramEntryMode('catalog');
+    setManualProgramName('');
     setIsModalOpen(true);
   };
 
@@ -171,11 +177,36 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       return;
     }
 
-    const existing = students.find(s => s.id === editingStudent.id);
+    let studentToSave = editingStudent;
+    if (programEntryMode === 'manual') {
+      const name = manualProgramName.trim();
+      if (!name) {
+        alert('Vui lòng nhập tên chương trình học.');
+        return;
+      }
+      const existingProgram = programs.find((program) => program.name.trim().toLocaleLowerCase('vi-VN') === name.toLocaleLowerCase('vi-VN'));
+      const program = existingProgram ?? {
+        id: `PROG_CUSTOM_${Date.now()}`,
+        code: `CUSTOM-${Date.now().toString().slice(-6)}`,
+        name,
+        category: 'Khác' as const,
+        tuitionFee: 0,
+        description: 'Tạo thủ công tại hồ sơ học viên.'
+      };
+      if (!existingProgram) onCreateProgram(program);
+      studentToSave = { ...editingStudent, programId: program.id };
+    }
+
+    if (!studentToSave.programId) {
+      alert('Vui lòng chọn hoặc nhập chương trình học.');
+      return;
+    }
+
+    const existing = students.find(s => s.id === studentToSave.id);
     if (existing) {
-      onUpdateStudent(editingStudent);
+      onUpdateStudent(studentToSave);
     } else {
-      onAddStudent(editingStudent);
+      onAddStudent(studentToSave);
     }
 
     setIsModalOpen(false);
@@ -428,6 +459,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               <button
                                 onClick={() => {
                                   setEditingStudent(st);
+                                  setProgramEntryMode(programs.some((program) => program.id === st.programId) ? 'catalog' : 'manual');
+                                  setManualProgramName(programs.find((program) => program.id === st.programId)?.name || st.programId);
                                   setIsModalOpen(true);
                                 }}
                                 className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
@@ -561,6 +594,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       <button
                         onClick={() => {
                           setEditingStudent(st);
+                          setProgramEntryMode(programs.some((program) => program.id === st.programId) ? 'catalog' : 'manual');
+                          setManualProgramName(programs.find((program) => program.id === st.programId)?.name || st.programId);
                           setIsModalOpen(true);
                         }}
                         className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg"
@@ -918,15 +953,38 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Chương Trình Học</label>
-                  <select
-                    value={editingStudent.programId}
-                    onChange={(e) => setEditingStudent({ ...editingStudent, programId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold"
-                  >
-                    {programs.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                  <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-[10px] font-bold">
+                    <button type="button" onClick={() => setProgramEntryMode('catalog')} className={`rounded-lg px-2 py-1.5 transition ${programEntryMode === 'catalog' ? 'bg-white text-red-800 shadow-sm' : 'text-slate-500'}`}>Từ danh mục / Excel</button>
+                    <button type="button" onClick={() => setProgramEntryMode('manual')} className={`rounded-lg px-2 py-1.5 transition ${programEntryMode === 'manual' ? 'bg-white text-red-800 shadow-sm' : 'text-slate-500'}`}>Nhập tay</button>
+                  </div>
+                  {programEntryMode === 'catalog' ? (
+                    <>
+                      <select
+                        value={editingStudent.programId}
+                        onChange={(e) => setEditingStudent({ ...editingStudent, programId: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold"
+                        required
+                      >
+                        <option value="">Chọn chương trình đã nhập từ Excel / danh mục</option>
+                        {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <p className="mt-1 text-[10px] text-slate-500">Danh sách gồm cả chương trình đã nhập từ file Excel.</p>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={manualProgramName}
+                        onChange={(e) => setManualProgramName(e.target.value)}
+                        list="student-program-options"
+                        placeholder="Nhập tên chương trình học..."
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold"
+                        required
+                      />
+                      <datalist id="student-program-options">{programs.map((program) => <option key={program.id} value={program.name} />)}</datalist>
+                      <p className="mt-1 text-[10px] text-slate-500">Tên mới sẽ được tạo trong danh mục và dùng được khi xuất/nhập Excel.</p>
+                    </>
+                  )}
                 </div>
 
                 <div>
