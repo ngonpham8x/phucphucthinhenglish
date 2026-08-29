@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ClassRoom, Teacher, Room, CourseProgram, Student, StaffPermissions } from '../types';
+import { ClassRoom, Teacher, Room, CourseProgram, Student, StaffPermissions, TimetableSlot } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import {
   BookOpen,
@@ -22,12 +22,35 @@ interface ClassManagerProps {
   rooms: Room[];
   programs: CourseProgram[];
   students: Student[];
+  timetableSlots: TimetableSlot[];
   permissions: StaffPermissions;
   isOwner: boolean;
   onAddClass: (c: ClassRoom) => void;
   onUpdateClass: (c: ClassRoom) => void;
   onDeleteClass: (id: string) => void;
+  onReplaceClassSchedule: (classId: string, slots: TimetableSlot[]) => void;
 }
+
+type ScheduleDraft = Pick<TimetableSlot, 'dayOfWeek' | 'startTime' | 'endTime'>;
+
+const weekDays = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
+
+const sortSchedule = (slots: ScheduleDraft[]) => [...slots].sort((left, right) => (
+  weekDays.indexOf(left.dayOfWeek) - weekDays.indexOf(right.dayOfWeek) || left.startTime.localeCompare(right.startTime)
+));
+
+const scheduleDescription = (slots: ScheduleDraft[]) => sortSchedule(slots)
+  .map((slot) => `${slot.dayOfWeek}: ${slot.startTime}–${slot.endTime}`)
+  .join(' · ');
+
+const normaliseTime = (value: string) => {
+  const match = value.trim().match(/^(\d{1,2})\s*:\s*(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
 
 export const ClassManager: React.FC<ClassManagerProps> = ({
   classes,
@@ -35,16 +58,20 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
   rooms,
   programs,
   students,
+  timetableSlots,
   permissions,
   isOwner,
   onAddClass,
   onUpdateClass,
-  onDeleteClass
+  onDeleteClass,
+  onReplaceClassSchedule,
 }) => {
   const { t, language } = useLanguage();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassRoom | null>(null);
   const [viewingClassStudents, setViewingClassStudents] = useState<ClassRoom | null>(null);
+  const [scheduleEntries, setScheduleEntries] = useState<ScheduleDraft[]>([]);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   // Quản lý lớp thay đổi lịch, phòng và phân công nên chỉ Chủ trung tâm được sửa.
   const canEdit = isOwner;
@@ -62,34 +89,83 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
       capacity: 0,
       studentIds: []
     });
+    setScheduleEntries([]);
+    setScheduleError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (classroom: ClassRoom) => {
+    const existingSlots = timetableSlots
+      .filter((slot) => slot.classId === classroom.id)
+      .map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime, endTime }));
+    const legacyRange = classroom.scheduleTime.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+    setEditingClass(classroom);
+    setScheduleEntries(existingSlots.length ? existingSlots : classroom.days.map((dayOfWeek) => ({
+      dayOfWeek,
+      startTime: legacyRange?.[1] || '18:00',
+      endTime: legacyRange?.[2] || '19:30',
+    })));
+    setScheduleError(null);
     setIsModalOpen(true);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClass || !editingClass.name.trim()) return;
-
-    if (classes.some(c => c.id === editingClass.id)) {
-      onUpdateClass(editingClass);
-    } else {
-      onAddClass(editingClass);
+    const normalisedEntries = scheduleEntries.map((entry) => ({
+      ...entry,
+      startTime: normaliseTime(entry.startTime),
+      endTime: normaliseTime(entry.endTime),
+    }));
+    if (normalisedEntries.some((entry) => !entry.startTime || !entry.endTime || entry.startTime >= entry.endTime)) {
+      setScheduleError('Mỗi buổi học cần nhập giờ dạng HH:MM và giờ kết thúc phải sau giờ bắt đầu.');
+      return;
     }
+    const validEntries = normalisedEntries as Array<ScheduleDraft & { startTime: string; endTime: string }>;
+
+    const savedClass: ClassRoom = {
+      ...editingClass,
+      days: sortSchedule(validEntries).map((entry) => entry.dayOfWeek),
+      scheduleTime: scheduleDescription(validEntries),
+    };
+
+    if (classes.some(c => c.id === savedClass.id)) {
+      onUpdateClass(savedClass);
+    } else {
+      onAddClass(savedClass);
+    }
+
+    const existingSlots = timetableSlots.filter((slot) => slot.classId === savedClass.id);
+    onReplaceClassSchedule(savedClass.id, sortSchedule(validEntries).map((entry, index) => ({
+      id: existingSlots.find((slot) => slot.dayOfWeek === entry.dayOfWeek)?.id || `TT_${savedClass.id}_${Date.now()}_${index}`,
+      classId: savedClass.id,
+      teacherId: savedClass.teacherId,
+      roomId: savedClass.roomId,
+      ...entry,
+    })));
 
     setIsModalOpen(false);
     setEditingClass(null);
+    setScheduleEntries([]);
+    setScheduleError(null);
   };
 
   const toggleDay = (dayStr: string) => {
-    if (!editingClass) return;
-    const days = editingClass.days.includes(dayStr)
-      ? editingClass.days.filter(d => d !== dayStr)
-      : [...editingClass.days, dayStr];
-    setEditingClass({ ...editingClass, days });
+    setScheduleEntries((current) => current.some((entry) => entry.dayOfWeek === dayStr)
+      ? current.filter((entry) => entry.dayOfWeek !== dayStr)
+      : [...current, { dayOfWeek: dayStr, startTime: '18:00', endTime: '19:30' }]);
+    setScheduleError(null);
   };
 
-  const availableDays = language === 'vi'
-    ? ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật']
-    : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const handleClassCodeChange = (code: string) => {
+    if (!editingClass) return;
+    const existingClass = classes.find((classroom) => classroom.code.trim().toLocaleUpperCase('vi-VN') === code.trim().toLocaleUpperCase('vi-VN'));
+    if (existingClass && existingClass.id !== editingClass.id) {
+      handleOpenEdit(existingClass);
+      return;
+    }
+    setEditingClass({ ...editingClass, code });
+  };
 
   return (
     <div className="space-y-6">
@@ -122,6 +198,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
           const teacher = teachers.find(t => t.id === cls.teacherId);
           const room = rooms.find(r => r.id === cls.roomId);
           const program = programs.find(p => p.id === cls.programId);
+          const classSchedule = timetableSlots.filter((slot) => slot.classId === cls.id);
+          const displaySchedule = classSchedule.length ? scheduleDescription(classSchedule) : (cls.scheduleTime || 'Chưa xếp lịch');
           const classStudents = students.filter(s => s.classId === cls.id);
           const currentCount = classStudents.length;
           const capacityKnown = cls.capacity > 0;
@@ -146,8 +224,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => {
-                          setEditingClass(cls);
-                          setIsModalOpen(true);
+                          handleOpenEdit(cls);
                         }}
                         className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg"
                         title="Sửa"
@@ -182,12 +259,7 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
 
                   <div className="flex items-center gap-2">
                     <Clock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                    <span>{t('class.schedule_time')} <strong>{cls.scheduleTime}</strong></span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                    <span>{t('class.days')} <strong>{cls.days.join(', ')}</strong></span>
+                    <span>{t('class.schedule_time')} <strong>{displaySchedule}</strong></span>
                   </div>
                 </div>
 
@@ -237,7 +309,10 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
               Danh Sách Học Sinh: {viewingClassStudents.name} ({viewingClassStudents.code})
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Lịch học: {viewingClassStudents.days.join(', ')} ({viewingClassStudents.scheduleTime})
+              Lịch học: {(() => {
+                const slots = timetableSlots.filter((slot) => slot.classId === viewingClassStudents.id);
+                return slots.length ? scheduleDescription(slots) : viewingClassStudents.scheduleTime;
+              })()}
             </p>
 
             <div className="divide-y divide-slate-100">
@@ -289,6 +364,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
               onClick={() => {
                 setIsModalOpen(false);
                 setEditingClass(null);
+                setScheduleEntries([]);
+                setScheduleError(null);
               }}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
             >
@@ -307,10 +384,16 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                   <input
                     type="text"
                     value={editingClass.code}
-                    onChange={(e) => setEditingClass({ ...editingClass, code: e.target.value })}
+                    onChange={(e) => handleClassCodeChange(e.target.value)}
+                    list="class-code-options"
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-red-800"
+                    placeholder="Chọn hoặc nhập mã mới"
                     required
                   />
+                  <datalist id="class-code-options">
+                    {classes.map((classroom) => <option key={classroom.id} value={classroom.code}>{classroom.name}</option>)}
+                  </datalist>
+                  <p className="mt-1 text-[10px] text-slate-500">Có thể chọn mã lớp có sẵn để sửa, hoặc gõ một mã mới để tạo lớp.</p>
                 </div>
 
                 <div>
@@ -377,21 +460,10 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Ca Học</label>
-                <input
-                  type="text"
-                  value={editingClass.scheduleTime}
-                  onChange={(e) => setEditingClass({ ...editingClass, scheduleTime: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl"
-                  placeholder="18:00 - 19:30"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Ngày Học Trong Tuần</label>
+                <label className="block font-semibold text-slate-700 mb-1">Chọn Ngày Học</label>
                 <div className="flex flex-wrap gap-1.5 mt-1">
-                  {availableDays.map((day) => {
-                    const isSelected = editingClass.days.includes(day);
+                  {weekDays.map((day) => {
+                    const isSelected = scheduleEntries.some((entry) => entry.dayOfWeek === day);
                     return (
                       <button
                         key={day}
@@ -410,12 +482,54 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                 </div>
               </div>
 
+              {scheduleEntries.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-amber-900"><CalendarDays className="h-4 w-4" /> Ca học theo từng buổi</div>
+                  <div className="space-y-2">
+                    {sortSchedule(scheduleEntries).map((entry) => (
+                      <div key={entry.dayOfWeek} className="grid grid-cols-[1fr_minmax(76px,110px)_minmax(76px,110px)] items-center gap-2">
+                        <span className="font-semibold text-slate-700">{entry.dayOfWeek}</span>
+                        <label className="relative">
+                          <span className="sr-only">Giờ bắt đầu {entry.dayOfWeek}</span>
+                          <input
+                          type="text"
+                          inputMode="numeric"
+                          value={entry.startTime}
+                          onChange={(event) => setScheduleEntries((current) => current.map((item) => item.dayOfWeek === entry.dayOfWeek ? { ...item, startTime: event.target.value } : item))}
+                          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-slate-800"
+                          aria-label={`Giờ bắt đầu ${entry.dayOfWeek}`}
+                          placeholder="Từ 17:00"
+                        />
+                        </label>
+                        <label className="relative">
+                          <span className="sr-only">Giờ kết thúc {entry.dayOfWeek}</span>
+                          <input
+                          type="text"
+                          inputMode="numeric"
+                          value={entry.endTime}
+                          onChange={(event) => setScheduleEntries((current) => current.map((item) => item.dayOfWeek === entry.dayOfWeek ? { ...item, endTime: event.target.value } : item))}
+                          className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-slate-800"
+                          aria-label={`Giờ kết thúc ${entry.dayOfWeek}`}
+                          placeholder="Đến 19:00"
+                        />
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-4 text-slate-600">Tự gõ bất kỳ khung giờ nào theo dạng HH:MM, ví dụ Thứ 6: 17:00–19:00 và Chủ Nhật: 07:00–09:00. Lịch sẽ tự xuất hiện trong Thời khóa biểu.</p>
+                </div>
+              )}
+
+              {scheduleError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">{scheduleError}</p>}
+
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setIsModalOpen(false);
                     setEditingClass(null);
+                    setScheduleEntries([]);
+                    setScheduleError(null);
                   }}
                   className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl font-semibold"
                 >

@@ -117,9 +117,15 @@ export interface TuitionReceipt {
   studentId: string;
   classId: string;
   courseFee: number;
+  // The course price and the monthly price are retained independently so a
+  // receipt can clearly state what the family is paying for.
+  monthlyFee?: number;
+  paymentKind?: 'course' | 'monthly';
+  billingPeriod?: string; // YYYY-MM, used for monthly tuition reports
   discount: number;
   paidAmount: number;
   debtAmount: number;
+  status?: FeeStatus;
   paymentDate: string;
   collectorName: string;
   paymentMethod: 'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định';
@@ -180,4 +186,21 @@ export interface CenterSettings {
   autoEmailReport: boolean;
   autoBackup: boolean;
   sheetsConfig: GoogleSheetsConfig;
+}
+
+// The complete center dataset saved in an offline JSON backup. Keeping this
+// contract separate from the UI makes the restore path explicit and avoids
+// silently omitting related records such as rooms or timetable slots.
+export interface CenterBackupData {
+  settings: CenterSettings;
+  programs: CourseProgram[];
+  teachers: Teacher[];
+  rooms: Room[];
+  classes: ClassRoom[];
+  students: Student[];
+  timetableSlots: TimetableSlot[];
+  grades: Grade[];
+  receipts: TuitionReceipt[];
+  backups: SystemBackup[];
+  activityLogs: ActivityLog[];
 }

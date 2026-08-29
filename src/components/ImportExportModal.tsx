@@ -132,11 +132,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     if (!centerImport || !canSyncCenterData || !isOwner) return;
     onImportCenterData(centerImport);
     setIsImportingSuccess(true);
-    setTimeout(() => {
-      setIsImportingSuccess(false);
-      setCenterImport(null);
-      onClose();
-    }, 1500);
   };
 
   const handleConfirmImport = () => {
@@ -170,11 +165,6 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
     onImportStudents(newStudentsList);
     setIsImportingSuccess(true);
-    setTimeout(() => {
-      setIsImportingSuccess(false);
-      setValidationResult(null);
-      onClose();
-    }, 1500);
   };
 
   return (
@@ -243,7 +233,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             {isImportingSuccess ? (
               <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 font-bold text-center flex items-center justify-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Đã import học sinh thành công vào hệ thống!</span>
+                <span>Đã import thành công. Bạn vẫn ở trang hiện tại; chỉ đóng cửa sổ khi muốn quay lại.</span>
               </div>
             ) : (
               <>

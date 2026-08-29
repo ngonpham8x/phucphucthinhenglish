@@ -26,6 +26,15 @@ interface TimetableManagerProps {
   onDeleteSlot: (id: string) => void;
 }
 
+const normaliseTime = (value: string) => {
+  const match = value.trim().match(/^(\d{1,2})\s*:\s*(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+};
+
 export const TimetableManager: React.FC<TimetableManagerProps> = ({
   timetableSlots,
   classes,
@@ -45,7 +54,13 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
   const canEdit = isOwner;
 
   const daysOfWeek = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
-  const timeSlots = ['17:30 - 19:00', '18:00 - 19:30', '19:30 - 21:00'];
+  const timeSlots = [...new Set([
+    '07:00 - 09:00',
+    '17:30 - 19:00',
+    '18:00 - 19:30',
+    '19:30 - 21:00',
+    ...timetableSlots.map((slot) => `${slot.startTime} - ${slot.endTime}`),
+  ])].sort((left, right) => left.localeCompare(right));
 
   // Conflict Detection Engine
   const checkConflict = (targetSlot: TimetableSlot): string | null => {
@@ -93,20 +108,33 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
     setIsModalOpen(true);
   };
 
+  const handleOpenEdit = (slot: TimetableSlot) => {
+    setEditingSlot(slot);
+    setConflictError(null);
+    setIsModalOpen(true);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSlot) return;
+    const startTime = normaliseTime(editingSlot.startTime);
+    const endTime = normaliseTime(editingSlot.endTime);
+    if (!startTime || !endTime || startTime >= endTime) {
+      setConflictError('Nhập giờ dạng HH:MM; giờ kết thúc phải sau giờ bắt đầu.');
+      return;
+    }
+    const normalizedSlot = { ...editingSlot, startTime, endTime };
 
-    const conflict = checkConflict(editingSlot);
+    const conflict = checkConflict(normalizedSlot);
     if (conflict) {
       setConflictError(conflict);
       return;
     }
 
-    if (timetableSlots.some(s => s.id === editingSlot.id)) {
-      onUpdateSlot(editingSlot);
+    if (timetableSlots.some(s => s.id === normalizedSlot.id)) {
+      onUpdateSlot(normalizedSlot);
     } else {
-      onAddSlot(editingSlot);
+      onAddSlot(normalizedSlot);
     }
 
     setIsModalOpen(false);
@@ -233,13 +261,10 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
                                     <div className="font-bold text-red-900 flex items-center justify-between">
                                       <span className="truncate">{cls?.name || 'Lớp học'}</span>
                                       {canEdit && (
-                                        <button
-                                          onClick={() => onDeleteSlot(slot.id)}
-                                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 transition-opacity"
-                                          title="Xóa ca"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </button>
+                                        <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                          <button onClick={() => handleOpenEdit(slot)} className="text-slate-400 hover:text-amber-600" title="Sửa ca"><Edit className="w-3 h-3" /></button>
+                                          <button onClick={() => onDeleteSlot(slot.id)} className="text-slate-400 hover:text-rose-600" title="Xóa ca"><Trash2 className="w-3 h-3" /></button>
+                                        </span>
                                       )}
                                     </div>
 
@@ -284,7 +309,7 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
 
             <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
               <CalendarDays className="w-5 h-5 text-red-700" />
-              Tạo Lịch Học Mới
+              {timetableSlots.some((slot) => slot.id === editingSlot.id) ? 'Cập Nhật Lịch Học' : 'Tạo Lịch Học Mới'}
             </h3>
 
             {conflictError && (
@@ -361,20 +386,14 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Giờ Bắt Đầu</label>
-                  <select
-                    value={editingSlot.startTime}
-                    onChange={(e) => {
-                      const start = e.target.value;
-                      const end = start === '17:30' ? '19:00' : (start === '18:00' ? '19:30' : '21:00');
-                      setEditingSlot({ ...editingSlot, startTime: start, endTime: end });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
-                  >
-                    <option value="17:30">17:30</option>
-                    <option value="18:00">18:00</option>
-                    <option value="19:30">19:30</option>
-                  </select>
+                  <input type="text" inputMode="numeric" value={editingSlot.startTime} onChange={(e) => setEditingSlot({ ...editingSlot, startTime: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-xl" placeholder="Ví dụ: 17:00" required />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Giờ Kết Thúc</label>
+                <input type="text" inputMode="numeric" value={editingSlot.endTime} onChange={(e) => setEditingSlot({ ...editingSlot, endTime: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-xl" placeholder="Ví dụ: 19:00" required />
+                <p className="mt-1 text-[11px] text-slate-500">Tự gõ mọi khung giờ theo dạng HH:MM, ví dụ Chủ Nhật 07:00–09:00.</p>
               </div>
 
               <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">

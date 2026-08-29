@@ -1,5 +1,18 @@
-import React, { useState } from 'react';
-import { SystemBackup, CenterSettings, Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade } from '../types';
+import React, { useRef, useState } from 'react';
+import {
+  SystemBackup,
+  CenterSettings,
+  Student,
+  Teacher,
+  ClassRoom,
+  Room,
+  TuitionReceipt,
+  Grade,
+  CourseProgram,
+  TimetableSlot,
+  ActivityLog,
+  CenterBackupData,
+} from '../types';
 import {
   Database,
   Download,
@@ -12,9 +25,23 @@ import {
   FileJson,
   FileDown,
   Sparkles,
-  Printer
+  Printer,
+  Upload,
+  RotateCcw,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { generateMasterExcelWorkbook } from '../services/excelService';
+
+const BACKUP_SCHEMA_VERSION = 1;
+
+interface BackupArchive {
+  app: 'PHUC_PHUC_THINH';
+  schemaVersion: number;
+  exportedAt: string;
+  centerName: string;
+  data: CenterBackupData;
+}
 
 interface BackupManagerProps {
   backups: SystemBackup[];
@@ -25,7 +52,12 @@ interface BackupManagerProps {
   classes?: ClassRoom[];
   receipts?: TuitionReceipt[];
   grades?: Grade[];
+  programs?: CourseProgram[];
+  timetableSlots?: TimetableSlot[];
+  activityLogs?: ActivityLog[];
   onOpenImportExportModal?: () => void;
+  onBackupCreated?: (backup: SystemBackup) => void;
+  onRestoreBackup?: (data: CenterBackupData, filename: string) => void;
 }
 
 export const BackupManager: React.FC<BackupManagerProps> = ({
@@ -37,10 +69,49 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
   classes = [],
   receipts = [],
   grades = [],
-  onOpenImportExportModal
+  programs = [],
+  timetableSlots = [],
+  activityLogs = [],
+  onOpenImportExportModal,
+  onBackupCreated,
+  onRestoreBackup,
 }) => {
   const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [restoreCandidate, setRestoreCandidate] = useState<{ archive: BackupArchive; filename: string } | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
+
+  const makeBackupRecord = (filename: string, sizeBytes: number): SystemBackup => ({
+    id: `BACKUP_${Date.now()}`,
+    filename,
+    timestamp: new Date().toLocaleString('vi-VN'),
+    sizeKb: Math.max(1, Math.ceil(sizeBytes / 1024)),
+    type: 'Thủ công',
+    status: 'Thành công',
+  });
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+  const parseBackupArchive = (value: unknown): BackupArchive | null => {
+    if (!isRecord(value) || value.app !== 'PHUC_PHUC_THINH' || value.schemaVersion !== BACKUP_SCHEMA_VERSION || !isRecord(value.data)) return null;
+    const { data } = value;
+    const arrayKeys = ['programs', 'teachers', 'rooms', 'classes', 'students', 'timetableSlots', 'grades', 'receipts', 'backups', 'activityLogs'];
+    if (!isRecord(data.settings) || arrayKeys.some((key) => !Array.isArray(data[key]) || !data[key].every(isRecord))) return null;
+
+    return value as unknown as BackupArchive;
+  };
 
   // 1. Export Entire System Excel Master Report
   const handleExportSystemExcelReport = async () => {
@@ -58,14 +129,8 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
       });
 
       const fileName = `PhucPhucThinh_BaoCaoToanHeThong_${new Date().toISOString().split('T')[0]}.xlsx`;
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      downloadBlob(blob, fileName);
+      onBackupCreated?.(makeBackupRecord(fileName, blob.size));
 
       setStatusMessage(`Đã xuất báo cáo toàn bộ hệ thống Excel (${fileName}) thành công!`);
     } catch (err) {
@@ -80,38 +145,44 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
   const handleExportSystemJson = () => {
     setStatusMessage(null);
     try {
-      const systemData = {
-        appVersion: '2.5.0',
+      const fileName = `PhucPhucThinh_DatabaseBackup_Full_${new Date().toISOString().split('T')[0]}.json`;
+      const backupRecord = makeBackupRecord(fileName, 0);
+      const systemData: BackupArchive = {
+        app: 'PHUC_PHUC_THINH',
+        schemaVersion: BACKUP_SCHEMA_VERSION,
         centerName: settings.name,
-        exportDate: new Date().toISOString(),
-        statistics: {
-          totalStudents: students.length,
-          totalTeachers: teachers.length,
-          totalClasses: classes.length,
-          totalReceipts: receipts.length,
-          totalGrades: grades.length
-        },
+        exportedAt: new Date().toISOString(),
         data: {
+          settings,
+          programs,
           students,
           teachers,
+          rooms,
           classes,
+          timetableSlots,
           receipts,
           grades,
-          settings
-        }
+          backups: [backupRecord, ...backups],
+          activityLogs,
+        },
       };
 
-      const jsonStr = JSON.stringify(systemData, null, 2);
+      // Calculate the final file size before serialising it one last time so
+      // the history embedded in the archive describes the downloaded file.
+      let sizeKb = 0;
+      let jsonStr = '';
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        backupRecord.sizeKb = sizeKb;
+        jsonStr = JSON.stringify(systemData, null, 2);
+        const nextSizeKb = Math.max(1, Math.ceil(new Blob([jsonStr]).size / 1024));
+        if (nextSizeKb === sizeKb) break;
+        sizeKb = nextSizeKb;
+      }
+      backupRecord.sizeKb = sizeKb;
+      jsonStr = JSON.stringify(systemData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
-      const fileName = `PhucPhucThinh_DatabaseBackup_Full_${new Date().toISOString().split('T')[0]}.json`;
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      downloadBlob(blob, fileName);
+      onBackupCreated?.(backupRecord);
 
       setStatusMessage(`Đã tải xuống toàn bộ CSDL dữ liệu hệ thống JSON (${fileName}) thành công!`);
     } catch (err) {
@@ -120,10 +191,34 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
     }
   };
 
-  // Bản ghi sao lưu cũ chỉ có thể tải lại dưới dạng bản xuất hiện thời.
+  // The browser cannot retain the original file contents between sessions.
+  // Offer a fresh full export instead of implying that a historic file exists.
   const handleDownloadBackup = (bk: SystemBackup) => {
-    void bk;
+    setStatusMessage(`Tệp gốc “${bk.filename}” không được lưu trên máy chủ. Đang tạo một bản JSON đầy đủ mới từ dữ liệu hiện tại.`);
     handleExportSystemJson();
+  };
+
+  const handleRestoreFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setRestoreError(null);
+    setRestoreCandidate(null);
+    try {
+      const archive = parseBackupArchive(JSON.parse(await file.text()));
+      if (!archive) throw new Error('Tệp không đúng định dạng sao lưu đầy đủ của Phúc Phúc Thịnh, hoặc được tạo bởi phiên bản cũ.');
+      setRestoreCandidate({ archive, filename: file.name });
+    } catch (error) {
+      setRestoreError(error instanceof Error ? error.message : 'Không thể đọc tệp JSON sao lưu.');
+    }
+  };
+
+  const handleConfirmRestore = () => {
+    if (!restoreCandidate || !onRestoreBackup) return;
+    onRestoreBackup(restoreCandidate.archive.data, restoreCandidate.filename);
+    setStatusMessage(`Đã khôi phục dữ liệu từ ${restoreCandidate.filename}. Dữ liệu mới sẽ được đồng bộ sau ít phút.`);
+    setRestoreCandidate(null);
   };
 
   return (
@@ -139,7 +234,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
             Quản Lý Sao Lưu & Xuất Báo Cáo Toàn Bộ Hệ Thống
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-            Tải xuống bản sao dữ liệu hiện tại dưới dạng Excel hoặc JSON. Sao lưu máy chủ tự động và gửi email chỉ hiển thị khi đã tích hợp dịch vụ phía máy chủ.
+            Xuất dữ liệu hiện tại dưới dạng Excel hoặc JSON đầy đủ. Bạn có thể dùng tệp JSON để khôi phục dữ liệu sau khi đã xác nhận.
           </p>
         </div>
 
@@ -210,6 +305,27 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
             </button>
           </div>
 
+          <div className="p-4 bg-gradient-to-br from-rose-50 via-white to-slate-50 rounded-xl border border-rose-200 flex flex-col justify-between space-y-3 hover:shadow-sm transition-all">
+            <div>
+              <div className="flex items-center gap-2 text-rose-800 font-bold text-xs uppercase mb-1">
+                <RotateCcw className="w-4 h-4 text-rose-700" /> Khôi phục có xác nhận
+              </div>
+              <h4 className="font-extrabold text-slate-900 text-sm">Khôi Phục Từ Bản Sao JSON</h4>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                Chỉ nhận tệp JSON đầy đủ do hệ thống xuất. Việc khôi phục sẽ thay thế toàn bộ dữ liệu trung tâm hiện tại.
+              </p>
+            </div>
+
+            <input ref={jsonInputRef} type="file" accept="application/json,.json" onChange={(event) => void handleRestoreFile(event)} className="hidden" />
+            <button
+              type="button"
+              onClick={() => jsonInputRef.current?.click()}
+              className="w-full py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition-colors"
+            >
+              <Upload className="w-4 h-4 text-rose-200" /> Chọn Tệp JSON Để Khôi Phục
+            </button>
+          </div>
+
           {/* Option 3: Import/Export Excel Modal */}
           <div className="p-4 bg-gradient-to-br from-amber-50 via-white to-slate-50 rounded-xl border border-amber-200 flex flex-col justify-between space-y-3 hover:shadow-sm transition-all">
             <div>
@@ -242,13 +358,20 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
         </div>
       )}
 
+      {restoreError && (
+        <div role="alert" className="p-4 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 font-bold text-xs flex items-center gap-2 shadow-2xs">
+          <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+          <span>{restoreError}</span>
+        </div>
+      )}
+
       {/* Settings Info Banner */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
           <div className="font-bold text-slate-900 flex items-center gap-1.5 mb-1">
             <Shield className="w-4 h-4 text-emerald-600" /> Sao Lưu Thủ Công
           </div>
-          <div className="text-slate-500">Xuất Excel hoặc JSON từ dữ liệu hiện có để lưu giữ tại nơi an toàn do trung tâm quản lý.</div>
+          <div className="text-slate-500">Xuất JSON đầy đủ trước khi thay đổi lớn. Tệp được tải về chỉ do trung tâm lưu giữ.</div>
         </div>
 
         <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
@@ -264,7 +387,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
           <div className="font-bold text-slate-900 flex items-center gap-1.5 mb-1">
             <History className="w-4 h-4 text-amber-600" /> Lịch Sử Bản Xuất
           </div>
-          <div className="text-slate-500">Lịch sử sao lưu máy chủ chưa được tích hợp; hãy lưu các tệp tải về theo quy trình của trung tâm.</div>
+          <div className="text-slate-500">Hệ thống ghi nhận các bản xuất ở thiết bị này; nội dung tệp chỉ nằm trong nơi lưu do trung tâm quản lý.</div>
         </div>
       </div>
 
@@ -318,9 +441,9 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
                         <button
                           onClick={() => handleDownloadBackup(bk)}
                           className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg text-[11px] flex items-center gap-1 border border-slate-300"
-                          title="Tải bản sao lưu"
+                          title="Tạo lại bản sao JSON từ dữ liệu hiện tại"
                         >
-                          <Download className="w-3.5 h-3.5 text-blue-600" /> Download
+                          <Download className="w-3.5 h-3.5 text-blue-600" /> Tạo lại
                         </button>
 
                         <span className="px-2.5 py-1 text-[11px] font-semibold text-slate-400">Khôi phục cần tệp JSON</span>
@@ -333,6 +456,27 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
           </table>
         </div>
       </div>
+
+      {restoreCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <section role="dialog" aria-modal="true" aria-labelledby="restore-backup-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-extrabold text-rose-800"><AlertTriangle className="h-3.5 w-3.5" /> THAO TÁC GHI ĐÈ</div>
+                <h3 id="restore-backup-title" className="text-lg font-black text-slate-900">Xác nhận khôi phục dữ liệu</h3>
+              </div>
+              <button type="button" onClick={() => setRestoreCandidate(null)} aria-label="Đóng" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Tệp <b>{restoreCandidate.filename}</b> chứa {restoreCandidate.archive.data.students.length} học sinh, {restoreCandidate.archive.data.classes.length} lớp và {restoreCandidate.archive.data.receipts.length} phiếu thu. Dữ liệu hiện tại sẽ bị thay thế.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setRestoreCandidate(null)} className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Hủy</button>
+              <button type="button" onClick={handleConfirmRestore} className="rounded-xl bg-rose-700 px-4 py-2 text-xs font-bold text-white hover:bg-rose-800">Xác nhận khôi phục</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

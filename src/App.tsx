@@ -13,7 +13,8 @@ import {
   ActivityLog,
   AccountAuditLog,
   SystemBackup,
-  CenterSettings
+  CenterSettings,
+  CenterBackupData,
 } from './types';
 import {
   initialSettings,
@@ -100,6 +101,20 @@ const canAccessTab = (tab: string, user: UserAccount) => {
     case 'excel-import-export': return permissions.excel.import || permissions.excel.export;
     default: return false;
   }
+};
+
+const weekDayOrder = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
+
+const withClassScheduleSummary = (classroom: ClassRoom, slots: TimetableSlot[]): ClassRoom => {
+  const classSlots = slots
+    .filter((slot) => slot.classId === classroom.id)
+    .sort((left, right) => weekDayOrder.indexOf(left.dayOfWeek) - weekDayOrder.indexOf(right.dayOfWeek) || left.startTime.localeCompare(right.startTime));
+
+  return {
+    ...classroom,
+    days: [...new Set(classSlots.map((slot) => slot.dayOfWeek))],
+    scheduleTime: classSlots.map((slot) => `${slot.dayOfWeek}: ${slot.startTime}-${slot.endTime}`).join(' · '),
+  };
 };
 
 export default function App() {
@@ -417,6 +432,7 @@ export default function App() {
   const handleDeleteClass = (id: string) => {
     const c = classes.find(item => item.id === id);
     setClasses(prev => prev.filter(item => item.id !== id));
+    setTimetableSlots(prev => prev.filter(slot => slot.classId !== id));
     if (c) addLog('XÓA', 'Lớp học', `Xóa lớp học ${c.name} (${c.code})`);
   };
 
@@ -438,18 +454,39 @@ export default function App() {
 
   // Timetable Handlers
   const handleAddSlot = (slot: TimetableSlot) => {
-    setTimetableSlots(prev => [...prev, slot]);
+    setTimetableSlots(prev => {
+      const next = [...prev, slot];
+      setClasses(classrooms => classrooms.map((classroom) => classroom.id === slot.classId ? withClassScheduleSummary(classroom, next) : classroom));
+      return next;
+    });
     addLog('THÊM', 'Thời khóa biểu', `Thêm ca học mới vào ${slot.dayOfWeek} (${slot.startTime}-${slot.endTime})`);
   };
 
   const handleUpdateSlot = (slot: TimetableSlot) => {
-    setTimetableSlots(prev => prev.map(s => s.id === slot.id ? slot : s));
+    setTimetableSlots(prev => {
+      const next = prev.map(s => s.id === slot.id ? slot : s);
+      setClasses(classrooms => classrooms.map((classroom) => classroom.id === slot.classId ? withClassScheduleSummary(classroom, next) : classroom));
+      return next;
+    });
     addLog('SỬA', 'Thời khóa biểu', `Cập nhật ca học vào ${slot.dayOfWeek}`);
   };
 
   const handleDeleteSlot = (id: string) => {
-    setTimetableSlots(prev => prev.filter(s => s.id !== id));
+    setTimetableSlots(prev => {
+      const deletedSlot = prev.find((slot) => slot.id === id);
+      const next = prev.filter(s => s.id !== id);
+      if (deletedSlot) setClasses(classrooms => classrooms.map((classroom) => classroom.id === deletedSlot.classId ? withClassScheduleSummary(classroom, next) : classroom));
+      return next;
+    });
     addLog('XÓA', 'Thời khóa biểu', `Xóa ca học khỏi thời khóa biểu`);
+  };
+
+  const handleReplaceClassSchedule = (classId: string, slots: TimetableSlot[]) => {
+    setTimetableSlots(prev => {
+      const next = [...prev.filter((slot) => slot.classId !== classId), ...slots];
+      setClasses(classrooms => classrooms.map((classroom) => classroom.id === classId ? withClassScheduleSummary(classroom, next) : classroom));
+      return next;
+    });
   };
 
   // Grade Handler
@@ -470,18 +507,44 @@ export default function App() {
   const handleAddReceipt = (r: TuitionReceipt) => {
     setReceipts(prev => [r, ...prev]);
 
-    // Update student feeStatus
+    const studentReceipts = [r, ...receipts].filter((receipt) => receipt.studentId === r.studentId);
+    const totalPaid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
+    const totalDebt = studentReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);
+
+    // Keep the student-level status consistent with every receipt, not only
+    // the latest payment that was entered.
     setStudents(prev => prev.map(s => {
       if (s.id === r.studentId) {
         return {
           ...s,
-          feeStatus: r.debtAmount === 0 ? 'paid' : 'debt'
+          feeStatus: totalDebt === 0 ? (totalPaid > 0 ? 'paid' : 'unpaid') : (totalPaid > 0 ? 'partial' : 'unpaid')
         };
       }
       return s;
     }));
 
     addLog('THÊM', 'Học phí', `Lập phiếu thu ${r.code} số tiền ${r.paidAmount.toLocaleString('vi-VN')} đ`);
+  };
+
+  const handleBackupCreated = (backup: SystemBackup) => {
+    setBackups(prev => [backup, ...prev].slice(0, 30));
+    addLog('BACKUP', 'Sao lưu', `Đã xuất tệp sao lưu ${backup.filename} (${backup.sizeKb} KB)`);
+  };
+
+  const handleRestoreBackup = (data: CenterBackupData, filename: string) => {
+    setSettings(data.settings);
+    setPrograms(data.programs);
+    setTeachers(data.teachers);
+    setRooms(data.rooms);
+    setClasses(data.classes);
+    setStudents(data.students);
+    setTimetableSlots(data.timetableSlots);
+    setGrades(data.grades);
+    setReceipts(data.receipts);
+    setBackups(data.backups.slice(0, 30));
+    setActivityLogs(data.activityLogs);
+    setHasCenterData(true);
+    addLog('RESTORE', 'Sao lưu', `Đã khôi phục dữ liệu từ tệp ${filename}`);
   };
 
   const handleLogout = async () => {
@@ -599,11 +662,13 @@ export default function App() {
               rooms={rooms}
               programs={programs}
               students={students}
+              timetableSlots={timetableSlots}
               permissions={currentUser.permissions}
               isOwner={currentUser.role === 'owner'}
               onAddClass={handleAddClass}
               onUpdateClass={handleUpdateClass}
               onDeleteClass={handleDeleteClass}
+              onReplaceClassSchedule={handleReplaceClassSchedule}
             />
           )}
 
@@ -698,7 +763,12 @@ export default function App() {
                 classes={classes}
                 receipts={receipts}
                 grades={grades}
+                programs={programs}
+                timetableSlots={timetableSlots}
+                activityLogs={activityLogs}
                 onOpenImportExportModal={() => setIsImportExportModalOpen(true)}
+                onBackupCreated={handleBackupCreated}
+                onRestoreBackup={handleRestoreBackup}
               />
             </Suspense>
           )}

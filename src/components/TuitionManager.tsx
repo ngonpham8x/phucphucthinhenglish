@@ -2,6 +2,27 @@ import React, { useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
 import { CreditCard, Plus, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign } from 'lucide-react';
 
+const receiptStatus = (receipt: Pick<TuitionReceipt, 'paidAmount' | 'debtAmount' | 'status'>) => {
+  if (receipt.status) return receipt.status;
+  if (receipt.debtAmount <= 0 && receipt.paidAmount > 0) return 'paid' as const;
+  if (receipt.paidAmount > 0) return 'partial' as const;
+  return 'unpaid' as const;
+};
+
+const receiptStatusLabel: Record<'paid' | 'partial' | 'unpaid' | 'debt', string> = {
+  paid: 'Đã thanh toán',
+  partial: 'Đóng một phần',
+  unpaid: 'Chưa đóng',
+  debt: 'Còn nợ',
+};
+
+const receiptStatusClass: Record<'paid' | 'partial' | 'unpaid' | 'debt', string> = {
+  paid: 'bg-emerald-100 text-emerald-800',
+  partial: 'bg-amber-100 text-amber-800',
+  unpaid: 'bg-rose-100 text-rose-800',
+  debt: 'bg-rose-100 text-rose-800',
+};
+
 interface TuitionManagerProps {
   receipts: TuitionReceipt[];
   students: Student[];
@@ -27,6 +48,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
 
   const [collectingStudentId, setCollectingStudentId] = useState<string>(students[0]?.id || '');
+  const [courseFeeInput, setCourseFeeInput] = useState<number>(0);
+  const [monthlyFeeInput, setMonthlyFeeInput] = useState<number>(0);
+  const [paymentKind, setPaymentKind] = useState<'course' | 'monthly'>('course');
+  const [billingPeriod, setBillingPeriod] = useState<string>(new Date().toISOString().slice(0, 7));
   const [paidAmountInput, setPaidAmountInput] = useState<number>(0);
   const [discountInput, setDiscountInput] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chuyển khoản');
@@ -41,7 +66,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCollectingStudentId(students[0]?.id || '');
     const st = students[0];
     const program = programs.find(p => p.id === st?.programId);
-    setPaidAmountInput(program?.tuitionFee ?? 0);
+    const suggestedCourseFee = program?.tuitionFee ?? 0;
+    setCourseFeeInput(suggestedCourseFee);
+    setMonthlyFeeInput(0);
+    setPaymentKind('course');
+    setBillingPeriod(new Date().toISOString().slice(0, 7));
+    setPaidAmountInput(suggestedCourseFee);
     setDiscountInput(0);
     setIsCollectModalOpen(true);
   };
@@ -51,20 +81,24 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     const student = students.find(s => s.id === collectingStudentId);
     if (!student) return;
 
-    const program = programs.find(p => p.id === student.programId);
-    const courseFee = program?.tuitionFee ?? paidAmountInput;
-    const finalPrice = Math.max(courseFee - discountInput, 0);
+    const selectedFee = paymentKind === 'monthly' ? monthlyFeeInput : courseFeeInput;
+    const finalPrice = Math.max(selectedFee - discountInput, 0);
     const debtAmount = Math.max(finalPrice - paidAmountInput, 0);
+    const status = paidAmountInput >= finalPrice && finalPrice > 0 ? 'paid' : (paidAmountInput > 0 ? 'partial' : 'unpaid');
 
     const newReceipt: TuitionReceipt = {
       id: `TR_${Date.now()}`,
       code: `PT-2026-${(receipts.length + 1).toString().padStart(3, '0')}`,
       studentId: student.id,
       classId: student.classId,
-      courseFee,
+      courseFee: courseFeeInput,
+      monthlyFee: monthlyFeeInput,
+      paymentKind,
+      billingPeriod,
       discount: discountInput,
       paidAmount: paidAmountInput,
       debtAmount,
+      status,
       paymentDate: new Date().toISOString().split('T')[0],
       collectorName: isOwner ? 'Chủ trung tâm' : 'Nhân viên',
       paymentMethod,
@@ -139,8 +173,11 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 <th className="py-3 px-4">Mã Phiếu Thu</th>
                 <th className="py-3 px-4">Học Sinh</th>
                 <th className="py-3 px-4">Học Phí Khóa</th>
+                <th className="py-3 px-4">Học Phí Tháng</th>
+                <th className="py-3 px-4">Khoản Thu</th>
                 <th className="py-3 px-4">Đã Đóng (VNĐ)</th>
                 <th className="py-3 px-4">Còn Nợ (VNĐ)</th>
+                <th className="py-3 px-4">Tình Trạng</th>
                 <th className="py-3 px-4">Ngày Thu</th>
                 <th className="py-3 px-4">Hình Thức</th>
                 <th className="py-3 px-4 text-right">In Phiếu</th>
@@ -149,16 +186,20 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
             <tbody className="divide-y divide-slate-100 font-medium">
               {receipts.map((rc) => {
                 const student = students.find(s => s.id === rc.studentId);
+                const status = receiptStatus(rc);
 
                 return (
                   <tr key={rc.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4 font-bold text-red-800">{rc.code}</td>
                     <td className="py-3 px-4 font-bold text-slate-900">{student?.name} ({student?.code})</td>
                     <td className="py-3 px-4">{rc.courseFee.toLocaleString('vi-VN')} đ</td>
+                    <td className="py-3 px-4">{(rc.monthlyFee || 0).toLocaleString('vi-VN')} đ</td>
+                    <td className="py-3 px-4"><span className="font-semibold text-slate-700">{rc.paymentKind === 'monthly' ? `Tháng ${rc.billingPeriod || 'chưa chọn'}` : 'Học phí khóa'}</span></td>
                     <td className="py-3 px-4 font-bold text-emerald-700">{rc.paidAmount.toLocaleString('vi-VN')} đ</td>
                     <td className="py-3 px-4 font-bold text-rose-700">
                       {rc.debtAmount > 0 ? `${rc.debtAmount.toLocaleString('vi-VN')} đ` : 'Đã đủ'}
                     </td>
+                    <td className="py-3 px-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>
                     <td className="py-3 px-4">{rc.paymentDate}</td>
                     <td className="py-3 px-4">{rc.paymentMethod}</td>
                     <td className="py-3 px-4 text-right">
@@ -203,7 +244,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     setCollectingStudentId(e.target.value);
                     const st = students.find(s => s.id === e.target.value);
                     const prog = programs.find(p => p.id === st?.programId);
-                    if (prog) setPaidAmountInput(prog.tuitionFee);
+                    if (prog) {
+                      setCourseFeeInput(prog.tuitionFee);
+                      if (paymentKind === 'course') setPaidAmountInput(prog.tuitionFee);
+                    }
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900"
                   required
@@ -216,26 +260,67 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Số Tiền Đóng (VNĐ) *</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Học Phí Khóa (VNĐ) *</label>
                   <input
                     type="number"
-                    value={paidAmountInput}
-                    onChange={(e) => setPaidAmountInput(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-emerald-800"
+                    min="0"
+                    value={courseFeeInput}
+                    onChange={(e) => setCourseFeeInput(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Giảm Giá / Miễn Giảm</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Học Phí Tháng (VNĐ)</label>
                   <input
                     type="number"
-                    value={discountInput}
-                    onChange={(e) => setDiscountInput(Number(e.target.value))}
+                    min="0"
+                    value={monthlyFeeInput}
+                    onChange={(e) => setMonthlyFeeInput(Number(e.target.value))}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl"
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Khoản Thu *</label>
+                  <select
+                    value={paymentKind}
+                    onChange={(e) => {
+                      const nextKind = e.target.value as 'course' | 'monthly';
+                      setPaymentKind(nextKind);
+                      setPaidAmountInput(nextKind === 'monthly' ? monthlyFeeInput : courseFeeInput);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                  >
+                    <option value="course">Học phí khóa</option>
+                    <option value="monthly">Học phí tháng</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Kỳ Học Phí</label>
+                  <input type="month" value={billingPeriod} onChange={(e) => setBillingPeriod(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-xl" required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Số Tiền Đóng (VNĐ) *</label>
+                  <input type="number" min="0" value={paidAmountInput} onChange={(e) => setPaidAmountInput(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-emerald-800" required />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Giảm Giá / Miễn Giảm</label>
+                  <input type="number" min="0" value={discountInput} onChange={(e) => setDiscountInput(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-300 rounded-xl" />
+                </div>
+              </div>
+
+              {(() => {
+                const due = Math.max((paymentKind === 'monthly' ? monthlyFeeInput : courseFeeInput) - discountInput, 0);
+                const previewStatus = paidAmountInput >= due && due > 0 ? 'paid' : (paidAmountInput > 0 ? 'partial' : 'unpaid');
+                return <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"><span className="font-semibold text-slate-700">Tình trạng phiếu</span><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[previewStatus]}`}>{receiptStatusLabel[previewStatus]}</span></div>;
+              })()}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Hình Thức Thanh Toán</label>
@@ -313,8 +398,11 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <div>Phụ huynh đại diện: <strong>{student?.parentName}</strong> - SĐT: <strong>{student?.parentPhone}</strong></div>
                     <div>Lớp đăng ký học: <strong>{cls?.name}</strong></div>
                     <div>Số tiền học phí khóa: <strong>{selectedReceipt.courseFee.toLocaleString('vi-VN')} đ</strong></div>
+                    <div>Số tiền học phí tháng: <strong>{(selectedReceipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</strong></div>
+                    <div>Khoản thu: <strong>{selectedReceipt.paymentKind === 'monthly' ? `Học phí tháng ${selectedReceipt.billingPeriod || ''}` : 'Học phí khóa'}</strong></div>
                     <div>Số tiền thực đóng: <strong className="text-base text-red-800">{selectedReceipt.paidAmount.toLocaleString('vi-VN')} đ</strong></div>
                     <div>Số tiền còn nợ: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>
+                    <div>Tình trạng: <strong>{receiptStatusLabel[receiptStatus(selectedReceipt)]}</strong></div>
                     <div>Hình thức thanh toán: <strong>{selectedReceipt.paymentMethod}</strong></div>
                     <div>Ngày lập phiếu: <strong>{selectedReceipt.paymentDate}</strong></div>
                     <div>Ghi chú: <em>{selectedReceipt.notes || 'Đã hoàn tất thanh toán'}</em></div>

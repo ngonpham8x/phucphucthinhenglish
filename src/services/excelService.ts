@@ -48,6 +48,7 @@ const dateFromIso = (value: string) => {
   return new Date(year || 2000, (month || 1) - 1, day || 1);
 };
 const monthKey = (value: string) => value.slice(0, 7);
+const receiptPeriod = (receipt: TuitionReceipt) => receipt.billingPeriod || monthKey(receipt.paymentDate);
 const columnLetter = (column: number) => {
   let remaining = column;
   let result = '';
@@ -117,7 +118,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   workbook.created = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
 
-  const months = [...new Set(data.receipts.map((receipt) => monthKey(receipt.paymentDate)).filter(Boolean))].sort();
+  const months = [...new Set(data.receipts.map(receiptPeriod).filter(Boolean))].sort();
   const classSheetNames = new Map(data.classes.map((classroom) => [classroom.id, classSheetName(classroom)]));
   const classById = new Map(data.classes.map((classroom) => [classroom.id, classroom]));
   const studentById = new Map(data.students.map((student) => [student.id, student]));
@@ -135,7 +136,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   orderedReceipts.forEach((receipt, index) => {
     const rowNumber = 6 + index;
     if (!firstReceiptRowByStudentId.has(receipt.studentId)) firstReceiptRowByStudentId.set(receipt.studentId, rowNumber);
-    const classMonthKey = `${receipt.classId}:${monthKey(receipt.paymentDate)}`;
+    const classMonthKey = `${receipt.classId}:${receiptPeriod(receipt)}`;
     if (!firstReceiptRowByClassMonth.has(classMonthKey)) firstReceiptRowByClassMonth.set(classMonthKey, rowNumber);
   });
   const firstReceiptLink = orderedReceipts.length ? "#'HỌC PHÍ'!A6" : "#'HỌC PHÍ'!A1";
@@ -154,8 +155,8 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   styleHeader(summary.getRow(6));
   const kpis = [
     ['Tổng học sinh', { formula: "COUNTA('HỌC SINH'!$B$6:$B$1048576)" }, 'Học sinh', 'Sheet HỌC SINH'],
-    ['Tổng học phí đã thu', { formula: withWorksheetLink(firstReceiptLink, "SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$A:$A,\"<>TỔNG CỘNG\")") }, 'VNĐ', 'Bấm để mở SỔ THU HỌC PHÍ'],
-    ['Tổng công nợ', { formula: withWorksheetLink(firstReceiptLink, "SUMIFS('HỌC PHÍ'!$H:$H,'HỌC PHÍ'!$A:$A,\"<>TỔNG CỘNG\")") }, 'VNĐ', 'Bấm để mở SỔ THU HỌC PHÍ'],
+    ['Tổng học phí đã thu', { formula: withWorksheetLink(firstReceiptLink, "SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$A:$A,\"<>TỔNG CỘNG\")") }, 'VNĐ', 'Bấm để mở SỔ THU HỌC PHÍ'],
+    ['Tổng công nợ', { formula: withWorksheetLink(firstReceiptLink, "SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$A:$A,\"<>TỔNG CỘNG\")") }, 'VNĐ', 'Bấm để mở SỔ THU HỌC PHÍ'],
     ['Tỷ lệ thu', { formula: 'IFERROR(B8/(B8+B9),0)' }, '%', 'Đã thu / (đã thu + công nợ)']
   ];
   const kpiSourceLinks = ["#'HỌC SINH'!A1", firstReceiptLink, firstReceiptLink, undefined];
@@ -200,14 +201,14 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       const column = 4 + monthIndex;
       const header = `${columnLetter(column)}$${monthlyHeaderRow}`;
       const monthTarget = `#'${classSheetNames.get(classroom.id)}'!${columnLetter(2 + monthIndex)}6`;
-      row.getCell(column).value = { formula: withWorksheetLink(monthTarget, `SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$F:$F,$A${rowNumber},'HỌC PHÍ'!$I:$I,">="&${header},'HỌC PHÍ'!$I:$I,"<"&EDATE(${header},1))`) };
+      row.getCell(column).value = { formula: withWorksheetLink(monthTarget, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A${rowNumber},'HỌC PHÍ'!$J:$J,">="&${header},'HỌC PHÍ'!$J:$J,"<"&EDATE(${header},1))`) };
       row.getCell(column).numFmt = moneyFormat;
     });
     const totalColumn = 4 + months.length;
     const debtColumn = totalColumn + 1;
     const classTarget = `#'${classSheetNames.get(classroom.id)}'!A6`;
-    row.getCell(totalColumn).value = { formula: withWorksheetLink(classTarget, `SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$F:$F,$A${rowNumber})`) };
-    row.getCell(debtColumn).value = { formula: withWorksheetLink(classTarget, `SUMIFS('HỌC PHÍ'!$H:$H,'HỌC PHÍ'!$F:$F,$A${rowNumber})`) };
+    row.getCell(totalColumn).value = { formula: withWorksheetLink(classTarget, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A${rowNumber})`) };
+    row.getCell(debtColumn).value = { formula: withWorksheetLink(classTarget, `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$F:$F,$A${rowNumber})`) };
     row.getCell(totalColumn).numFmt = moneyFormat;
     row.getCell(debtColumn).numFmt = moneyFormat;
     styleData(row, index);
@@ -235,7 +236,8 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const classroom = classById.get(student.classId);
     const receiptLink = firstReceiptRowByStudentId.has(student.id) ? `#'HỌC PHÍ'!A${firstReceiptRowByStudentId.get(student.id)}` : undefined;
     const row = studentsSheet.getRow(rowNumber);
-    row.values = [index + 1, student.code, student.name, student.gender, student.dob, student.programId, classroom?.code || '', student.phone, student.parentPhone, student.address, studentStatusLabel(student.status), student.notes || '', { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$H:$H,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, student.id];
+    const classLink = classroom ? `#'${classSheetNames.get(classroom.id)}'!A1` : undefined;
+    row.values = [index + 1, student.code, student.name, student.gender, student.dob, student.programId, classLink ? { text: classroom?.code || '', hyperlink: classLink } : (classroom?.code || ''), student.phone, student.parentPhone, student.address, studentStatusLabel(student.status), student.notes || '', { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$C:$C,$O${rowNumber})`) }, student.id];
     styleData(row, index);
     row.getCell(13).numFmt = moneyFormat;
     row.getCell(14).numFmt = moneyFormat;
@@ -243,6 +245,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       styleFormulaLink(row.getCell(13));
       styleFormulaLink(row.getCell(14));
     }
+    if (classLink) row.getCell(7).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
     studentSheetRowById.set(student.id, rowNumber);
   });
   const studentFooterRow = 6 + data.students.length;
@@ -262,7 +265,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const rowNumber = 6 + index;
     const row = classSheet.getRow(rowNumber);
     const teacher = teacherById.get(classroom.teacherId);
-    row.values = [index + 1, classroom.code, classroom.name, teacher?.name || 'Chưa cập nhật', `${classroom.days.join(', ')}${classroom.scheduleTime ? ` (${classroom.scheduleTime})` : ''}`, roomById.get(classroom.roomId)?.name || classroom.roomId || 'Chưa cập nhật', classroom.capacity || 'Chưa cập nhật', { formula: `COUNTIF('HỌC SINH'!$G:$G,B${rowNumber})` }, { text: `→ ${classSheetNames.get(classroom.id)}`, hyperlink: `#'${classSheetNames.get(classroom.id)}'!A1` }];
+    row.values = [index + 1, classroom.code, classroom.name, teacher?.name || 'Chưa cập nhật', classroom.scheduleTime || classroom.days.join(', '), roomById.get(classroom.roomId)?.name || classroom.roomId || 'Chưa cập nhật', classroom.capacity || 'Chưa cập nhật', { formula: `COUNTIF('HỌC SINH'!$G:$G,B${rowNumber})` }, { text: `→ ${classSheetNames.get(classroom.id)}`, hyperlink: `#'${classSheetNames.get(classroom.id)}'!A1` }];
     styleData(row, index);
     row.getCell(9).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
   });
@@ -273,9 +276,9 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   classSheet.columns = [{ width: 8 }, { width: 18 }, { width: 32 }, { width: 26 }, { width: 32 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 28 }];
 
   const tuitionSheet = workbook.addWorksheet('HỌC PHÍ');
-  styleTitle(tuitionSheet, 'A1:M2', `${data.centerName.toUpperCase()}\nSỔ THU HỌC PHÍ`);
-  applyBackLink(tuitionSheet, 'M');
-  const tuitionHeaders = ['STT', 'Mã phiếu', 'ID hệ thống', 'Mã học sinh', 'Họ và tên', 'Mã lớp', 'Đã thu (VNĐ)', 'Công nợ (VNĐ)', 'Ngày thu', 'Hình thức', 'Ghi chú', 'Hồ sơ học sinh', 'Lớp chi tiết'];
+  styleTitle(tuitionSheet, 'A1:S2', `${data.centerName.toUpperCase()}\nSỔ THU HỌC PHÍ`);
+  applyBackLink(tuitionSheet, 'S');
+  const tuitionHeaders = ['STT', 'Mã phiếu', 'ID hệ thống', 'Mã học sinh', 'Họ và tên', 'Mã lớp', 'Học phí khóa (VNĐ)', 'Học phí tháng (VNĐ)', 'Khoản thu', 'Kỳ học phí', 'Giảm giá (VNĐ)', 'Đã thu (VNĐ)', 'Công nợ (VNĐ)', 'Tình trạng', 'Ngày thu', 'Hình thức', 'Ghi chú', 'Hồ sơ học sinh', 'Lớp chi tiết'];
   tuitionSheet.getRow(5).values = tuitionHeaders;
   styleHeader(tuitionSheet.getRow(5));
   orderedReceipts.forEach((receipt, index) => {
@@ -285,20 +288,22 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const studentRow = studentSheetRowById.get(receipt.studentId);
     const studentLink = studentRow ? { text: '→ Học sinh', hyperlink: `#'HỌC SINH'!A${studentRow}` } : '—';
     const classLink = classroom ? { text: `→ ${classroom.code}`, hyperlink: `#'${classSheetNames.get(classroom.id)}'!A1` } : '—';
-    row.values = [index + 1, receipt.code, receipt.studentId, student?.code || '', student?.name || '', classroom?.code || '', receipt.paidAmount, receipt.debtAmount, dateFromIso(receipt.paymentDate), receipt.paymentMethod, receipt.notes || '', studentLink, classLink];
+    const period = receiptPeriod(receipt);
+    const status = receipt.status || (receipt.debtAmount <= 0 && receipt.paidAmount > 0 ? 'paid' : (receipt.paidAmount > 0 ? 'partial' : 'unpaid'));
+    row.values = [index + 1, receipt.code, receipt.studentId, student?.code || '', student?.name || '', classroom?.code || '', receipt.courseFee, receipt.monthlyFee || 0, receipt.paymentKind === 'monthly' ? 'Học phí tháng' : 'Học phí khóa', dateFromIso(`${period || monthKey(receipt.paymentDate)}-01`), receipt.discount, receipt.paidAmount, receipt.debtAmount, status === 'paid' ? 'Đã thanh toán' : (status === 'partial' ? 'Đóng một phần' : 'Chưa đóng'), dateFromIso(receipt.paymentDate), receipt.paymentMethod, receipt.notes || '', studentLink, classLink];
     styleData(row, index);
-    row.getCell(7).numFmt = moneyFormat;
-    row.getCell(8).numFmt = moneyFormat;
-    row.getCell(9).numFmt = 'dd/mm/yyyy';
-    [12, 13].forEach((column) => { row.getCell(column).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true }; });
+    [7, 8, 11, 12, 13].forEach((column) => { row.getCell(column).numFmt = moneyFormat; });
+    row.getCell(10).numFmt = 'mm/yyyy';
+    row.getCell(15).numFmt = 'dd/mm/yyyy';
+    [18, 19].forEach((column) => { row.getCell(column).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true }; });
   });
   const tuitionFooterRow = 6 + orderedReceipts.length;
-  writeFooter(tuitionSheet, tuitionFooterRow, tuitionHeaders.length, { 7: `SUM(G6:G${tuitionFooterRow - 1})`, 8: `SUM(H6:H${tuitionFooterRow - 1})` });
-  tuitionSheet.getCell(tuitionFooterRow, 7).numFmt = moneyFormat;
-  tuitionSheet.getCell(tuitionFooterRow, 8).numFmt = moneyFormat;
-  tuitionSheet.autoFilter = { from: 'A5', to: `M${tuitionFooterRow - 1}` };
+  writeFooter(tuitionSheet, tuitionFooterRow, tuitionHeaders.length, { 12: `SUM(L6:L${tuitionFooterRow - 1})`, 13: `SUM(M6:M${tuitionFooterRow - 1})` });
+  tuitionSheet.getCell(tuitionFooterRow, 12).numFmt = moneyFormat;
+  tuitionSheet.getCell(tuitionFooterRow, 13).numFmt = moneyFormat;
+  tuitionSheet.autoFilter = { from: 'A5', to: `S${tuitionFooterRow - 1}` };
   tuitionSheet.views = [{ state: 'frozen', ySplit: 5 }];
-  tuitionSheet.columns = [{ width: 8 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 20 }, { width: 48 }, { width: 18 }, { width: 18 }];
+  tuitionSheet.columns = [{ width: 8 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 20 }, { width: 48 }, { width: 18 }, { width: 18 }];
   tuitionSheet.getColumn(3).hidden = true;
 
   const gradesSheet = workbook.addWorksheet('BẢNG ĐIỂM');
@@ -328,7 +333,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     applyBackLink(sheet, classEndColumn);
     const teacher = teacherById.get(classroom.teacherId);
     sheet.mergeCells(`A4:${classEndColumn}4`);
-    sheet.getCell('A4').value = `Giáo viên: ${teacher?.name || 'Chưa cập nhật'} · Lịch: ${classroom.days.join(', ')} ${classroom.scheduleTime ? `(${classroom.scheduleTime})` : ''} · Phòng: ${roomById.get(classroom.roomId)?.name || classroom.roomId || 'Chưa cập nhật'}`;
+    sheet.getCell('A4').value = `Giáo viên: ${teacher?.name || 'Chưa cập nhật'} · Lịch: ${classroom.scheduleTime || classroom.days.join(', ')} · Phòng: ${roomById.get(classroom.roomId)?.name || classroom.roomId || 'Chưa cập nhật'}`;
     sheet.getCell('A4').font = { name: 'Arial', size: 9.5, italic: true, color: { argb: '475569' } };
     sheet.getCell('A4').alignment = { horizontal: 'center' };
     sheet.getRow(6).values = ['Kỳ thu', ...months.map((month) => dateFromIso(`${month}-01`))];
@@ -343,8 +348,8 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       const header = `${columnLetter(column)}$6`;
       const receiptRow = firstReceiptRowByClassMonth.get(`${classroom.id}:${month}`);
       const receiptLink = receiptRow ? `#'HỌC PHÍ'!A${receiptRow}` : undefined;
-      monthlyPaidRow.getCell(column).value = { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$F:$F,"${classroom.code}",'HỌC PHÍ'!$I:$I,">="&${header},'HỌC PHÍ'!$I:$I,"<"&EDATE(${header},1))`) };
-      monthlyDebtRow.getCell(column).value = { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$H:$H,'HỌC PHÍ'!$F:$F,"${classroom.code}",'HỌC PHÍ'!$I:$I,">="&${header},'HỌC PHÍ'!$I:$I,"<"&EDATE(${header},1))`) };
+      monthlyPaidRow.getCell(column).value = { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,"${classroom.code}",'HỌC PHÍ'!$J:$J,">="&${header},'HỌC PHÍ'!$J:$J,"<"&EDATE(${header},1))`) };
+      monthlyDebtRow.getCell(column).value = { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$F:$F,"${classroom.code}",'HỌC PHÍ'!$J:$J,">="&${header},'HỌC PHÍ'!$J:$J,"<"&EDATE(${header},1))`) };
       monthlyPaidRow.getCell(column).numFmt = moneyFormat;
       monthlyDebtRow.getCell(column).numFmt = moneyFormat;
     });
@@ -370,7 +375,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       const receiptRow = firstReceiptRowByStudentId.get(student.id);
       const receiptLink = receiptRow ? `#'HỌC PHÍ'!A${receiptRow}` : undefined;
       const row = sheet.getRow(rowNumber);
-      row.values = [index + 1, student.code, student.name, student.phone, student.parentPhone, student.address, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$C:$C,$K${rowNumber})`) }, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$H:$H,'HỌC PHÍ'!$C:$C,$K${rowNumber})`) }, receiptLink ? { text: '→ Phiếu thu', hyperlink: receiptLink } : 'Chưa có phiếu', studentStatusLabel(student.status), student.id];
+      row.values = [index + 1, student.code, student.name, student.phone, student.parentPhone, student.address, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$C:$C,$K${rowNumber})`) }, { formula: withWorksheetLink(receiptLink, `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$C:$C,$K${rowNumber})`) }, receiptLink ? { text: '→ Phiếu thu', hyperlink: receiptLink } : 'Chưa có phiếu', studentStatusLabel(student.status), student.id];
       styleData(row, index);
       row.getCell(7).numFmt = moneyFormat;
       row.getCell(8).numFmt = moneyFormat;
@@ -396,10 +401,10 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   styleTitle(guide, 'A1:H2', `${data.centerName.toUpperCase()}\nHƯỚNG DẪN NHẬP VÀ CÔNG THỨC EXCEL`);
   const guideRows = [
     ['1. Nhập học sinh', 'Thêm học sinh ở sheet HỌC SINH. Cột “Mã lớp” phải trùng chính xác với mã ở sheet LỚP HỌC.'],
-    ['2. Nhập học phí', 'Thêm một dòng ở sheet HỌC PHÍ: Mã phiếu, ID hệ thống, mã học sinh, mã lớp, đã thu, công nợ, ngày thu. Không đổi tên các cột.'],
-    ['3. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$G:$G,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$I:$I,\">=\"&D$14,'HỌC PHÍ'!$I:$I,\"<\"&EDATE(D$14,1))"],
+    ['2. Nhập học phí', 'Thêm một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC PHÍ. Nhập Mã phiếu, ID học sinh, Mã lớp, học phí khóa/tháng, khoản thu, kỳ học phí, đã thu và công nợ; không đổi tên các cột.'],
+    ['3. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$J:$J,\">=\"&D$14,'HỌC PHÍ'!$J:$J,\"<\"&EDATE(D$14,1))"],
     ['4. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
-    ['5. Cách hoạt động', 'Khi nhập thêm dữ liệu trực tiếp trong Excel, hãy chèn dòng mới ngay phía trên hàng “TỔNG CỘNG”. Excel sẽ tự mở rộng các công thức, đồng thời TỔNG QUAN và sheet lớp vẫn cộng đúng dữ liệu mới.'],
+    ['5. Cách hoạt động', 'Khi thêm hoặc xóa học viên/phiếu thu trực tiếp trong Excel, hãy chèn hoặc xóa dòng trong vùng dữ liệu ngay phía trên “TỔNG CỘNG”. Các công thức SUMIFS/COUNTIF dùng toàn cột nên TỔNG QUAN, HỌC SINH và thống kê lớp tự cập nhật; không cần quay về trang chủ.'],
     ['6. Lưu ý dữ liệu nguồn', 'Nguồn: PhucPhucThinh_BaoCaoToanHeThong_2026-08-10 (1).xlsx. Các trường thiếu được để trống. Cột T7 lặp lại ở Jolly sp4 được ghi chú và chuẩn hoá thành kỳ T8/2026. Tiền sách được lưu trong ghi chú, không cộng vào học phí.']
   ];
   guideRows.forEach((values, index) => {
@@ -544,10 +549,13 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     const roomName = cellText(getByAliases(record, ['phong', 'room']));
     const schedule = cellText(getByAliases(record, ['lichhoc', 'schedule']));
     const timeMatch = schedule.match(/\(([^)]+)\)\s*$/);
-    const days = (timeMatch ? schedule.slice(0, timeMatch.index).trim() : schedule).split(',').map((item) => item.trim()).filter(Boolean);
+    const individualSlots = [...schedule.matchAll(/(Thứ [2-7]|Chủ Nhật)\s*:\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/g)];
+    const days = individualSlots.length
+      ? individualSlots.map((match) => match[1])
+      : (timeMatch ? schedule.slice(0, timeMatch.index).trim() : schedule).split(',').map((item) => item.trim()).filter(Boolean);
     if (teacherName && !teacherName.toLocaleLowerCase('vi-VN').includes('chưa')) teacherNames.add(teacherName);
     if (roomName && !roomName.toLocaleLowerCase('vi-VN').includes('chưa')) roomNames.add(roomName);
-    return { id: `CLASS-IMP-${String(index + 1).padStart(2, '0')}`, code, name, teacherName, roomName, days, scheduleTime: timeMatch?.[1] || '', capacity: numberValue(getByAliases(record, ['succhua', 'capacity'])), studentIds: [] as string[] };
+    return { id: `CLASS-IMP-${String(index + 1).padStart(2, '0')}`, code, name, teacherName, roomName, days, scheduleTime: individualSlots.length ? schedule : (timeMatch?.[1] || ''), capacity: numberValue(getByAliases(record, ['succhua', 'capacity'])), studentIds: [] as string[] };
   }).filter((item) => item.code && item.name);
 
   const teachers: Teacher[] = [...teacherNames].map((name, index) => ({
@@ -569,7 +577,31 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
   teachers.forEach((teacher) => { teacher.assignedClassIds = classes.filter((classroom) => classroom.teacherId === teacher.id).map((classroom) => classroom.id); });
 
   const students: Student[] = [];
-  for (const classroom of classes) {
+  const masterStudentsSheet = workbook.getWorksheet('HỌC SINH');
+  if (masterStudentsSheet) {
+    const masterRecords = readRecords(masterStudentsSheet, ['mahocsinh', 'hovaten']);
+    masterRecords.forEach((record, index) => {
+      const code = cellText(getByAliases(record, ['mahocsinh', 'mahs', 'studentcode']));
+      const name = cellText(getByAliases(record, ['hovaten', 'hoten', 'name']));
+      const classCode = cellText(getByAliases(record, ['malop', 'classcode']));
+      const classroom = classes.find((item) => item.code === classCode);
+      if (!code || !name || !classroom) return;
+      const id = cellText(getByAliases(record, ['idhethong', 'systemid'])) || `STU-IMP-MASTER-${String(index + 1).padStart(3, '0')}`;
+      students.push({
+        id, code, name,
+        dob: cellText(getByAliases(record, ['ngaysinh', 'dob'])),
+        gender: cellText(getByAliases(record, ['gioitinh', 'gender'])) === 'Nam' ? 'Nam' : (cellText(getByAliases(record, ['gioitinh', 'gender'])) === 'Nữ' ? 'Nữ' : 'Chưa xác định'),
+        school: '', gradeLevel: '', programId: classroom.programId, classId: classroom.id,
+        address: cellText(getByAliases(record, ['diachi', 'address'])), email: '',
+        phone: cellText(getByAliases(record, ['sdthocsinh', 'phone'])), parentName: '',
+        parentPhone: cellText(getByAliases(record, ['sdtphuhuynh', 'parentphone'])), enrollDate: '', notes: cellText(getByAliases(record, ['ghichu', 'notes'])),
+        status: statusFromLabel(getByAliases(record, ['trangthai', 'status'])), feeStatus: 'unpaid',
+      });
+      classroom.studentIds.push(id);
+    });
+  }
+
+  if (!students.length) for (const classroom of classes) {
     const detailSheet = workbook.getWorksheet(classSheetName(classroom));
     if (!detailSheet) continue;
     const records = readRecords(detailSheet, ['mahocsinh', 'hovaten']);
@@ -600,6 +632,12 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     const student = students.find((item) => item.id === studentId);
     const paidAmount = numberValue(getByAliases(record, ['dathuvnd', 'dathu', 'paidamount']));
     const debtAmount = numberValue(getByAliases(record, ['congnovnd', 'congno', 'debtamount']));
+    const courseFee = numberValue(getByAliases(record, ['hocphikhoavnd', 'hocphikhoa', 'coursefee'])) || (paidAmount + debtAmount);
+    const monthlyFee = numberValue(getByAliases(record, ['hocphithangvnd', 'hocphithang', 'monthlyfee']));
+    const paymentKindLabel = cellText(getByAliases(record, ['khoanthu', 'paymentkind'])).toLocaleLowerCase('vi-VN');
+    const paymentKind: TuitionReceipt['paymentKind'] = paymentKindLabel.includes('tháng') ? 'monthly' : 'course';
+    const billingPeriod = monthKey(isoDate(getByAliases(record, ['kyhocphi', 'billingperiod', 'period']) || getByAliases(record, ['ngaythu', 'paymentdate'])));
+    const receiptStatus: TuitionReceipt['status'] = debtAmount <= 0 && paidAmount > 0 ? 'paid' : (paidAmount > 0 ? 'partial' : 'unpaid');
     const paymentMethod = cellText(getByAliases(record, ['hinhthuc', 'paymentmethod']));
     const normalizedPaymentMethod: TuitionReceipt['paymentMethod'] = paymentMethod === 'Tiền mặt' || paymentMethod === 'Chuyển khoản' || paymentMethod === 'Thẻ' ? paymentMethod : 'Chưa xác định';
     return {
@@ -607,10 +645,14 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       code: cellText(getByAliases(record, ['maphieu', 'receiptcode'])) || `IMP-${index + 1}`,
       studentId,
       classId: student?.classId || '',
-      courseFee: paidAmount + debtAmount,
-      discount: 0,
+      courseFee,
+      monthlyFee,
+      paymentKind,
+      billingPeriod,
+      discount: numberValue(getByAliases(record, ['giamgiavnd', 'giamgia', 'discount'])),
       paidAmount,
       debtAmount,
+      status: receiptStatus,
       paymentDate: isoDate(getByAliases(record, ['ngaythu', 'paymentdate'])),
       collectorName: '',
       paymentMethod: normalizedPaymentMethod,
@@ -624,6 +666,8 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     student.feeStatus = debt > 0 ? (paid > 0 ? 'debt' : 'unpaid') : (paid > 0 ? 'paid' : 'unpaid');
   });
   const timetableSlots = classes.flatMap((classroom) => {
+    const individualSlots = [...classroom.scheduleTime.matchAll(/(Thứ [2-7]|Chủ Nhật)\s*:\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/g)];
+    if (individualSlots.length) return individualSlots.map((match, index) => ({ id: `SLOT-IMP-${classroom.id}-${index + 1}`, classId: classroom.id, teacherId: classroom.teacherId, roomId: classroom.roomId, dayOfWeek: match[1], startTime: match[2], endTime: match[3] }));
     const [startTime = '', endTime = ''] = classroom.scheduleTime.split('-').map((item) => item.trim());
     return classroom.days.map((dayOfWeek, index) => ({ id: `SLOT-IMP-${classroom.id}-${index + 1}`, classId: classroom.id, teacherId: classroom.teacherId, roomId: classroom.roomId, dayOfWeek, startTime, endTime }));
   });
