@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, Building2, CheckCircle2, DollarSign, GraduationCap, Users, UserCheck, UserMinus } from 'lucide-react';
 import { ClassRoom, CourseProgram, Room, Student, Teacher, TuitionReceipt, UserAccount } from '../types';
 import { DashboardDetailModal, DashboardDetailType } from './DashboardDetailModal';
-import { debtBreakdown } from '../lib/tuition';
+import { debtBreakdown, paymentKindOf } from '../lib/tuition';
 
 interface DashboardViewProps {
   students: Student[];
@@ -46,7 +46,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
   const receiptMonths = receipts.map((receipt) => receipt.paymentDate.slice(0, 7)).filter((month): month is string => Boolean(month));
   const monthlyRevenueData = (showRevenue ? [...new Set<string>(receiptMonths)] : [])
     .sort()
-    .map((month) => ({ month: monthLabel(month), amount: receipts.filter((receipt) => receipt.paymentDate.startsWith(month)).reduce((sum, receipt) => sum + receipt.paidAmount, 0) }));
+    .map((month) => {
+      const monthReceipts = receipts.filter((receipt) => receipt.paymentDate.startsWith(month));
+      return {
+        month: monthLabel(month),
+        monthly: monthReceipts.filter((receipt) => paymentKindOf(receipt) === 'monthly').reduce((sum, receipt) => sum + receipt.paidAmount, 0),
+        course: monthReceipts.filter((receipt) => paymentKindOf(receipt) === 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0),
+      };
+    });
   const programData = (canViewStudents ? programs : []).map((program, index) => ({
     name: program.name,
     value: students.filter((student) => student.programId === program.id).length,
@@ -119,7 +126,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"><h2 className="text-sm font-bold text-slate-800">Học sinh theo chương trình</h2><div className="mt-3 flex items-center gap-3"><div className="h-36 w-36"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={programData} dataKey="value" innerRadius={38} outerRadius={58} paddingAngle={2}>{programData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}</Pie></PieChart></ResponsiveContainer></div><div className="min-w-0 flex-1 space-y-2">{programData.map((item) => <div key={item.name} className="flex items-center justify-between gap-2 text-xs"><span className="flex min-w-0 items-center gap-1.5 text-slate-600"><i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} /> <span className="truncate">{item.name}</span></span><b>{item.value}</b></div>)}</div></div></div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"><h2 className="text-sm font-bold text-slate-800">Doanh thu theo tháng</h2><div className="mt-3 h-44"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthlyRevenueData}><XAxis dataKey="month" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => `${Math.round(value / 1000000)}M`} /><Tooltip formatter={(value) => [currency(Number(value)), 'Đã thu']} /><Bar dataKey="amount" fill="#dc2626" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"><h2 className="text-sm font-bold text-slate-800">Doanh thu theo tháng &amp; khóa</h2><p className="mt-0.5 text-[10px] text-slate-500">Tách theo khoản thu trên phiếu đã lập trong từng tháng.</p><div className="mt-2 h-44"><ResponsiveContainer width="100%" height="100%"><BarChart data={monthlyRevenueData} barGap={4}><XAxis dataKey="month" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => `${Math.round(value / 1000000)}M`} /><Tooltip formatter={(value, name) => [currency(Number(value)), String(name)]} /><Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 10 }} /><Bar name="Học phí tháng" dataKey="monthly" fill="#dc2626" radius={[3, 3, 0, 0]} /><Bar name="Học phí khóa" dataKey="course" fill="#7c3aed" radius={[3, 3, 0, 0]} /></BarChart></ResponsiveContainer></div></div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"><h2 className="text-sm font-bold text-slate-800">Tình trạng học phí</h2><div className="mt-3 flex items-center gap-3"><div className="h-36 w-36"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={tuitionStatusData} dataKey="value" innerRadius={38} outerRadius={58} paddingAngle={2}>{tuitionStatusData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}</Pie></PieChart></ResponsiveContainer></div><div className="min-w-0 flex-1 space-y-2">{tuitionStatusData.map((item) => <div key={item.name} className="flex items-center justify-between gap-2 text-xs"><span className="flex min-w-0 items-center gap-1.5 text-slate-600"><i className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} /> <span className="truncate">{item.name}</span></span><b>{item.value}</b></div>)}</div></div></div>
       </section>
 
