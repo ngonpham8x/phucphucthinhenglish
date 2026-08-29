@@ -136,6 +136,16 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   };
 
   const handlePrintReceipt = () => {
+    document.body.dataset.printing = 'tuition-receipt';
+    const pageStyle = document.createElement('style');
+    pageStyle.id = 'tuition-receipt-page-style';
+    pageStyle.textContent = '@page { size: A5 portrait; margin: 8mm; }';
+    document.head.appendChild(pageStyle);
+    const cleanup = () => {
+      delete document.body.dataset.printing;
+      pageStyle.remove();
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
     window.print();
   };
 
@@ -247,7 +257,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       {/* COLLECT TUITION MODAL */}
       {isCollectModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 relative">
+          <div className="bg-white rounded-2xl max-h-[90vh] max-w-md w-full overflow-y-auto p-6 shadow-xl border border-slate-200 relative custom-scrollbar">
             <button
               onClick={() => setIsCollectModalOpen(false)}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
@@ -291,33 +301,6 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Học Phí Khóa (VNĐ) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={courseFeeInput}
-                    onChange={(e) => setCourseFeeInput(Number(e.target.value))}
-                    disabled={paymentKind !== 'course'}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Học Phí Tháng (VNĐ)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={monthlyFeeInput}
-                    onChange={(e) => setMonthlyFeeInput(Number(e.target.value))}
-                    disabled={paymentKind !== 'monthly'}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
                   <label className="block font-semibold text-slate-700 mb-1">Khoản Thu *</label>
                   <select
                     value={paymentKind}
@@ -350,6 +333,18 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">{paymentKind === 'course' ? 'Học Phí Khóa (VNĐ) *' : 'Học Phí Tháng (VNĐ) *'}</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={paymentKind === 'course' ? courseFeeInput : monthlyFeeInput}
+                  onChange={(e) => paymentKind === 'course' ? setCourseFeeInput(Number(e.target.value)) : setMonthlyFeeInput(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800"
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Số Tiền Đóng Lần Này (VNĐ) *</label>
@@ -372,9 +367,20 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                       <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[previewStatus]}`}>{receiptStatusLabel[previewStatus]}</span>
                     </div>
                     {remaining > 0 && (
-                      <div className="mt-2 flex items-center justify-between border-t border-amber-200 pt-2 text-amber-900">
-                        <span className="font-semibold">Còn thiếu {paymentKind === 'monthly' ? 'học phí tháng' : 'học phí khóa'} cần thu</span>
-                        <strong>{remaining.toLocaleString('vi-VN')} đ</strong>
+                      <div className="mt-2 border-t border-amber-200 pt-2 text-amber-900">
+                        <label className="mb-1 block font-semibold">Tiền còn nợ {paymentKind === 'monthly' ? 'học phí tháng' : 'học phí khóa'} (VNĐ)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={due}
+                          value={remaining}
+                          onChange={(e) => {
+                            const enteredDebt = Math.min(Math.max(Number(e.target.value), 0), due);
+                            setPaidAmountInput(Math.max(due - enteredDebt, 0));
+                          }}
+                          className="w-full border border-amber-300 bg-white px-3 py-2 font-extrabold text-amber-900 rounded-xl"
+                        />
+                        <p className="mt-1 text-[10px] text-amber-800">Số tiền đã đóng sẽ tự điều chỉnh để khớp với số còn nợ.</p>
                       </div>
                     )}
                   </div>
@@ -430,8 +436,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
       {/* PRINTABLE RECEIPT MODAL */}
       {selectedReceipt && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-8 shadow-2xl border border-slate-300 relative print:m-0 print:p-4 print:shadow-none print:border-none">
+        <div data-print-receipt-overlay className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div data-print-receipt className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-8 shadow-2xl border border-slate-300 relative print:m-0 print:p-4 print:shadow-none print:border-none">
             <button
               onClick={() => setSelectedReceipt(null)}
               className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg print:hidden"
@@ -441,10 +447,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
             {/* Receipt Content */}
             <div className="border-2 border-red-900 p-6 rounded-xl space-y-4">
-              <div className="flex items-center justify-center gap-3 border-b-2 border-red-900 pb-4 text-center">
+              <div className="flex flex-nowrap items-center justify-center gap-3 border-b-2 border-red-900 pb-4 text-center">
                 <img src={logoImg} onError={(event) => { event.currentTarget.src = '/phuc-phuc-thinh-logo.png'; }} alt="Logo Phúc Phúc Thịnh English" className="h-14 w-14 rounded-full border border-slate-200 bg-white object-cover" />
-                <div>
-                  <h2 className="font-extrabold text-red-900 text-lg uppercase tracking-wider">{settings.name}</h2>
+                <div className="min-w-0">
+                  <h2 className="whitespace-nowrap font-extrabold text-red-900 text-[13px] uppercase tracking-tight">{settings.name}</h2>
                   <p className="text-xs text-slate-600">{settings.address}</p>
                   <p className="text-xs text-slate-600">Hotline: {settings.phone}</p>
                   <h3 className="text-xl font-black text-slate-900 uppercase mt-3 tracking-widest">PHIẾU THU HỌC PHÍ</h3>

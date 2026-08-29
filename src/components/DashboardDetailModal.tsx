@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, ChevronRight, ReceiptText, X } from 'lucide-react';
 import { ClassRoom, CourseProgram, Room, Student, Teacher, TuitionReceipt } from '../types';
-import { debtBreakdown, paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
+import { debtBreakdown, paymentKindLabel, paymentKindOf, paymentPeriodLabel } from '../lib/tuition';
 
 export type DashboardDetailType =
   | 'students'
@@ -13,7 +13,9 @@ export type DashboardDetailType =
   | 'reserved'
   | 'dropped'
   | 'debt'
-  | 'paid';
+  | 'paid'
+  | 'monthly-debt'
+  | 'course-debt';
 
 interface DashboardDetailModalProps {
   detail: DashboardDetailType | null;
@@ -51,9 +53,11 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
   onViewFull
 }) => {
   const [selectedRevenueClassId, setSelectedRevenueClassId] = useState<string | null>(null);
+  const [selectedDebtClassId, setSelectedDebtClassId] = useState<string | null>(null);
 
   useEffect(() => {
     if (detail !== 'revenue') setSelectedRevenueClassId(null);
+    if (detail !== 'monthly-debt' && detail !== 'course-debt') setSelectedDebtClassId(null);
   }, [detail]);
 
   const classById = new Map<string, ClassRoom>(classes.map((item) => [item.id, item]));
@@ -111,6 +115,33 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
     })).sort((a, b) => b.paidAmount - a.paidAmount);
   })() : [];
 
+  const debtKind = detail === 'monthly-debt' ? 'monthly' : detail === 'course-debt' ? 'course' : null;
+  const debtReceipts = useMemo(() => debtKind
+    ? receipts.filter((receipt) => receipt.debtAmount > 0 && paymentKindOf(receipt) === debtKind)
+    : [], [debtKind, receipts]);
+  const debtClassRows = useMemo(() => classes.map((classroom) => {
+    const classReceipts = debtReceipts.filter((receipt) => receipt.classId === classroom.id);
+    return {
+      classroom,
+      receipts: classReceipts,
+      debtAmount: classReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0),
+      studentCount: new Set(classReceipts.map((receipt) => receipt.studentId)).size
+    };
+  }).filter((row) => row.receipts.length > 0).sort((a, b) => b.debtAmount - a.debtAmount), [classes, debtReceipts]);
+  const selectedDebtClass = debtClassRows.find((row) => row.classroom.id === selectedDebtClassId) ?? null;
+  const debtStudentRows = selectedDebtClass ? (() => {
+    const groupedStudents = new Map<string, { student: Student | undefined; receipts: TuitionReceipt[] }>();
+    selectedDebtClass.receipts.forEach((receipt) => {
+      const group = groupedStudents.get(receipt.studentId) ?? { student: studentById.get(receipt.studentId), receipts: [] };
+      group.receipts.push(receipt);
+      groupedStudents.set(receipt.studentId, group);
+    });
+    return [...groupedStudents.values()].map((row) => ({
+      ...row,
+      debtAmount: row.receipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0)
+    })).sort((a, b) => b.debtAmount - a.debtAmount);
+  })() : [];
+
   if (!detail) return null;
 
   const title = isStudentDetail
@@ -121,7 +152,13 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
         rooms: 'Danh sách phòng học',
         revenue: selectedRevenueClass
           ? `${selectedRevenueClass.classroom.code} · ${selectedRevenueClass.classroom.name}`
-          : 'Doanh thu tháng ' + formatMonth(revenueMonth)
+          : 'Doanh thu tháng ' + formatMonth(revenueMonth),
+        'monthly-debt': selectedDebtClass
+          ? `${selectedDebtClass.classroom.code} · ${selectedDebtClass.classroom.name}`
+          : 'Nợ học phí tháng theo lớp',
+        'course-debt': selectedDebtClass
+          ? `${selectedDebtClass.classroom.code} · ${selectedDebtClass.classroom.name}`
+          : 'Nợ học phí khóa theo lớp'
       } satisfies Partial<Record<DashboardDetailType, string>>)[detail] ?? 'Chi tiết';
 
   const total = isStudentDetail
@@ -132,6 +169,10 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
         ? classes.length
         : detail === 'rooms'
           ? rooms.length
+          : debtKind
+            ? selectedDebtClass
+              ? selectedDebtClass.debtAmount
+              : debtReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0)
           : selectedRevenueClass
             ? selectedRevenueClass.paidAmount
             : visibleReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
@@ -142,7 +183,7 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
       ? 'classes'
       : detail === 'rooms'
         ? 'rooms'
-        : detail === 'revenue'
+        : detail === 'revenue' || debtKind
           ? 'tuition'
           : 'students';
 
@@ -165,6 +206,8 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
             <p className="mt-1 text-xs text-slate-500">
               {detail === 'revenue'
                 ? 'Tổng đã thu: ' + formatCurrency(total as number)
+                : debtKind
+                  ? 'Tổng còn nợ: ' + formatCurrency(total as number)
                 : total + ' bản ghi'}
             </p>
           </div>
@@ -332,14 +375,58 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
             )
           )}
 
-          {((isStudentDetail && visibleStudents.length === 0) || (detail === 'revenue' && visibleReceipts.length === 0)) && (
+          {debtKind && (
+            selectedDebtClass ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs text-rose-950">
+                  <div className="font-extrabold">{selectedDebtClass.classroom.code} · {selectedDebtClass.classroom.name}</div>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-rose-800">
+                    <span>{debtStudentRows.length} học sinh còn nợ {debtKind === 'monthly' ? 'tháng' : 'khóa'}</span>
+                    <span>Tổng nợ: <b>{formatCurrency(selectedDebtClass.debtAmount)}</b></span>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {debtStudentRows.map(({ student, receipts: studentReceipts, debtAmount }) => (
+                    <article key={student?.id ?? studentReceipts[0]?.studentId} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0"><p className="truncate font-extrabold text-slate-900">{student?.name ?? 'Học sinh đã xóa'}</p><p className="mt-0.5 text-[11px] text-slate-500">{student?.code || 'Chưa có mã'} · {studentReceipts.length} khoản chưa đủ</p></div>
+                        <p className="shrink-0 text-sm font-extrabold text-rose-700">{formatCurrency(debtAmount)}</p>
+                      </div>
+                      <div className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-100 text-xs">
+                        {studentReceipts.map((receipt) => (
+                          <div key={receipt.id} className="flex items-center justify-between gap-2 px-2.5 py-2">
+                            <div className="min-w-0"><p className="font-semibold text-slate-700">{receipt.code} · {paymentKindLabel(receipt)}</p><p className="text-[10px] text-slate-500">{paymentPeriodLabel(receipt)} · {receipt.paymentDate}</p></div>
+                            <p className="shrink-0 font-bold text-rose-700">Nợ {formatCurrency(receipt.debtAmount)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {debtClassRows.map((row) => (
+                  <button key={row.classroom.id} type="button" onClick={() => setSelectedDebtClassId(row.classroom.id)} className="group rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-rose-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-red-600">
+                    <div className="flex items-start justify-between gap-3"><div><p className="font-extrabold text-slate-900">{row.classroom.code}</p><p className="mt-0.5 text-xs text-slate-500">{row.classroom.name}</p></div><ChevronRight className="h-5 w-5 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-rose-700" /></div>
+                    <div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-slate-500">Nợ {debtKind === 'monthly' ? 'tháng' : 'khóa'}</p><p className="mt-0.5 text-lg font-extrabold text-rose-700">{formatCurrency(row.debtAmount)}</p></div><p className="text-right text-[11px] text-slate-500">{row.studentCount} học sinh</p></div>
+                  </button>
+                ))}
+              </div>
+            )
+          )}
+
+          {((isStudentDetail && visibleStudents.length === 0) || (detail === 'revenue' && visibleReceipts.length === 0) || (Boolean(debtKind) && debtReceipts.length === 0)) && (
             <p className="py-10 text-center text-sm text-slate-500">Chưa có dữ liệu phù hợp.</p>
           )}
         </div>
 
         <footer className="flex items-center justify-end border-t border-slate-100 px-5 py-3 sm:px-6">
-          {detail === 'revenue' && selectedRevenueClass && (
-            <button type="button" onClick={() => setSelectedRevenueClassId(null)} className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+          {((detail === 'revenue' && selectedRevenueClass) || (debtKind && selectedDebtClass)) && (
+            <button type="button" onClick={() => {
+              setSelectedRevenueClassId(null);
+              setSelectedDebtClassId(null);
+            }} className="mr-auto inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
               <ArrowLeft className="h-3.5 w-3.5" /> Danh sách lớp
             </button>
           )}

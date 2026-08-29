@@ -82,6 +82,7 @@ interface StudentManagerProps {
   onUpdateStudent: (updatedStudent: Student) => void;
   onDeleteStudent: (id: string) => void;
   onOpenImportExportModal: () => void;
+  onOpenTuition: () => void;
 }
 
 export const StudentManager: React.FC<StudentManagerProps> = ({
@@ -98,7 +99,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   onAddStudent,
   onUpdateStudent,
   onDeleteStudent,
-  onOpenImportExportModal
+  onOpenImportExportModal,
+  onOpenTuition
 }) => {
   const { t, language } = useLanguage();
   const [filterProgram, setFilterProgram] = useState<string>('all');
@@ -829,6 +831,20 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
               <UserPlus className="w-5 h-5 text-red-700" />
               {students.some(s => s.id === editingStudent.id) ? 'Cập Nhật Thông Tin Học Sinh' : 'Thêm Học Sinh Mới'}
             </h3>
+
+            {receipts.some((receipt) => receipt.studentId === editingStudent.id) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingStudent(null);
+                  onOpenTuition();
+                }}
+                className="mb-4 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+              >
+                <DollarSign className="h-4 w-4" /> Xem học phí và phiếu thu của học viên này
+              </button>
+            )}
 
             <form onSubmit={handleSaveStudent} className="space-y-4 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

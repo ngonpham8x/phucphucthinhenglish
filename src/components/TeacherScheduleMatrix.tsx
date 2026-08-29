@@ -18,11 +18,21 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
   const days = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
 
   const handlePrint = () => {
+    document.body.dataset.printing = 'teacher-schedule';
+    const pageStyle = document.createElement('style');
+    pageStyle.id = 'teacher-schedule-page-style';
+    pageStyle.textContent = '@page { size: A4 landscape; margin: 7mm; }';
+    document.head.appendChild(pageStyle);
+    const cleanup = () => {
+      delete document.body.dataset.printing;
+      pageStyle.remove();
+    };
+    window.addEventListener('afterprint', cleanup, { once: true });
     window.print();
   };
 
   return (
-    <div className="space-y-6 print:m-0 print:p-0">
+    <div data-print-teacher-schedule className="teacher-print-schedule space-y-6 print:m-0 print:p-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs print:hidden">
         <div>
@@ -46,8 +56,8 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
       </div>
 
       {/* EXCEL GRID MATRIX TABLE */}
-      <div className="bg-white rounded-2xl border border-slate-300 shadow-xs overflow-hidden">
-        <div className="p-4 bg-red-900 text-white flex justify-between items-center print:bg-slate-900">
+      <div className="teacher-print-shell bg-white rounded-2xl border border-slate-300 shadow-xs overflow-hidden">
+        <div className="teacher-print-heading p-4 bg-red-900 text-white flex justify-between items-center print:bg-white print:text-slate-900">
           <div>
             <h3 className="font-bold text-base uppercase tracking-wider">TRUNG TÂM ANH NGỮ PHÚC PHÚC THỊNH</h3>
             <p className="text-xs text-amber-300 font-medium">BẢNG LỊCH PHÂN CÔNG GIẢNG DẠY CƠ SỞ 01</p>
@@ -55,8 +65,8 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
           <span className="text-xs text-red-100 italic">Cập nhật: 2026</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left border-collapse border border-slate-300">
+        <div className="teacher-print-table-wrap overflow-x-auto">
+          <table className="teacher-print-table w-full text-xs text-left border-collapse border border-slate-300">
             <thead>
               <tr className="bg-amber-500 text-slate-950 uppercase text-[11px] font-bold border-b border-amber-600">
                 <th className="py-3 px-4 border-r border-amber-600 w-44">Giáo Viên</th>
@@ -69,7 +79,7 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-300 font-medium">
               {teachers.map((teacher) => (
-                <tr key={teacher.id} className="hover:bg-slate-50">
+                <tr key={teacher.id} className="teacher-print-row hover:bg-slate-50">
                   <td className="py-3 px-4 bg-slate-100 font-bold text-slate-900 border-r border-slate-300">
                     <div className="flex items-center gap-2">
                       <img src={teacher.avatar} alt={teacher.name} className="w-7 h-7 rounded-full object-cover border border-red-700" />
@@ -98,7 +108,7 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
                               return (
                                 <div
                                   key={s.id}
-                                  className="p-1.5 bg-red-50 border border-red-300 rounded-lg text-[10px] shadow-2xs"
+                                  className="teacher-print-slot p-1.5 bg-red-50 border border-red-300 rounded-lg text-[10px] shadow-2xs"
                                 >
                                   <div className="font-bold text-red-900">{cls?.code} ({s.startTime})</div>
                                   <div className="text-slate-600 truncate">{cls?.name}</div>

@@ -460,7 +460,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
 
       {restoreCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <section role="dialog" aria-modal="true" aria-labelledby="restore-backup-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+          <section role="dialog" aria-modal="true" aria-labelledby="restore-backup-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl custom-scrollbar">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-extrabold text-rose-800"><AlertTriangle className="h-3.5 w-3.5" /> THAO TÁC GHI ĐÈ</div>

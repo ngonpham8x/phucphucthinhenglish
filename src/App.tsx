@@ -697,6 +697,7 @@ export default function App() {
               onUpdateStudent={handleUpdateStudent}
               onDeleteStudent={handleDeleteStudent}
               onOpenImportExportModal={() => setIsImportExportModalOpen(true)}
+              onOpenTuition={() => navigateTo('tuition')}
             />
           )}
 

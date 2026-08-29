@@ -1,1 +1,88 @@
 @import "tailwindcss";
+
+@media print {
+  /* Print only the requested document. This prevents the fixed receipt from
+     repeating above every application page and removes the web-app frame. */
+  body[data-printing] #root {
+    visibility: hidden;
+  }
+
+  body[data-printing="teacher-schedule"] [data-print-teacher-schedule],
+  body[data-printing="teacher-schedule"] [data-print-teacher-schedule] *,
+  body[data-printing="tuition-receipt"] [data-print-receipt],
+  body[data-printing="tuition-receipt"] [data-print-receipt] * {
+    visibility: visible;
+  }
+
+  body[data-printing="teacher-schedule"] [data-print-teacher-schedule] {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    background: #fff;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-shell {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-heading {
+    padding: 0 0 3mm;
+    border-bottom: 0.25mm solid #0f172a;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-table-wrap {
+    overflow: visible;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: 7.5pt;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-table th:first-child,
+  body[data-printing="teacher-schedule"] .teacher-print-table td:first-child {
+    width: 18%;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-table td {
+    min-width: 0;
+    height: auto;
+    padding: 1.5mm;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-row {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  body[data-printing="teacher-schedule"] .teacher-print-slot {
+    border: 0;
+    border-bottom: 0.2mm solid #94a3b8;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 1mm 0;
+    break-inside: avoid;
+  }
+
+  body[data-printing="tuition-receipt"] [data-print-receipt] {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    width: 105mm;
+    max-width: 105mm;
+    max-height: none;
+    transform: translateX(-50%);
+    overflow: visible;
+    background: #fff;
+  }
+
+  body[data-printing="tuition-receipt"] [data-print-receipt-overlay] {
+    display: block;
+    background: transparent;
+    padding: 0;
+  }
+}

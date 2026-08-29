@@ -51,7 +51,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({ isOpen, onClos
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative overflow-hidden">
+      <div className="bg-white rounded-2xl max-h-[90vh] max-w-lg w-full overflow-y-auto p-6 shadow-2xl border border-slate-200 relative custom-scrollbar">
         {/* Top Branding Header */}
         <div className="bg-gradient-to-r from-red-900 via-red-800 to-red-900 -mx-6 -mt-6 p-5 text-white mb-5 relative">
           <button

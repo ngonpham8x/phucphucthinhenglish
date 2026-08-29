@@ -332,7 +332,7 @@ export const TeacherManager: React.FC<TeacherManagerProps> = ({
       {/* EDIT / ADD TEACHER MODAL */}
       {isModalOpen && editingTeacher && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 relative">
+          <div className="bg-white rounded-2xl max-h-[90vh] max-w-lg w-full overflow-y-auto p-6 shadow-xl border border-slate-200 relative custom-scrollbar">
             <button
               onClick={() => {
                 setIsModalOpen(false);
