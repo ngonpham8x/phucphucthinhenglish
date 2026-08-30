@@ -86,6 +86,22 @@ const DATA_STORE_KEYS = [
   'activityLogs'
 ] as const;
 
+const MAX_ACTIVITY_LOGS = 500;
+
+const mergeActivityLogs = (...lists: ActivityLog[][]) => {
+  const seen = new Set<string>();
+  const merged: ActivityLog[] = [];
+  for (const list of lists) {
+    for (const log of list) {
+      if (!log?.id || seen.has(log.id)) continue;
+      seen.add(log.id);
+      merged.push(log);
+      if (merged.length >= MAX_ACTIVITY_LOGS) return merged;
+    }
+  }
+  return merged;
+};
+
 const canAccessTab = (tab: string, user: UserAccount) => {
   if (user.role === 'owner') return true;
   const permissions = user.permissions;
@@ -335,7 +351,11 @@ export default function App() {
           if (Array.isArray(payload.grades)) setGrades(payload.grades);
           if (Array.isArray(payload.receipts)) setReceipts(normalizedReceipts);
           if (Array.isArray(payload.backups)) setBackups(payload.backups);
-          if (Array.isArray(payload.activityLogs)) setActivityLogs(payload.activityLogs);
+          if (Array.isArray(payload.activityLogs)) {
+            // Do not discard local history if an older cloud payload has no
+            // logs yet; merge by log id and let the next sync persist it.
+            setActivityLogs((previous) => mergeActivityLogs(payload.activityLogs, previous));
+          }
         }
         setCanSyncCenterData(true);
         setHasCenterData(hasPayload);
@@ -343,6 +363,24 @@ export default function App() {
         console.warn('Không thể tải dữ liệu trung tâm từ Supabase:', centerDataError.message);
         setCanSyncCenterData(false);
         setHasCenterData(false);
+      }
+      try {
+        const loginLogKey = `PHUC_PHUC_THINH_LOGIN_LOGGED_${nextSession.user.id}`;
+        if (!sessionStorage.getItem(loginLogKey)) {
+          const loginLog: ActivityLog = {
+            id: `LOG_LOGIN_${Date.now()}`,
+            timestamp: new Date().toLocaleString('vi-VN'),
+            userEmail: account.email,
+            userName: account.name,
+            action: 'ĐĂNG NHẬP',
+            module: 'Xác thực',
+            details: 'Đăng nhập vào hệ thống quản lý trung tâm.',
+          };
+          setActivityLogs((previous) => mergeActivityLogs([loginLog], previous));
+          sessionStorage.setItem(loginLogKey, '1');
+        }
+      } catch {
+        // Session storage can be unavailable in restricted browser contexts.
       }
       setIsCenterDataHydrated(true);
       setAuthStatus('ready');
@@ -383,13 +421,13 @@ export default function App() {
     const newLog: ActivityLog = {
       id: `LOG_${Date.now()}`,
       timestamp: new Date().toLocaleString('vi-VN'),
-      userEmail: '',
+      userEmail: currentUser.email,
       userName: currentUser.name,
       action,
       module,
       details
     };
-    setActivityLogs(prev => [newLog, ...prev]);
+    setActivityLogs(prev => mergeActivityLogs([newLog], prev));
   };
 
   const loadAccountAuditLogs = useCallback(async () => {
@@ -458,7 +496,7 @@ export default function App() {
     setReceipts(normalizedReceipts);
     setBackups([]);
     setHasCenterData(true);
-    setActivityLogs(currentUser ? [{
+    const importLog: ActivityLog[] = currentUser ? [{
       id: `LOG_IMPORT_${Date.now()}`,
       timestamp: new Date().toLocaleString('vi-VN'),
       userEmail: currentUser.email,
@@ -466,7 +504,8 @@ export default function App() {
       action: 'IMPORT',
       module: 'Excel',
       details: `Nhập dữ liệu trung tâm: ${data.classes.length} lớp, ${data.students.length} học sinh, ${data.receipts.length} phiếu thu.`
-    }] : []);
+    }] : [];
+    setActivityLogs((previous) => mergeActivityLogs(importLog, previous));
   };
 
   // Teacher CRUD Handlers
@@ -916,6 +955,7 @@ export default function App() {
             permissions={currentUser.permissions}
             onImportStudents={handleImportStudents}
             onImportCenterData={handleImportCenterData}
+            onExportExcel={(filename) => addLog('EXPORT', 'Excel', `Xuất báo cáo Excel ${filename}`)}
           />
         </Suspense>
       )}

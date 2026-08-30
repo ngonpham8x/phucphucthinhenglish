@@ -19,6 +19,7 @@ interface ImportExportModalProps {
   permissions: StaffPermissions;
   onImportStudents: (newStudents: Student[]) => void;
   onImportCenterData: (data: CenterWorkbookData) => void;
+  onExportExcel: (filename: string) => void;
 }
 
 export const ImportExportModal: React.FC<ImportExportModalProps> = ({
@@ -36,7 +37,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   isOwner,
   permissions,
   onImportStudents,
-  onImportCenterData
+  onImportCenterData,
+  onExportExcel
 }) => {
   const canImport = isOwner || permissions.excel.import;
   const canExport = isOwner || permissions.excel.export;
@@ -69,11 +71,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `PhucPhucThinh_MasterReport_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const filename = `PhucPhucThinh_MasterReport_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+      onExportExcel(filename);
     } catch (err) {
       console.error(err);
       alert('Có lỗi xảy ra khi tạo file Excel');

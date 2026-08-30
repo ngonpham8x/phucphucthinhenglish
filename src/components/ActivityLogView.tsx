@@ -100,7 +100,10 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
             <option value="SỬA">Sửa dữ liệu</option>
             <option value="XÓA">Xóa dữ liệu</option>
             <option value="EXPORT">Export Excel</option>
+            <option value="IMPORT">Import Excel</option>
             <option value="BACKUP">Backup</option>
+            <option value="RESTORE">Khôi phục</option>
+            <option value="ĐỒNG BỘ">Đồng bộ</option>
           </select>
         </div>
       </div>
@@ -169,7 +172,9 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {filteredLogs.map((log) => (
+              {filteredLogs.length === 0 ? (
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-xs font-medium text-slate-500">Chưa có thao tác dữ liệu nào được ghi nhận. Hãy thêm, sửa, xóa hoặc nhập/xuất dữ liệu để tạo lịch sử.</td></tr>
+              ) : filteredLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4 font-mono text-slate-500">{log.timestamp}</td>
                   <td className="py-3 px-4">
