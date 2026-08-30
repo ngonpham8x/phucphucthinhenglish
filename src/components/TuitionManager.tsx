@@ -110,6 +110,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       .sort((left, right) => right.paymentDate.localeCompare(left.paymentDate) || right.code.localeCompare(left.code));
   }, [filterClassId, filterMonth, filterPaymentKind, filterPaymentMethod, filterReceiptStatus, receiptQuery, receipts, students]);
 
+  const selectedStudentReceiptHistory = useMemo(() => (
+    receipts
+      .filter((receipt) => receipt.studentId === collectingStudentId)
+      .sort((left, right) => right.paymentDate.localeCompare(left.paymentDate) || right.code.localeCompare(left.code))
+  ), [collectingStudentId, receipts]);
+
   const resetReceiptFilters = () => {
     setReceiptQuery('');
     setFilterClassId('all');
@@ -192,14 +198,18 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     const debtAmount = Math.max(finalPrice - paidAmountInput, 0);
     const status = debtAmount > 0 ? (paidAmountInput > 0 ? 'partial' : 'debt') : 'paid';
 
+    const retainContextFee = Boolean(editingReceipt);
     const nextReceipt: TuitionReceipt = {
       ...(editingReceipt ?? {}),
       id: editingReceipt?.id || `TR_${Date.now()}`,
       code: editingReceipt?.code || `PT-${new Date().getFullYear()}-${(receipts.length + 1).toString().padStart(3, '0')}`,
       studentId: student.id,
       classId: student.classId,
-      courseFee: paymentKind === 'course' ? courseFeeInput : 0,
-      monthlyFee: paymentKind === 'monthly' ? monthlyFeeInput : 0,
+      // An existing receipt retains the other fee field as readable audit
+      // context when the operator switches monthly <-> course. New receipts
+      // keep the unused field empty so reports remain uncluttered.
+      courseFee: paymentKind === 'course' || retainContextFee ? courseFeeInput : 0,
+      monthlyFee: paymentKind === 'monthly' || retainContextFee ? monthlyFeeInput : 0,
       paymentKind,
       billingPeriod: cleanBillingPeriod,
       discount: discountInput,
@@ -461,6 +471,42 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 </select>
               </div>
 
+              {collectingStudentId && (
+                <section className="rounded-xl border border-sky-200 bg-sky-50/70 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-extrabold text-sky-950">Lịch sử học phí của học viên</h4>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-sky-700">{selectedStudentReceiptHistory.length} phiếu</span>
+                  </div>
+                  {selectedStudentReceiptHistory.length ? (
+                    <div className="max-h-36 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
+                      {selectedStudentReceiptHistory.map((receipt) => {
+                        const status = receiptStatus(receipt);
+                        const isCurrentReceipt = receipt.id === editingReceipt?.id;
+                        return (
+                          <div key={receipt.id} className={`rounded-lg border px-2.5 py-2 ${isCurrentReceipt ? 'border-amber-300 bg-amber-50' : 'border-sky-100 bg-white'}`}>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate font-bold text-slate-800">{paymentKindLabel(receipt)} · {paymentPeriodLabel(receipt)}</div>
+                                <div className="text-[10px] text-slate-500">{receipt.code} · {receipt.paymentDate}{isCurrentReceipt ? ' · đang sửa' : ''}</div>
+                              </div>
+                              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-semibold">
+                              <span className="text-emerald-700">Đã đóng: {receipt.paidAmount.toLocaleString('vi-VN')} đ</span>
+                              {receipt.debtAmount > 0 && <span className="text-rose-700">Còn nợ: {receipt.debtAmount.toLocaleString('vi-VN')} đ</span>}
+                              {receipt.paymentKind === 'course' && (receipt.monthlyFee || 0) > 0 && <span className="text-slate-500">Giữ HP tháng: {(receipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</span>}
+                              {receipt.paymentKind !== 'course' && receipt.courseFee > 0 && <span className="text-slate-500">Giữ HP khóa: {receipt.courseFee.toLocaleString('vi-VN')} đ</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-sky-800">Chưa có phiếu thu. Sau khi lập phiếu, tháng/khóa đã đóng sẽ hiển thị ở đây.</p>
+                  )}
+                </section>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Khoản Thu *</label>
@@ -506,6 +552,19 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   required
                 />
               </div>
+
+              {editingReceipt && paymentKind === 'course' && monthlyFeeInput > 0 && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950">
+                  <div className="font-extrabold">Học phí tháng đang được giữ lại</div>
+                  <div className="mt-0.5">{monthlyFeeInput.toLocaleString('vi-VN')} đ · chuyển lại “Học phí tháng” để xem/sửa giá trị này. Lưu phiếu khóa sẽ không xóa giá trị tháng.</div>
+                </div>
+              )}
+              {editingReceipt && paymentKind === 'monthly' && courseFeeInput > 0 && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-950">
+                  <div className="font-extrabold">Học phí khóa đang được giữ lại</div>
+                  <div className="mt-0.5">{courseFeeInput.toLocaleString('vi-VN')} đ · chuyển lại “Học phí khóa” để xem/sửa giá trị này. Lưu phiếu tháng sẽ không xóa giá trị khóa.</div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

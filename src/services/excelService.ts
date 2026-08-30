@@ -596,7 +596,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   const guideRows = [
     ['1. Nhập học sinh', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC SINH, rồi nhập tối thiểu Mã học sinh, Họ và tên, Mã lớp. Macro tự tạo ID, cập nhật lớp, bảng điểm và mọi hàng tổng; không có giới hạn dòng.'],
     ['2. Thu trực tiếp cùng học sinh', 'Nếu thu ngay khi thêm học sinh, nhập số tiền ở cột “Đã thu nhập trực tiếp”; có thể điền thêm Còn nợ, Khoản thu, Kỳ/Mốc khóa, Ngày thu và Hình thức. Các sheet lớp, TỔNG QUAN và tổng HỌC PHÍ tự cập nhật.'],
-    ['3. Nhập phiếu thu chi tiết', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC PHÍ. Nhập Mã phiếu, Mã học sinh, Mã lớp, khoản thu, kỳ học phí, đã thu và công nợ; macro tự tìm ID/Họ tên và cập nhật học sinh, lớp cùng các tổng.'],
+    ['3. Nhập phiếu thu chi tiết', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC PHÍ. Nhập Mã phiếu, Mã học sinh, Mã lớp, khoản thu, kỳ học phí, đã thu và công nợ; macro tự tìm ID/Họ tên và cập nhật học sinh, lớp cùng các tổng. Hai cột Học phí tháng/khóa được giữ lại khi đổi khoản thu để còn đối chiếu lịch sử.'],
     ['4. Nhập bảng điểm', 'Ở sheet BẢNG ĐIỂM chỉ nhập/sửa 7 cột: Nghe, Nói, Đọc, Viết, Giữa kỳ, Cuối kỳ, Chuyên cần. Không sửa Mã HS, Họ tên, Mã lớp, Điểm TB hoặc Xếp loại; macro tự tạo danh sách, giữ điểm đã nhập và tính ĐTB/Xếp loại.'],
     ['5. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$O:$O,\">=\"&D$14,'HỌC PHÍ'!$O:$O,\"<\"&EDATE(D$14,1))+SUMIFS('HỌC SINH'!$M:$M,'HỌC SINH'!$G:$G,$A15,'HỌC SINH'!$Q:$Q,\">=\"&D$14,'HỌC SINH'!$Q:$Q,\"<\"&EDATE(D$14,1))"],
     ['6. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
@@ -923,8 +923,15 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     const discount = numberValue(getByAliases(record, ['giamgiavnd', 'giamgia', 'discount']));
     const rawCourseFee = numberValue(getByAliases(record, ['hocphikhoavnd', 'hocphikhoa', 'coursefee']));
     const rawMonthlyFee = numberValue(getByAliases(record, ['hocphithangvnd', 'hocphithang', 'monthlyfee']));
-    const courseFee = paymentKind === 'course' ? rawCourseFee : 0;
-    const monthlyFee = paymentKind === 'monthly' ? (rawMonthlyFee || (paidAmount + debtAmount + discount)) : rawMonthlyFee;
+    // The inactive price is intentional audit context when a receipt is
+    // reclassified. Keep both columns exactly as the workbook provides; the
+    // selected payment kind alone controls revenue/debt categorisation.
+    const courseFee = paymentKind === 'course'
+      ? (rawCourseFee || (paidAmount + debtAmount + discount))
+      : rawCourseFee;
+    const monthlyFee = paymentKind === 'monthly'
+      ? (rawMonthlyFee || (paidAmount + debtAmount + discount))
+      : rawMonthlyFee;
     const rawBillingPeriod = cellText(getByAliases(record, ['kyhocphi', 'billingperiod', 'period'])).trim();
     const billingPeriod = paymentKind === 'course'
       ? (rawBillingPeriod || `Khóa ${monthKey(isoDate(getByAliases(record, ['ngaythu', 'paymentdate'])))}`)

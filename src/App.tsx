@@ -148,10 +148,16 @@ const normaliseReceipt = (receipt: TuitionReceipt): TuitionReceipt => {
     : (receipt.paidAmount > 0 ? 'paid' : 'unpaid');
   return {
     ...receipt,
-    // All historic payments are monthly tuition. A monthly receipt cannot
-    // carry a course fee, even if an old UI/export wrote one accidentally.
-    courseFee: paymentKind === 'course' ? receipt.courseFee : 0,
-    monthlyFee: paymentKind === 'monthly' ? Math.max(receipt.monthlyFee ?? 0, recordedAmount) : 0,
+    // Keep both price fields. When staff reclassify an existing receipt, the
+    // former monthly/course price stays as audit context instead of being
+    // silently erased. Only paymentKind decides which bucket receives the
+    // paid/debt amount in reports.
+    courseFee: paymentKind === 'course'
+      ? Math.max(receipt.courseFee ?? 0, recordedAmount)
+      : Math.max(receipt.courseFee ?? 0, 0),
+    monthlyFee: paymentKind === 'monthly'
+      ? Math.max(receipt.monthlyFee ?? 0, recordedAmount)
+      : Math.max(receipt.monthlyFee ?? 0, 0),
     paymentKind,
     billingPeriod: receipt.billingPeriod || receipt.paymentDate.slice(0, 7),
     // Status is derived from amounts so stale imported/manual labels cannot
