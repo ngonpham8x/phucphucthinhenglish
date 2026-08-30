@@ -162,6 +162,33 @@ const normaliseReceipt = (receipt: TuitionReceipt): TuitionReceipt => {
 
 const normaliseReceipts = (receipts: TuitionReceipt[]) => receipts.map(normaliseReceipt);
 
+const sameIdList = (left: string[], right: string[]) => (
+  left.length === right.length && left.every((id, index) => id === right[index])
+);
+
+// studentIds and assignedClassIds are denormalized fields used by some cards
+// and reports. Keep them derived from the primary student/class references so
+// one CRUD action can never leave a stale roster or teacher workload behind.
+const reconcileClassStudentIds = (classrooms: ClassRoom[], centerStudents: Student[]) => {
+  const studentIdsByClass = new Map<string, string[]>();
+  centerStudents.forEach((student) => {
+    if (!classrooms.some((classroom) => classroom.id === student.classId)) return;
+    const ids = studentIdsByClass.get(student.classId) || [];
+    ids.push(student.id);
+    studentIdsByClass.set(student.classId, ids);
+  });
+
+  return classrooms.map((classroom) => {
+    const studentIds = studentIdsByClass.get(classroom.id) || [];
+    return sameIdList(classroom.studentIds || [], studentIds) ? classroom : { ...classroom, studentIds };
+  });
+};
+
+const reconcileTeacherAssignments = (centerTeachers: Teacher[], classrooms: ClassRoom[]) => centerTeachers.map((teacher) => {
+  const assignedClassIds = classrooms.filter((classroom) => classroom.teacherId === teacher.id).map((classroom) => classroom.id);
+  return sameIdList(teacher.assignedClassIds || [], assignedClassIds) ? teacher : { ...teacher, assignedClassIds };
+});
+
 export default function App() {
   // Persistence Helper with localStorage
   const ensureDataSchema = () => {
@@ -282,6 +309,14 @@ export default function App() {
   useEffect(() => saveStored('activityLogs', activityLogs), [activityLogs]);
 
   useEffect(() => {
+    setClasses((previousClasses) => reconcileClassStudentIds(previousClasses, students));
+  }, [students]);
+
+  useEffect(() => {
+    setTeachers((previousTeachers) => reconcileTeacherAssignments(previousTeachers, classes));
+  }, [classes]);
+
+  useEffect(() => {
     setStudents((previousStudents) => {
       let changed = false;
       const nextStudents = previousStudents.map((student) => {
@@ -342,11 +377,17 @@ export default function App() {
         if (hasPayload && payload) {
           if (payload.settings) setSettings(payload.settings);
           if (Array.isArray(payload.programs)) setPrograms(payload.programs);
-          if (Array.isArray(payload.teachers)) setTeachers(payload.teachers);
           if (Array.isArray(payload.rooms)) setRooms(payload.rooms);
-          if (Array.isArray(payload.classes)) setClasses(payload.classes);
           const normalizedReceipts = Array.isArray(payload.receipts) ? normaliseReceipts(payload.receipts) : [];
-          if (Array.isArray(payload.students)) setStudents(payload.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) })));
+          const hydratedStudents = Array.isArray(payload.students)
+            ? payload.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }))
+            : [];
+          const hydratedClasses = Array.isArray(payload.classes)
+            ? reconcileClassStudentIds(payload.classes, hydratedStudents)
+            : [];
+          if (Array.isArray(payload.teachers)) setTeachers(reconcileTeacherAssignments(payload.teachers, hydratedClasses));
+          if (Array.isArray(payload.classes)) setClasses(hydratedClasses);
+          if (Array.isArray(payload.students)) setStudents(hydratedStudents);
           if (Array.isArray(payload.timetableSlots)) setTimetableSlots(payload.timetableSlots);
           if (Array.isArray(payload.grades)) setGrades(payload.grades);
           if (Array.isArray(payload.receipts)) setReceipts(normalizedReceipts);
@@ -460,37 +501,48 @@ export default function App() {
 
   // Student CRUD Handlers
   const handleAddStudent = (newStudent: Student) => {
-    setStudents(prev => [newStudent, ...prev]);
+    setStudents(prev => [{ ...newStudent, feeStatus: feeStatusFromReceipts(newStudent.id, receipts) }, ...prev]);
     addLog('THÊM', 'Học sinh', `Thêm mới học sinh ${newStudent.name} (${newStudent.code})`);
   };
 
   const handleUpdateStudent = (updatedStudent: Student) => {
-    setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+    const previousStudent = students.find((student) => student.id === updatedStudent.id);
+    const normalizedStudent = { ...updatedStudent, feeStatus: feeStatusFromReceipts(updatedStudent.id, receipts) };
+    setStudents(prev => prev.map(s => s.id === updatedStudent.id ? normalizedStudent : s));
+    if (previousStudent && previousStudent.classId !== updatedStudent.classId) {
+      setGrades((previousGrades) => previousGrades.map((grade) => (
+        grade.studentId === updatedStudent.id ? { ...grade, classId: updatedStudent.classId } : grade
+      )));
+    }
     addLog('SỬA', 'Học sinh', `Cập nhật thông tin học sinh ${updatedStudent.name} (${updatedStudent.code})`);
   };
 
   const handleDeleteStudent = (id: string) => {
     const st = students.find(s => s.id === id);
+    const linkedReceipts = receipts.filter((receipt) => receipt.studentId === id);
+    if (linkedReceipts.length > 0) {
+      alert(`Không thể xóa ${st?.name || 'học sinh'} vì còn ${linkedReceipts.length} phiếu thu. Hãy xóa/điều chỉnh phiếu thu hoặc chuyển trạng thái học trước để không mất lịch sử tài chính.`);
+      return;
+    }
     setStudents(prev => prev.filter(s => s.id !== id));
-    if (st) addLog('XÓA', 'Học sinh', `Xóa học sinh ${st.name} (${st.code}) khỏi hệ thống`);
+    setGrades((previousGrades) => previousGrades.filter((grade) => grade.studentId !== id));
+    if (st) addLog('XÓA', 'Học sinh', `Xóa học sinh ${st.name} (${st.code}) và dữ liệu điểm liên quan khỏi hệ thống`);
   };
 
   const handleImportStudents = (newStudentsList: Student[]) => {
     setStudents(prev => [...newStudentsList, ...prev]);
-    setClasses(prev => prev.map((classroom) => ({
-      ...classroom,
-      studentIds: [...classroom.studentIds, ...newStudentsList.filter((student) => student.classId === classroom.id).map((student) => student.id)]
-    })));
     addLog('IMPORT', 'Excel', `Import ${newStudentsList.length} học sinh mới từ file Excel`);
   };
 
   const handleImportCenterData = (data: CenterWorkbookData) => {
-    setPrograms(data.programs);
-    setTeachers(data.teachers);
-    setRooms(data.rooms);
-    setClasses(data.classes);
     const normalizedReceipts = normaliseReceipts(data.receipts);
-    setStudents(data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) })));
+    const importedStudents = data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
+    const importedClasses = reconcileClassStudentIds(data.classes, importedStudents);
+    setPrograms(data.programs);
+    setTeachers(reconcileTeacherAssignments(data.teachers, importedClasses));
+    setRooms(data.rooms);
+    setClasses(importedClasses);
+    setStudents(importedStudents);
     setTimetableSlots(data.timetableSlots);
     setGrades(data.grades);
     setReceipts(normalizedReceipts);
@@ -521,6 +573,11 @@ export default function App() {
 
   const handleDeleteTeacher = (id: string) => {
     const t = teachers.find(item => item.id === id);
+    const managedClasses = classes.filter((classroom) => classroom.teacherId === id);
+    if (managedClasses.length > 0) {
+      alert(`Không thể xóa giáo viên ${t?.name || ''} vì đang phụ trách ${managedClasses.length} lớp. Hãy phân công giáo viên khác cho các lớp trước.`);
+      return;
+    }
     setTeachers(prev => prev.filter(item => item.id !== id));
     if (t) addLog('XÓA', 'Giáo viên', `Xóa giáo viên ${t.name}`);
   };
@@ -543,9 +600,20 @@ export default function App() {
 
   const handleDeleteClass = (id: string) => {
     const c = classes.find(item => item.id === id);
+    const classStudents = students.filter((student) => student.classId === id);
+    const classReceipts = receipts.filter((receipt) => receipt.classId === id);
+    if (classStudents.length > 0 || classReceipts.length > 0) {
+      const dependencies = [
+        classStudents.length > 0 ? `${classStudents.length} học sinh` : '',
+        classReceipts.length > 0 ? `${classReceipts.length} phiếu thu` : '',
+      ].filter(Boolean).join(' và ');
+      alert(`Không thể xóa lớp ${c?.name || ''} vì còn ${dependencies}. Hãy chuyển học sinh và xử lý phiếu thu trước để giữ liên kết dữ liệu.`);
+      return;
+    }
     setClasses(prev => prev.filter(item => item.id !== id));
     setTimetableSlots(prev => prev.filter(slot => slot.classId !== id));
-    if (c) addLog('XÓA', 'Lớp học', `Xóa lớp học ${c.name} (${c.code})`);
+    setGrades(prev => prev.filter((grade) => grade.classId !== id));
+    if (c) addLog('XÓA', 'Lớp học', `Xóa lớp học ${c.name} (${c.code}) cùng lịch và điểm không còn liên kết`);
   };
 
   // Room CRUD Handlers
@@ -560,8 +628,14 @@ export default function App() {
   };
 
   const handleDeleteRoom = (id: string) => {
+    const room = rooms.find((item) => item.id === id);
+    const roomClasses = classes.filter((classroom) => classroom.roomId === id);
+    if (roomClasses.length > 0) {
+      alert(`Không thể xóa phòng ${room?.name || ''} vì đang được dùng cho ${roomClasses.length} lớp. Hãy đổi phòng cho các lớp trước.`);
+      return;
+    }
     setRooms(prev => prev.filter(item => item.id !== id));
-    addLog('XÓA', 'Phòng học', `Xóa phòng học`);
+    addLog('XÓA', 'Phòng học', `Xóa phòng học ${room?.name || ''}`);
   };
 
   // Timetable Handlers
@@ -639,13 +713,15 @@ export default function App() {
   };
 
   const handleRestoreBackup = (data: CenterBackupData, filename: string) => {
+    const normalizedReceipts = normaliseReceipts(data.receipts);
+    const restoredStudents = data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
+    const restoredClasses = reconcileClassStudentIds(data.classes, restoredStudents);
     setSettings(data.settings);
     setPrograms(data.programs);
-    setTeachers(data.teachers);
+    setTeachers(reconcileTeacherAssignments(data.teachers, restoredClasses));
     setRooms(data.rooms);
-    setClasses(data.classes);
-    const normalizedReceipts = normaliseReceipts(data.receipts);
-    setStudents(data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) })));
+    setClasses(restoredClasses);
+    setStudents(restoredStudents);
     setTimetableSlots(data.timetableSlots);
     setGrades(data.grades);
     setReceipts(normalizedReceipts);

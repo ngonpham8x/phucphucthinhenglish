@@ -418,9 +418,12 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   tuitionSheet.getColumn(3).hidden = true;
 
   const gradesSheet = workbook.addWorksheet('BẢNG ĐIỂM');
-  styleTitle(gradesSheet, 'A1:J2', `${data.centerName.toUpperCase()}\nBẢNG ĐIỂM`);
-  applyBackLink(gradesSheet, 'J');
-  const gradeHeaders = ['STT', 'Mã học sinh', 'Họ và tên', 'Mã lớp', 'Nghe', 'Nói', 'Đọc', 'Viết', 'Điểm TB', 'Xếp loại'];
+  styleTitle(gradesSheet, 'A1:M2', `${data.centerName.toUpperCase()}\nBẢNG ĐIỂM`);
+  applyBackLink(gradesSheet, 'M');
+  // Keep every score used by the web gradebook in the workbook.  The prior
+  // 4-skill-only layout silently discarded midterm/final/attendance when a
+  // report was imported back into the app.
+  const gradeHeaders = ['STT', 'Mã học sinh', 'Họ và tên', 'Mã lớp', 'Nghe', 'Nói', 'Đọc', 'Viết', 'Giữa kỳ', 'Cuối kỳ', 'Chuyên cần', 'Điểm TB', 'Xếp loại'];
   gradesSheet.getRow(5).values = gradeHeaders;
   styleHeader(gradesSheet.getRow(5));
   const gradeByStudentId = new Map(data.grades.map((grade) => [grade.studentId, grade]));
@@ -428,17 +431,18 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const rowNumber = STUDENT_DATA_START_ROW + index;
     const grade = gradeByStudentId.get(student.id);
     const row = gradesSheet.getRow(rowNumber);
-    const scores = [grade?.listening, grade?.speaking, grade?.reading, grade?.writing].filter((score): score is number => typeof score === 'number');
-    const average = grade ? (Number.isFinite(grade.average) ? grade.average : (scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null)) : null;
+    const skillsAverage = grade ? (grade.listening + grade.speaking + grade.reading + grade.writing) / 4 : 0;
+    const calculatedAverage = grade ? Math.round(((skillsAverage * 0.4) + (grade.midterm * 0.2) + (grade.finalExam * 0.3) + (grade.attendance * 0.1)) * 10) / 10 : null;
+    const average = grade ? (Number.isFinite(grade.average) ? grade.average : calculatedAverage) : null;
     const classification = average === null ? '' : (average >= 8 ? 'Giỏi' : (average >= 6.5 ? 'Khá' : (average >= 5 ? 'Trung bình' : 'Cần hỗ trợ')));
-    row.values = [index + 1, student.code, student.name, classById.get(student.classId)?.code || '', grade?.listening ?? '', grade?.speaking ?? '', grade?.reading ?? '', grade?.writing ?? '', average ?? '', classification];
+    row.values = [index + 1, student.code, student.name, classById.get(student.classId)?.code || '', grade?.listening ?? '', grade?.speaking ?? '', grade?.reading ?? '', grade?.writing ?? '', grade?.midterm ?? '', grade?.finalExam ?? '', grade?.attendance ?? '', average ?? '', classification];
     styleData(row, index);
   });
   const gradesFooterRow = STUDENT_DATA_START_ROW + data.students.length;
-  writeFooter(gradesSheet, gradesFooterRow, gradeHeaders.length, { 9: `IFERROR(AVERAGE(I${STUDENT_DATA_START_ROW}:I${gradesFooterRow - 1}),0)` });
-  gradesSheet.autoFilter = { from: 'A5', to: `J${gradesFooterRow - 1}` };
+  writeFooter(gradesSheet, gradesFooterRow, gradeHeaders.length, { 12: `IFERROR(AVERAGE(L${STUDENT_DATA_START_ROW}:L${gradesFooterRow - 1}),0)` });
+  gradesSheet.autoFilter = { from: 'A5', to: `M${gradesFooterRow - 1}` };
   gradesSheet.views = [{ state: 'frozen', ySplit: 5 }];
-  gradesSheet.columns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 18 }];
+  gradesSheet.columns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 13 }, { width: 13 }, { width: 14 }, { width: 14 }, { width: 18 }];
 
   data.classes.forEach((classroom) => {
     const sheet = workbook.addWorksheet(classSheetNames.get(classroom.id)!);
@@ -615,7 +619,9 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
 const normaliseHeader = (value: unknown) => String(value ?? '').replace(/[Đđ]/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('vi-VN').replace(/[^a-z0-9]/g, '');
 const getByAliases = (record: Record<string, unknown>, aliases: string[]) => Object.entries(record).map(([key, value]) => [normaliseHeader(key), value] as const).find(([key]) => aliases.includes(key))?.[1];
 const cellText = (value: unknown) => {
-  if (value && typeof value === 'object' && 'formula' in value) return '';
+  // ExcelJS represents calculated cells as { formula, result }.  Reading the
+  // cached result prevents valid manual values from disappearing on import.
+  if (value && typeof value === 'object' && 'formula' in value) return String(('result' in value ? value.result : '') ?? '').trim();
   return String(value ?? '').trim();
 };
 
@@ -699,6 +705,16 @@ const numberValue = (value: unknown) => {
   if (typeof value === 'number') return value;
   const parsed = Number(cellText(value).replace(/[^0-9.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const duplicatedValues = (values: string[]) => {
+  const seen = new Set<string>();
+  return [...new Set(values.filter(Boolean).filter((value) => {
+    const key = value.trim().toLocaleUpperCase('vi-VN');
+    if (seen.has(key)) return true;
+    seen.add(key);
+    return false;
+  }))];
 };
 
 const isoDate = (value: unknown) => {
@@ -796,6 +812,10 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     teacherId: teachers.find((teacher) => teacher.name === teacherName)?.id || '',
     roomId: rooms.find((room) => room.name === roomName)?.id || ''
   }));
+  const duplicateClassCodes = duplicatedValues(classes.map((classroom) => classroom.code));
+  if (duplicateClassCodes.length > 0) {
+    return { errors: [{ row: 0, field: 'Mã lớp', message: `Trùng mã lớp: ${duplicateClassCodes.join(', ')}. Mỗi lớp phải có một mã duy nhất trước khi nhập.` }] };
+  }
   teachers.forEach((teacher) => { teacher.assignedClassIds = classes.filter((classroom) => classroom.teacherId === teacher.id).map((classroom) => classroom.id); });
 
   const students: Student[] = [];
@@ -867,8 +887,27 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     return { errors: [{ row: 0, field: 'Sheet lớp', message: 'Không đọc được danh sách học sinh từ các sheet lớp.' }] };
   }
 
+  const duplicateStudentCodes = duplicatedValues(students.map((student) => student.code));
+  const duplicateStudentIds = duplicatedValues(students.map((student) => student.id));
+  if (duplicateStudentCodes.length > 0 || duplicateStudentIds.length > 0) {
+    const details = [
+      duplicateStudentCodes.length > 0 ? `mã học sinh: ${duplicateStudentCodes.join(', ')}` : '',
+      duplicateStudentIds.length > 0 ? `ID hệ thống: ${duplicateStudentIds.join(', ')}` : '',
+    ].filter(Boolean).join('; ');
+    return { errors: [{ row: 0, field: 'HỌC SINH', message: `Phát hiện dữ liệu trùng (${details}). Hãy sửa trùng lặp trước khi nhập để học phí và lớp không liên kết nhầm.` }] };
+  }
+
   const studentIds = new Set(students.map((student) => student.id));
   const tuitionRecords = readRecords(tuitionSheet, ['maphieu', 'idhethong']);
+  const invalidTuitionReferences = tuitionRecords.filter((record) => {
+    const suppliedStudentId = cellText(getByAliases(record, ['idhethong', 'systemid']));
+    const suppliedStudentCode = cellText(getByAliases(record, ['mahocsinh', 'mahs', 'studentcode']));
+    return Boolean(suppliedStudentId || suppliedStudentCode)
+      && !students.some((student) => student.id === suppliedStudentId || student.code === suppliedStudentCode);
+  });
+  if (invalidTuitionReferences.length > 0) {
+    return { errors: [{ row: 0, field: 'HỌC PHÍ', message: `${invalidTuitionReferences.length} phiếu thu không khớp Mã HS / ID hệ thống. Đã dừng nhập để không làm mất hoặc gán nhầm học phí.` }] };
+  }
   const receipts: TuitionReceipt[] = tuitionRecords.map((record, index) => {
     const suppliedStudentId = cellText(getByAliases(record, ['idhethong', 'systemid']));
     const suppliedStudentCode = cellText(getByAliases(record, ['mahocsinh', 'mahs', 'studentcode']));
@@ -913,6 +952,10 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       notes: cellText(getByAliases(record, ['ghichu', 'notes']))
     };
   }).filter((receipt) => studentIds.has(receipt.studentId));
+  const duplicateReceiptCodes = duplicatedValues(receipts.map((receipt) => receipt.code));
+  if (duplicateReceiptCodes.length > 0) {
+    return { errors: [{ row: 0, field: 'Mã phiếu thu', message: `Trùng mã phiếu thu: ${duplicateReceiptCodes.join(', ')}. Mỗi phiếu thu phải có một mã duy nhất.` }] };
+  }
   masterDirectPayments.forEach((directPayment, studentId) => {
     const student = students.find((item) => item.id === studentId);
     if (!student) return;
@@ -942,11 +985,55 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
     const paid = studentReceipts.reduce((sum, receipt) => sum + receipt.paidAmount, 0);
     student.feeStatus = debt > 0 ? (paid > 0 ? 'partial' : 'debt') : (paid > 0 ? 'paid' : 'unpaid');
   });
+
+  const grades: Grade[] = [];
+  const gradesSheet = workbook.getWorksheet('BẢNG ĐIỂM');
+  if (gradesSheet) {
+    const gradeRecords = readRecords(gradesSheet, ['mahocsinh', 'malop']);
+    gradeRecords.forEach((record, index) => {
+      const studentCode = cellText(getByAliases(record, ['mahocsinh', 'mahs', 'studentcode']));
+      const classCode = cellText(getByAliases(record, ['malop', 'classcode']));
+      const student = students.find((item) => item.code === studentCode && (!classCode || classes.find((classroom) => classroom.id === item.classId)?.code === classCode));
+      if (!student) return;
+
+      const rawScores = [
+        getByAliases(record, ['nghe', 'listening']),
+        getByAliases(record, ['noi', 'speaking']),
+        getByAliases(record, ['doc', 'reading']),
+        getByAliases(record, ['viet', 'writing']),
+        getByAliases(record, ['giuaky', 'midterm']),
+        getByAliases(record, ['cuoiky', 'finalexam', 'final']),
+        getByAliases(record, ['chuyencan', 'attendance']),
+      ];
+      const rawAverage = getByAliases(record, ['diemtb', 'diemtrungbinh', 'average']);
+      // Every student has a row in the generated grade sheet.  Preserve only
+      // rows that actually contain a grade, so blank rows do not become fake
+      // zero-score records after an import.
+      if (![...rawScores, rawAverage].some((value) => cellText(value) !== '')) return;
+
+      const [listening, speaking, reading, writing, midterm, finalExam, attendance] = rawScores.map(numberValue);
+      const calculatedAverage = Math.round(((((listening + speaking + reading + writing) / 4) * 0.4) + (midterm * 0.2) + (finalExam * 0.3) + (attendance * 0.1)) * 10) / 10;
+      const suppliedAverage = cellText(rawAverage);
+      grades.push({
+        id: `GRADE-IMP-${student.id}`,
+        studentId: student.id,
+        classId: student.classId,
+        listening,
+        speaking,
+        reading,
+        writing,
+        midterm,
+        finalExam,
+        attendance,
+        average: suppliedAverage === '' ? calculatedAverage : numberValue(rawAverage),
+      });
+    });
+  }
   const timetableSlots = classes.flatMap((classroom) => {
     const individualSlots = [...classroom.scheduleTime.matchAll(/(Thứ [2-7]|Chủ Nhật)\s*:\s*(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/g)];
     if (individualSlots.length) return individualSlots.map((match, index) => ({ id: `SLOT-IMP-${classroom.id}-${index + 1}`, classId: classroom.id, teacherId: classroom.teacherId, roomId: classroom.roomId, dayOfWeek: match[1], startTime: match[2], endTime: match[3] }));
     const [startTime = '', endTime = ''] = classroom.scheduleTime.split('-').map((item) => item.trim());
     return classroom.days.map((dayOfWeek, index) => ({ id: `SLOT-IMP-${classroom.id}-${index + 1}`, classId: classroom.id, teacherId: classroom.teacherId, roomId: classroom.roomId, dayOfWeek, startTime, endTime }));
   });
-  return { data: { programs, teachers, rooms, classes, students, timetableSlots, grades: [], receipts }, errors: [] };
+  return { data: { programs, teachers, rooms, classes, students, timetableSlots, grades, receipts }, errors: [] };
 }

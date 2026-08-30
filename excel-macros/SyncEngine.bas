@@ -261,6 +261,9 @@ Private Sub RebuildGrades()
     Dim savedSpeaking() As Variant
     Dim savedReading() As Variant
     Dim savedWriting() As Variant
+    Dim savedMidterm() As Variant
+    Dim savedFinalExam() As Variant
+    Dim savedAttendance() As Variant
     Dim savedCount As Long
     Dim savedIndex As Long
     Dim matchedSavedGrade As Long
@@ -275,6 +278,9 @@ Private Sub RebuildGrades()
         ReDim savedSpeaking(1 To lastGradeRow - FIRST_DATA_ROW + 1)
         ReDim savedReading(1 To lastGradeRow - FIRST_DATA_ROW + 1)
         ReDim savedWriting(1 To lastGradeRow - FIRST_DATA_ROW + 1)
+        ReDim savedMidterm(1 To lastGradeRow - FIRST_DATA_ROW + 1)
+        ReDim savedFinalExam(1 To lastGradeRow - FIRST_DATA_ROW + 1)
+        ReDim savedAttendance(1 To lastGradeRow - FIRST_DATA_ROW + 1)
     End If
     For gradeRow = FIRST_DATA_ROW To lastGradeRow
         If Trim$(CStr(gradeSheet.Cells(gradeRow, 2).Value)) <> vbNullString Then
@@ -285,15 +291,18 @@ Private Sub RebuildGrades()
             savedSpeaking(savedCount) = gradeSheet.Cells(gradeRow, 6).Value
             savedReading(savedCount) = gradeSheet.Cells(gradeRow, 7).Value
             savedWriting(savedCount) = gradeSheet.Cells(gradeRow, 8).Value
+            savedMidterm(savedCount) = gradeSheet.Cells(gradeRow, 9).Value
+            savedFinalExam(savedCount) = gradeSheet.Cells(gradeRow, 10).Value
+            savedAttendance(savedCount) = gradeSheet.Cells(gradeRow, 11).Value
         End If
     Next gradeRow
-    If lastGradeRow >= FIRST_DATA_ROW Then gradeSheet.Range("A" & FIRST_DATA_ROW & ":J" & lastGradeRow).ClearContents
+    If lastGradeRow >= FIRST_DATA_ROW Then gradeSheet.Range("A" & FIRST_DATA_ROW & ":M" & lastGradeRow).ClearContents
 
     lastStudentRow = LastDataRow(studentSheet, 2, FIRST_DATA_ROW)
     gradeRow = FIRST_DATA_ROW
     For sourceRow = FIRST_DATA_ROW To lastStudentRow
         If Trim$(CStr(studentSheet.Cells(sourceRow, 2).Value)) <> vbNullString Then
-            If gradeRow > FIRST_DATA_ROW Then CopyDetailFormat gradeSheet, FIRST_DATA_ROW, gradeRow, 10
+            If gradeRow > FIRST_DATA_ROW Then CopyDetailFormat gradeSheet, FIRST_DATA_ROW, gradeRow, 13
             gradeSheet.Cells(gradeRow, 1).Value = gradeRow - FIRST_DATA_ROW + 1
             gradeSheet.Cells(gradeRow, 2).Value = studentSheet.Cells(sourceRow, 2).Value
             gradeSheet.Cells(gradeRow, 3).Value = studentSheet.Cells(sourceRow, 3).Value
@@ -310,14 +319,17 @@ Private Sub RebuildGrades()
                 gradeSheet.Cells(gradeRow, 6).Value = savedSpeaking(matchedSavedGrade)
                 gradeSheet.Cells(gradeRow, 7).Value = savedReading(matchedSavedGrade)
                 gradeSheet.Cells(gradeRow, 8).Value = savedWriting(matchedSavedGrade)
+                gradeSheet.Cells(gradeRow, 9).Value = savedMidterm(matchedSavedGrade)
+                gradeSheet.Cells(gradeRow, 10).Value = savedFinalExam(matchedSavedGrade)
+                gradeSheet.Cells(gradeRow, 11).Value = savedAttendance(matchedSavedGrade)
             End If
-            gradeSheet.Cells(gradeRow, 9).Formula = "=IF(COUNT(E" & gradeRow & ":H" & gradeRow & ")=0,"""",AVERAGE(E" & gradeRow & ":H" & gradeRow & "))"
-            gradeSheet.Cells(gradeRow, 10).Formula = "=IF(I" & gradeRow & "="""","""",IF(I" & gradeRow & ">=8,""" & ExcellentGradeLabel() & """,IF(I" & gradeRow & ">=6.5,""" & GoodGradeLabel() & """,IF(I" & gradeRow & ">=5,""" & AverageGradeLabel() & """,""" & NeedsSupportGradeLabel() & """))))"
+            gradeSheet.Cells(gradeRow, 12).Formula = "=IF(COUNT(E" & gradeRow & ":K" & gradeRow & ")=0,"""",ROUND((AVERAGE(E" & gradeRow & ":H" & gradeRow & ")*0.4)+(I" & gradeRow & "*0.2)+(J" & gradeRow & "*0.3)+(K" & gradeRow & "*0.1),1))"
+            gradeSheet.Cells(gradeRow, 13).Formula = "=IF(L" & gradeRow & "="""","""",IF(L" & gradeRow & ">=8,""" & ExcellentGradeLabel() & """,IF(L" & gradeRow & ">=6.5,""" & GoodGradeLabel() & """,IF(L" & gradeRow & ">=5,""" & AverageGradeLabel() & """,""" & NeedsSupportGradeLabel() & """))))"
             gradeRow = gradeRow + 1
         End If
     Next sourceRow
 
-    SetFooter gradeSheet, gradeRow, 10, vbNullString, vbNullString, vbNullString, vbNullString, "=IFERROR(AVERAGE(I" & FIRST_DATA_ROW & ":I" & gradeRow - 1 & "),0)"
+    SetFooter gradeSheet, gradeRow, 13, vbNullString, vbNullString, vbNullString, vbNullString, "=IFERROR(AVERAGE(L" & FIRST_DATA_ROW & ":L" & gradeRow - 1 & "),0)"
 End Sub
 
 Private Sub RefreshTotals()
@@ -420,6 +432,8 @@ Private Sub SetFooter(ByVal ws As Worksheet, ByVal rowNumber As Long, ByVal last
         If Len(courseDebtOrAverageFormula) > 0 Then ws.Cells(rowNumber, 22).Formula = courseDebtOrAverageFormula
     ElseIf lastColumn = 10 And Len(courseDebtOrAverageFormula) > 0 Then
         ws.Cells(rowNumber, 9).Formula = courseDebtOrAverageFormula
+    ElseIf lastColumn = 13 And Len(courseDebtOrAverageFormula) > 0 Then
+        ws.Cells(rowNumber, 12).Formula = courseDebtOrAverageFormula
     End If
 End Sub
 

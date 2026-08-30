@@ -181,11 +181,37 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       return;
     }
 
-    let studentToSave = editingStudent;
+    const code = editingStudent.code.trim();
+    if (!code) {
+      alert('Vui lòng nhập mã học sinh.');
+      return;
+    }
+    if (students.some((student) => student.id !== editingStudent.id && student.code.trim().toLocaleUpperCase('vi-VN') === code.toLocaleUpperCase('vi-VN'))) {
+      alert(`Mã học sinh “${code}” đã tồn tại. Mỗi học sinh cần một mã duy nhất để đồng bộ chính xác với học phí, lớp học và Excel.`);
+      return;
+    }
+
+    const classInput = editingStudent.classId.trim();
+    const selectedClass = classInput ? classes.find((classroom) => (
+      classroom.id === classInput
+      || classroom.code.trim().toLocaleUpperCase('vi-VN') === classInput.toLocaleUpperCase('vi-VN')
+      || classroom.name.trim().toLocaleUpperCase('vi-VN') === classInput.toLocaleUpperCase('vi-VN')
+    )) : undefined;
+    if (classInput && !selectedClass) {
+      alert(`Không tìm thấy lớp “${classInput}”. Hãy tạo lớp tại Quản lý lớp học trước, rồi chọn hoặc nhập đúng mã/tên lớp để dữ liệu không bị đứt liên kết.`);
+      return;
+    }
+
+    let studentToSave = { ...editingStudent, code, classId: selectedClass?.id || '' };
     if (programEntryMode === 'manual') {
       const name = manualProgramName.trim();
       if (!name) {
         alert('Vui lòng nhập tên chương trình học.');
+        return;
+      }
+      const classProgram = selectedClass ? programs.find((program) => program.id === selectedClass.programId) : undefined;
+      if (classProgram && classProgram.name.trim().toLocaleUpperCase('vi-VN') !== name.toLocaleUpperCase('vi-VN')) {
+        alert(`Học sinh đã được xếp vào ${selectedClass.name}; chương trình phải là “${classProgram.name}” để đồng bộ với lớp.`);
         return;
       }
       const existingProgram = programs.find((program) => program.name.trim().toLocaleLowerCase('vi-VN') === name.toLocaleLowerCase('vi-VN'));
@@ -198,7 +224,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         description: 'Tạo thủ công tại hồ sơ học viên.'
       };
       if (!existingProgram) onCreateProgram(program);
-      studentToSave = { ...editingStudent, programId: program.id };
+      studentToSave = { ...studentToSave, programId: program.id };
+    }
+
+    if (selectedClass) {
+      studentToSave = { ...studentToSave, classId: selectedClass.id, programId: selectedClass.programId };
     }
 
     if (!studentToSave.programId) {
@@ -1003,45 +1033,18 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                           <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
                         ))}
                       </optgroup>
-                      <optgroup label="Lớp Toán & Tiếng Việt (Bổ Trợ Tiểu Học)">
-                        <option value="Lớp Toán & Tiếng Việt Lớp 1">Lớp Toán & Tiếng Việt Lớp 1</option>
-                        <option value="Lớp Toán & Tiếng Việt Lớp 2">Lớp Toán & Tiếng Việt Lớp 2</option>
-                        <option value="Lớp Toán & Tiếng Việt Lớp 3">Lớp Toán & Tiếng Việt Lớp 3</option>
-                        <option value="Lớp Toán & Tiếng Việt Lớp 4">Lớp Toán & Tiếng Việt Lớp 4</option>
-                        <option value="Lớp Toán & Tiếng Việt Lớp 5">Lớp Toán & Tiếng Việt Lớp 5</option>
-                      </optgroup>
-                      <optgroup label="Khối Lớp Phổ Thông (Từ Lớp 1 đến Lớp 12)">
-                        <option value="CLASS_G1">Lớp 1 (Tiểu Học)</option>
-                        <option value="CLASS_G2">Lớp 2 (Tiểu Học)</option>
-                        <option value="CLASS_G3">Lớp 3 (Tiểu Học)</option>
-                        <option value="CLASS_G4">Lớp 4 (Tiểu Học)</option>
-                        <option value="CLASS_G5">Lớp 5 (Tiểu Học)</option>
-                        <option value="CLASS_G6">Lớp 6 (THCS)</option>
-                        <option value="CLASS_G7">Lớp 7 (THCS)</option>
-                        <option value="CLASS_G8">Lớp 8 (THCS)</option>
-                        <option value="CLASS_G9">Lớp 9 (THCS)</option>
-                        <option value="CLASS_G10">Lớp 10 (THPT)</option>
-                        <option value="CLASS_G11">Lớp 11 (THPT)</option>
-                        <option value="CLASS_G12">Lớp 12 (THPT)</option>
-                      </optgroup>
-                      <optgroup label="Lớp Mầm Non & Khóa Học Đặc Biệt">
-                        <option value="CLASS_MN">Lớp Anh Văn Mầm Non (3-5 tuổi)</option>
-                        <option value="CLASS_CAM">Lớp Cambridge (Starters/Movers/Flyers)</option>
-                        <option value="CLASS_IELTS">Lớp IELTS Academic 6.5+</option>
-                        <option value="CLASS_TOEIC">Lớp TOEIC 650+ Giao Tiếp</option>
-                        <option value="CLASS_TOEFL">Lớp TOEFL iBT Chuyên Sâu</option>
-                      </optgroup>
                     </select>
 
                     <div className="pt-1">
-                      <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">Hoặc Tự Nhập Tên Lớp Học / Mã Lớp Tùy Chỉnh:</label>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">Hoặc nhập mã / tên lớp đã tạo:</label>
                       <input
                         type="text"
                         value={editingStudent.classId}
                         onChange={(e) => setEditingStudent({ ...editingStudent, classId: e.target.value })}
-                        placeholder="Nhập tên lớp học hoặc mã lớp tùy chỉnh..."
+                        placeholder="Ví dụ: L9-PPTE hoặc Lớp 9 - Global Success"
                         className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-slate-800 font-semibold focus:ring-2 focus:ring-red-700 bg-amber-50/30"
                       />
+                      <p className="mt-1 text-[10px] text-slate-500">Chỉ nhận lớp đã tạo để học sinh, học phí, bảng điểm và Excel luôn liên kết đúng.</p>
                     </div>
                   </div>
                 </div>
@@ -1098,8 +1101,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   <label className="block font-semibold text-slate-700 mb-1">Tình Trạng Học Phí</label>
                   <select
                     value={editingStudent.feeStatus}
-                    onChange={(e) => setEditingStudent({ ...editingStudent, feeStatus: e.target.value as FeeStatus })}
-                    disabled={receipts.some(receipt => receipt.studentId === editingStudent.id)}
+                    disabled
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                   >
                     <option value="paid" className="text-emerald-700 font-bold">🟢 Đã đóng đủ</option>
@@ -1107,9 +1109,14 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                     <option value="debt" className="text-amber-700 font-bold">🟡 Đóng thiếu</option>
                     <option value="partial" className="text-blue-700 font-bold">🔵 Đóng thiếu</option>
                   </select>
-                  {receipts.some(receipt => receipt.studentId === editingStudent.id) && (
-                    <p className="mt-1 text-[10px] text-slate-500">Trạng thái được tính tự động từ các phiếu thu của học sinh này.</p>
-                  )}
+                  <p className="mt-1 text-[10px] text-slate-500">Tự tính từ phiếu thu; không sửa tay để tránh sai doanh thu hoặc công nợ.</p>
+                  <button
+                    type="button"
+                    onClick={() => { setIsModalOpen(false); setEditingStudent(null); onOpenTuition(); }}
+                    className="mt-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 hover:underline"
+                  >
+                    Lập / cập nhật phiếu thu cho học viên
+                  </button>
                 </div>
               </div>
 

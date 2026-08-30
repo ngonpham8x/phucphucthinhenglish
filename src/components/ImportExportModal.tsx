@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult } from '../services/excelService';
+import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult, ImportedStudentRow } from '../services/excelService';
 import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings, StaffPermissions, CourseProgram } from '../types';
 import { FileSpreadsheet, FileUp, FileDown, CheckCircle2, AlertTriangle, Download, Upload, X, RefreshCw } from 'lucide-react';
 
@@ -107,8 +107,19 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       }
       const result = await parseExcelStudentFile(file);
       const existingCodes = new Set(students.map((student) => student.code.trim().toLocaleUpperCase('vi-VN')));
-      const duplicateRows = result.validRows.filter((row) => existingCodes.has((row.code || '').trim().toLocaleUpperCase('vi-VN')));
-      const validRows = result.validRows.filter((row) => !existingCodes.has((row.code || '').trim().toLocaleUpperCase('vi-VN')));
+      const duplicateRows: ImportedStudentRow[] = [];
+      const validRows: ImportedStudentRow[] = [];
+      // Add accepted rows to the same set so two identical codes inside one
+      // upload cannot create ambiguous tuition/class links.
+      result.validRows.forEach((row) => {
+        const code = (row.code || '').trim().toLocaleUpperCase('vi-VN');
+        if (existingCodes.has(code)) {
+          duplicateRows.push(row);
+          return;
+        }
+        existingCodes.add(code);
+        validRows.push(row);
+      });
       setValidationResult({
         validRows,
         errors: [
@@ -147,7 +158,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     const fallbackClass = classes.find((item) => item.id === fallbackClassId);
     if (!fallbackClass) return;
     const newStudentsList: Student[] = validationResult.validRows.map((item, idx) => {
-      const classroom = classes.find((candidate) => candidate.code === item.classCode) || fallbackClass;
+      const classCode = (item.classCode || '').trim().toLocaleUpperCase('vi-VN');
+      const classroom = classes.find((candidate) => candidate.code.trim().toLocaleUpperCase('vi-VN') === classCode) || fallbackClass;
       return {
         id: `HS_IMP_${Date.now()}_${idx}`,
         code: item.code || '',
