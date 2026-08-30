@@ -357,17 +357,25 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   const gradeHeaders = ['STT', 'Mã học sinh', 'Họ và tên', 'Mã lớp', 'Nghe', 'Nói', 'Đọc', 'Viết', 'Điểm TB', 'Xếp loại'];
   gradesSheet.getRow(5).values = gradeHeaders;
   styleHeader(gradesSheet.getRow(5));
-  data.grades.forEach((grade, index) => {
-    const rowNumber = 6 + index;
-    const student = data.students.find((item) => item.id === grade.studentId);
-    const classroom = classById.get(grade.classId);
+  const gradeByStudentId = new Map(data.grades.map((grade) => [grade.studentId, grade]));
+  const gradeDataRows = STUDENT_DYNAMIC_LAST_ROW - STUDENT_DATA_START_ROW + 1;
+  for (let index = 0; index < gradeDataRows; index += 1) {
+    const rowNumber = STUDENT_DATA_START_ROW + index;
+    const student = data.students[index];
+    const grade = student ? gradeByStudentId.get(student.id) : undefined;
     const row = gradesSheet.getRow(rowNumber);
-    row.values = [index + 1, student?.code || '', student?.name || '', classroom?.code || '', grade.listening, grade.speaking, grade.reading, grade.writing, { formula: `AVERAGE(E${rowNumber}:H${rowNumber})` }, { formula: `IF(I${rowNumber}>=8,"Giỏi",IF(I${rowNumber}>=6.5,"Khá",IF(I${rowNumber}>=5,"Trung bình","Cần hỗ trợ")))` }];
-    styleData(row, index);
-  });
-  const gradesFooterRow = 6 + data.grades.length;
-  writeFooter(gradesSheet, gradesFooterRow, gradeHeaders.length, { 9: data.grades.length ? `AVERAGE(I6:I${gradesFooterRow - 1})` : '0' });
-  gradesSheet.autoFilter = { from: 'A5', to: `J${Math.max(5, gradesFooterRow - 1)}` };
+    row.getCell(1).value = { formula: `IF(B${rowNumber}="","",ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber}))` };
+    row.getCell(2).value = { formula: `IFERROR(INDEX('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber})),"")` };
+    row.getCell(3).value = { formula: `IFERROR(INDEX('HỌC SINH'!$C$${STUDENT_DATA_START_ROW}:$C$${STUDENT_DYNAMIC_LAST_ROW},ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber})),"")` };
+    row.getCell(4).value = { formula: `IFERROR(INDEX('HỌC SINH'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW},ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber})),"")` };
+    [5, 6, 7, 8].forEach((column) => { row.getCell(column).value = student ? [grade?.listening ?? '', grade?.speaking ?? '', grade?.reading ?? '', grade?.writing ?? ''][column - 5] : ''; });
+    row.getCell(9).value = { formula: `IF(B${rowNumber}="","",IF(COUNT(E${rowNumber}:H${rowNumber})=0,"",AVERAGE(E${rowNumber}:H${rowNumber})))` };
+    row.getCell(10).value = { formula: `IF(I${rowNumber}="","",IF(I${rowNumber}>=8,"Giỏi",IF(I${rowNumber}>=6.5,"Khá",IF(I${rowNumber}>=5,"Trung bình","Cần hỗ trợ"))))` };
+    if (index < data.students.length) styleData(row, index);
+  }
+  const gradesFooterRow = STUDENT_DATA_START_ROW + gradeDataRows;
+  writeFooter(gradesSheet, gradesFooterRow, gradeHeaders.length, { 9: `IFERROR(AVERAGE(I${STUDENT_DATA_START_ROW}:I${gradesFooterRow - 1}),0)` });
+  gradesSheet.autoFilter = { from: 'A5', to: `J${gradesFooterRow - 1}` };
   gradesSheet.views = [{ state: 'frozen', ySplit: 5 }];
   gradesSheet.columns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 18 }];
 
