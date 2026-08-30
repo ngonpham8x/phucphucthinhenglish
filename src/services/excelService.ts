@@ -597,11 +597,12 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     ['1. Nhập học sinh', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC SINH, rồi nhập tối thiểu Mã học sinh, Họ và tên, Mã lớp. Macro tự tạo ID, cập nhật lớp, bảng điểm và mọi hàng tổng; không có giới hạn dòng.'],
     ['2. Thu trực tiếp cùng học sinh', 'Nếu thu ngay khi thêm học sinh, nhập số tiền ở cột “Đã thu nhập trực tiếp”; có thể điền thêm Còn nợ, Khoản thu, Kỳ/Mốc khóa, Ngày thu và Hình thức. Các sheet lớp, TỔNG QUAN và tổng HỌC PHÍ tự cập nhật.'],
     ['3. Nhập phiếu thu chi tiết', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC PHÍ. Nhập Mã phiếu, Mã học sinh, Mã lớp, khoản thu, kỳ học phí, đã thu và công nợ; macro tự tìm ID/Họ tên và cập nhật học sinh, lớp cùng các tổng.'],
-    ['4. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$O:$O,\">=\"&D$14,'HỌC PHÍ'!$O:$O,\"<\"&EDATE(D$14,1))+SUMIFS('HỌC SINH'!$M:$M,'HỌC SINH'!$G:$G,$A15,'HỌC SINH'!$Q:$Q,\">=\"&D$14,'HỌC SINH'!$Q:$Q,\"<\"&EDATE(D$14,1))"],
-    ['5. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
-    ['6. Đồng bộ tự động', 'Đây là file .XLSM. Khi mở file, bấm Enable Macros. Sau khoảng vài giây kể từ khi thêm/sửa/xóa ở HỌC SINH hoặc HỌC PHÍ, hệ thống tự xây lại sheet Lớp, BẢNG ĐIỂM, công nợ và hàng tổng. Không nhập trùng học sinh vào sheet lớp.'],
-    ['7. Đồng bộ về web', 'Khi nhập lại tệp vào website, các khoản “nhập trực tiếp” tại HỌC SINH được tạo thành phiếu thu tự động; các khoản đã có trong HỌC PHÍ vẫn được giữ nguyên.'],
-    ['8. Lưu ý dữ liệu nguồn', 'Nguồn: PhucPhucThinh_BaoCaoToanHeThong_2026-08-10 (1).xlsx. Các trường thiếu được để trống. Cột T7 lặp lại ở Jolly sp4 được ghi chú và chuẩn hoá thành kỳ T8/2026. Tiền sách được lưu trong ghi chú, không cộng vào học phí.']
+    ['4. Nhập bảng điểm', 'Ở sheet BẢNG ĐIỂM chỉ nhập/sửa 7 cột: Nghe, Nói, Đọc, Viết, Giữa kỳ, Cuối kỳ, Chuyên cần. Không sửa Mã HS, Họ tên, Mã lớp, Điểm TB hoặc Xếp loại; macro tự tạo danh sách, giữ điểm đã nhập và tính ĐTB/Xếp loại.'],
+    ['5. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$O:$O,\">=\"&D$14,'HỌC PHÍ'!$O:$O,\"<\"&EDATE(D$14,1))+SUMIFS('HỌC SINH'!$M:$M,'HỌC SINH'!$G:$G,$A15,'HỌC SINH'!$Q:$Q,\">=\"&D$14,'HỌC SINH'!$Q:$Q,\"<\"&EDATE(D$14,1))"],
+    ['6. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
+    ['7. Đồng bộ tự động', 'Đây là file .XLSM. Khi mở file, bấm Enable Macros. Sau khoảng 2 giây kể từ khi thêm/sửa/xóa ở HỌC SINH hoặc HỌC PHÍ, hệ thống tự xây lại sheet Lớp, BẢNG ĐIỂM, công nợ và hàng tổng. Không nhập tay lại học sinh ở sheet lớp.'],
+    ['8. Đồng bộ về web', 'Khi nhập lại tệp vào website, các khoản “nhập trực tiếp” tại HỌC SINH được tạo thành phiếu thu tự động; các khoản đã có trong HỌC PHÍ vẫn được giữ nguyên. Tệp có mã HS, mã lớp hoặc mã phiếu thu trùng/sai sẽ bị chặn để tránh liên kết nhầm.'],
+    ['9. Không làm đứt liên kết', 'Không xóa hay sửa các cột ẩn ID hệ thống/Khóa tự động. Muốn xóa học sinh hoặc phiếu thu, xóa nguyên dòng dữ liệu và chờ macro chạy; hàng TỔNG CỘNG luôn được đặt lại tự động ở cuối danh sách.']
   ];
   guideRows.forEach((values, index) => {
     const row = guide.getRow(4 + index);
