@@ -131,7 +131,7 @@ const directSumByClassFormula = (amountColumn: 'M' | 'N', classCriterion: string
 );
 const masterStudentRange = (column: string) => `'HỌC SINH'!$${column}$${STUDENT_DATA_START_ROW}:$${column}$${STUDENT_DYNAMIC_LAST_ROW}`;
 const legacyStudentCodeFormula = (classCriterion: string, targetRow: number, firstDetailRow: number) => (
-  `IFERROR(INDEX(${masterStudentRange('B')},AGGREGATE(15,6,(ROW(${masterStudentRange('B')})-ROW('HỌC SINH'!$B$${STUDENT_DATA_START_ROW})+1)/(${masterStudentRange('G')}=${classCriterion}),ROWS($A$${firstDetailRow}:A${targetRow}))),"")`
+  `IFERROR(INDEX(${masterStudentRange('B')},MATCH(${classCriterion}&"|"&ROWS($A$${firstDetailRow}:A${targetRow}),${masterStudentRange('X')},0)),"")`
 );
 const legacyStudentFieldFormula = (column: string, targetRow: number) => (
   `IFERROR(INDEX(${masterStudentRange(column)},MATCH($B${targetRow},${masterStudentRange('B')},0)),"")`
@@ -258,15 +258,15 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   summary.columns = [{ width: 18 }, { width: 32 }, { width: 12 }, ...months.map(() => ({ width: 18 })), { width: 18 }, { width: 18 }];
 
   const studentsSheet = workbook.addWorksheet('HỌC SINH');
-  styleTitle(studentsSheet, 'A1:W2', `${data.centerName.toUpperCase()}\nDANH SÁCH HỌC SINH`);
-  applyBackLink(studentsSheet, 'W');
-  studentsSheet.mergeCells('A4:W4');
+  styleTitle(studentsSheet, 'A1:X2', `${data.centerName.toUpperCase()}\nDANH SÁCH HỌC SINH`);
+  applyBackLink(studentsSheet, 'X');
+  studentsSheet.mergeCells('A4:X4');
   studentsSheet.getCell('A4').value = 'Nhập học sinh và khoản thu trực tiếp tại các cột nền vàng M–R. Các cột Tổng/Nợ tự liên kết tới HỌC PHÍ và các sheet lớp.';
   studentsSheet.getCell('A4').font = { name: 'Arial', size: 9.5, italic: true, color: { argb: '7C2D12' } };
   studentsSheet.getCell('A4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBEB' } };
   studentsSheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   studentsSheet.getRow(4).height = 26;
-  const studentHeaders = ['STT', 'Mã học sinh', 'Họ và tên', 'Giới tính', 'Ngày sinh', 'Chương trình', 'Mã lớp', 'SĐT học sinh', 'SĐT phụ huynh', 'Địa chỉ', 'Trạng thái', 'Ghi chú', 'Đã thu nhập trực tiếp (VNĐ)', 'Còn nợ nhập trực tiếp (VNĐ)', 'Khoản thu nhập trực tiếp', 'Kỳ học phí / Mốc khóa', 'Ngày thu nhập trực tiếp', 'Hình thức nhập trực tiếp', 'Tổng đã thu (VNĐ)', 'Tổng nợ (VNĐ)', 'Nợ học phí tháng (VNĐ)', 'Nợ học phí khóa (VNĐ)', 'ID hệ thống'];
+  const studentHeaders = ['STT', 'Mã học sinh', 'Họ và tên', 'Giới tính', 'Ngày sinh', 'Chương trình', 'Mã lớp', 'SĐT học sinh', 'SĐT phụ huynh', 'Địa chỉ', 'Trạng thái', 'Ghi chú', 'Đã thu nhập trực tiếp (VNĐ)', 'Còn nợ nhập trực tiếp (VNĐ)', 'Khoản thu nhập trực tiếp', 'Kỳ học phí / Mốc khóa', 'Ngày thu nhập trực tiếp', 'Hình thức nhập trực tiếp', 'Tổng đã thu (VNĐ)', 'Tổng nợ (VNĐ)', 'Nợ học phí tháng (VNĐ)', 'Nợ học phí khóa (VNĐ)', 'ID hệ thống', 'Khóa lớp tự động'];
   studentsSheet.getRow(5).values = studentHeaders;
   styleHeader(studentsSheet.getRow(5));
   const studentSheetRowById = new Map<string, number>();
@@ -275,7 +275,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const classroom = classById.get(student.classId);
     const row = studentsSheet.getRow(rowNumber);
     const classLink = classroom ? `#'${classSheetNames.get(classroom.id)}'!A1` : undefined;
-    row.values = [index + 1, student.code, student.name, student.gender, student.dob, programById.get(student.programId)?.name || student.programId, classLink ? { text: classroom?.code || '', hyperlink: classLink } : (classroom?.code || ''), student.phone, student.parentPhone, student.address, studentStatusLabel(student.status), student.notes || '', 0, 0, '', '', '', '', { formula: `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$D:$D,$B${rowNumber})+$M${rowNumber}` }, { formula: `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$D:$D,$B${rowNumber})+$N${rowNumber}` }, { formula: `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$D:$D,$B${rowNumber},'HỌC PHÍ'!$I:$I,"Học phí tháng")+IF($O${rowNumber}="Học phí khóa",0,$N${rowNumber})` }, { formula: `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$D:$D,$B${rowNumber},'HỌC PHÍ'!$I:$I,"Học phí khóa")+IF($O${rowNumber}="Học phí khóa",$N${rowNumber},0)` }, student.id];
+    row.values = [index + 1, student.code, student.name, student.gender, student.dob, programById.get(student.programId)?.name || student.programId, classLink ? { text: classroom?.code || '', hyperlink: classLink } : (classroom?.code || ''), student.phone, student.parentPhone, student.address, studentStatusLabel(student.status), student.notes || '', 0, 0, '', '', '', '', { formula: `SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$D:$D,$B${rowNumber})+$M${rowNumber}` }, { formula: `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$D:$D,$B${rowNumber})+$N${rowNumber}` }, { formula: `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$D:$D,$B${rowNumber},'HỌC PHÍ'!$I:$I,"Học phí tháng")+IF($O${rowNumber}="Học phí khóa",0,$N${rowNumber})` }, { formula: `SUMIFS('HỌC PHÍ'!$M:$M,'HỌC PHÍ'!$D:$D,$B${rowNumber},'HỌC PHÍ'!$I:$I,"Học phí khóa")+IF($O${rowNumber}="Học phí khóa",$N${rowNumber},0)` }, student.id, { formula: `IF($G${rowNumber}="","",$G${rowNumber}&"|"&COUNTIF($G$${STUDENT_DATA_START_ROW}:$G${rowNumber},$G${rowNumber}))` }];
     styleData(row, index);
     [13, 14, 19, 20, 21, 22].forEach((column) => { row.getCell(column).numFmt = moneyFormat; });
     [19, 20, 21, 22].forEach((column) => styleFormulaLink(row.getCell(column)));
@@ -289,10 +289,11 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   const studentFooterRow = 6 + data.students.length;
   writeFooter(studentsSheet, studentFooterRow, studentHeaders.length, { 3: `COUNTA(B${STUDENT_DATA_START_ROW}:B${studentFooterRow - 1})`, 19: `SUM(S${STUDENT_DATA_START_ROW}:S${studentFooterRow - 1})`, 20: `SUM(T${STUDENT_DATA_START_ROW}:T${studentFooterRow - 1})`, 21: `SUM(U${STUDENT_DATA_START_ROW}:U${studentFooterRow - 1})`, 22: `SUM(V${STUDENT_DATA_START_ROW}:V${studentFooterRow - 1})` });
   [19, 20, 21, 22].forEach((column) => { studentsSheet.getCell(studentFooterRow, column).numFmt = moneyFormat; });
-  studentsSheet.autoFilter = { from: 'A5', to: `W${studentFooterRow - 1}` };
+  studentsSheet.autoFilter = { from: 'A5', to: `X${studentFooterRow - 1}` };
   studentsSheet.views = [{ state: 'frozen', ySplit: 5 }];
-  studentsSheet.columns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 14 }, { width: 20 }, { width: 18 }, { width: 17 }, { width: 18 }, { width: 35 }, { width: 15 }, { width: 42 }, { width: 22 }, { width: 22 }, { width: 22 }, { width: 24 }, { width: 18 }, { width: 22 }, { width: 20 }, { width: 20 }, { width: 22 }, { width: 22 }, { width: 18 }];
+  studentsSheet.columns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 14 }, { width: 20 }, { width: 18 }, { width: 17 }, { width: 18 }, { width: 35 }, { width: 15 }, { width: 42 }, { width: 22 }, { width: 22 }, { width: 22 }, { width: 24 }, { width: 18 }, { width: 22 }, { width: 20 }, { width: 20 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 22 }];
   studentsSheet.getColumn(23).hidden = true;
+  studentsSheet.getColumn(24).hidden = true;
 
   const classSheet = workbook.addWorksheet('LỚP HỌC');
   styleTitle(classSheet, 'A1:J2', `${data.centerName.toUpperCase()}\nDANH SÁCH LỚP HỌC`);
