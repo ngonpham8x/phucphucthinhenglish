@@ -43,7 +43,9 @@ const moneyFormat = '#,##0 "đ"';
 // Keep dynamic formulas bounded: this supports thousands of future students
 // without slowing Excel down with whole-column array calculations.
 const STUDENT_DATA_START_ROW = 6;
-const STUDENT_DYNAMIC_LAST_ROW = 5000;
+const STUDENT_DYNAMIC_LAST_ROW = 1000;
+const CLASS_DETAIL_MIN_ROWS = 100;
+const CLASS_DETAIL_MAX_ROWS = 300;
 const border: Partial<ExcelJS.Borders> = {
   top: { style: 'thin', color: { argb: COLOR.border } }, left: { style: 'thin', color: { argb: COLOR.border } },
   bottom: { style: 'thin', color: { argb: COLOR.border } }, right: { style: 'thin', color: { argb: COLOR.border } }
@@ -121,14 +123,21 @@ const styleFormulaLink = (cell: ExcelJS.Cell) => {
   cell.font = { name: 'Arial', size: 10, bold: true, color: { argb: COLOR.link }, underline: true };
 };
 const formulaText = (value: string) => value.replace(/"/g, '""');
-const studentCodesByClassFormula = (classCriterion: string) => (
-  `FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},'HỌC SINH'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW}=${classCriterion})`
-);
 const receiptSumByClassFormula = (amountColumn: 'L' | 'M', classCriterion: string, dateCriteria = '') => (
-  `IFERROR(SUM(SUMIFS('HỌC PHÍ'!$${amountColumn}$${STUDENT_DATA_START_ROW}:$${amountColumn}$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},${studentCodesByClassFormula(classCriterion)}${dateCriteria})),0)`
+  `SUMIFS('HỌC PHÍ'!$${amountColumn}$${STUDENT_DATA_START_ROW}:$${amountColumn}$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$F$${STUDENT_DATA_START_ROW}:$F$${STUDENT_DYNAMIC_LAST_ROW},${classCriterion}${dateCriteria})`
 );
 const directSumByClassFormula = (amountColumn: 'M' | 'N', classCriterion: string, dateCriteria = '') => (
   `SUMIFS('HỌC SINH'!$${amountColumn}$${STUDENT_DATA_START_ROW}:$${amountColumn}$${STUDENT_DYNAMIC_LAST_ROW},'HỌC SINH'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW},${classCriterion}${dateCriteria})`
+);
+const masterStudentRange = (column: string) => `'HỌC SINH'!$${column}$${STUDENT_DATA_START_ROW}:$${column}$${STUDENT_DYNAMIC_LAST_ROW}`;
+const legacyStudentCodeFormula = (classCriterion: string, targetRow: number, firstDetailRow: number) => (
+  `IFERROR(INDEX(${masterStudentRange('B')},AGGREGATE(15,6,(ROW(${masterStudentRange('B')})-ROW('HỌC SINH'!$B$${STUDENT_DATA_START_ROW})+1)/(${masterStudentRange('G')}=${classCriterion}),ROWS($A$${firstDetailRow}:A${targetRow}))),"")`
+);
+const legacyStudentFieldFormula = (column: string, targetRow: number) => (
+  `IFERROR(INDEX(${masterStudentRange(column)},MATCH($B${targetRow},${masterStudentRange('B')},0)),"")`
+);
+const legacyStudentNumberFormula = (column: string, targetRow: number) => (
+  `IFERROR(INDEX(${masterStudentRange(column)},MATCH($B${targetRow},${masterStudentRange('B')},0)),0)`
 );
 
 export async function generateMasterExcelWorkbook(data: ExcelExportData): Promise<Blob> {
@@ -421,34 +430,27 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const headers = ['STT', 'Mã học sinh', 'Họ và tên', 'SĐT học sinh', 'SĐT phụ huynh', 'Địa chỉ', 'Tổng đã thu (VNĐ)', 'Tổng nợ (VNĐ)', 'Nợ học phí tháng (VNĐ)', 'Nợ học phí khóa (VNĐ)', 'Xem phiếu', 'Trạng thái', 'ID hệ thống'];
     sheet.getRow(11).values = headers;
     styleHeader(sheet.getRow(11));
-    const studentFilter = `'HỌC SINH'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW}="${formulaText(classroom.code)}"`;
-    const dynamicStudentColumn = (column: string) => `IFERROR(FILTER('HỌC SINH'!$${column}$${STUDENT_DATA_START_ROW}:$${column}$${STUDENT_DYNAMIC_LAST_ROW},${studentFilter}),"")`;
-    const filteredStudentCodes = `FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${studentFilter})`;
-    const dynamicLedgerTotal = (ledgerColumn: 'L' | 'M', directColumn: 'M' | 'N') => `IFERROR(MAP(${filteredStudentCodes},${dynamicStudentColumn(directColumn)},LAMBDA(studentCode,directValue,SUMIF('HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},studentCode,'HỌC PHÍ'!$${ledgerColumn}$${STUDENT_DATA_START_ROW}:$${ledgerColumn}$${STUDENT_DYNAMIC_LAST_ROW})+directValue)),"")`;
-    const dynamicDebtByKind = (paymentKind: 'monthly' | 'course') => `IFERROR(MAP(${filteredStudentCodes},${dynamicStudentColumn('N')},${dynamicStudentColumn('O')},LAMBDA(studentCode,directDebt,directKind,SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},studentCode,'HỌC PHÍ'!$I$${STUDENT_DATA_START_ROW}:$I$${STUDENT_DYNAMIC_LAST_ROW},"Học phí ${paymentKind === 'monthly' ? 'tháng' : 'khóa'}")+IF(directKind="Học phí khóa",${paymentKind === 'course' ? 'directDebt' : '0'},${paymentKind === 'monthly' ? 'directDebt' : '0'}))),"")`;
-    const detailFormulaByColumn: Record<number, string> = {
-      1: `IFERROR(SEQUENCE(ROWS(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${studentFilter}))),"")`,
-      2: dynamicStudentColumn('B'),
-      3: dynamicStudentColumn('C'),
-      4: dynamicStudentColumn('H'),
-      5: dynamicStudentColumn('I'),
-      6: dynamicStudentColumn('J'),
-      7: dynamicLedgerTotal('L', 'M'),
-      8: dynamicLedgerTotal('M', 'N'),
-      9: dynamicDebtByKind('monthly'),
-      10: dynamicDebtByKind('course'),
-      11: `IFERROR(IF(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${studentFilter})<>"","→ Học phí",""),"")`,
-      12: dynamicStudentColumn('K'),
-      13: dynamicStudentColumn('W')
-    };
-    Object.entries(detailFormulaByColumn).forEach(([column, formula]) => {
-      sheet.getCell(12, Number(column)).value = { formula };
-    });
-    [7, 8, 9, 10].forEach((column) => {
-      sheet.getCell(12, column).numFmt = moneyFormat;
-      styleFormulaLink(sheet.getCell(12, column));
-    });
-    sheet.getCell(12, 11).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
+    const firstDetailRow = 12;
+    const detailRowCount = Math.min(CLASS_DETAIL_MAX_ROWS, Math.max(CLASS_DETAIL_MIN_ROWS, data.students.filter((student) => student.classId === classroom.id).length + 30));
+    const classCriterionForDetails = `"${formulaText(classroom.code)}"`;
+    for (let rowNumber = firstDetailRow; rowNumber < firstDetailRow + detailRowCount; rowNumber += 1) {
+      const directPaid = legacyStudentNumberFormula('M', rowNumber);
+      const directDebt = legacyStudentNumberFormula('N', rowNumber);
+      const directKind = legacyStudentFieldFormula('O', rowNumber);
+      sheet.getCell(rowNumber, 1).value = { formula: `IF($B${rowNumber}="","",ROWS($A$${firstDetailRow}:A${rowNumber}))` };
+      sheet.getCell(rowNumber, 2).value = { formula: legacyStudentCodeFormula(classCriterionForDetails, rowNumber, firstDetailRow) };
+      [3, 4, 5, 6, 12, 13].forEach((column) => {
+        const masterColumn = ({ 3: 'C', 4: 'H', 5: 'I', 6: 'J', 12: 'K', 13: 'W' } as Record<number, string>)[column];
+        sheet.getCell(rowNumber, column).value = { formula: legacyStudentFieldFormula(masterColumn, rowNumber) };
+      });
+      sheet.getCell(rowNumber, 7).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$L$${STUDENT_DATA_START_ROW}:$L$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber})+${directPaid})` };
+      sheet.getCell(rowNumber, 8).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber})+${directDebt})` };
+      sheet.getCell(rowNumber, 9).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber},'HỌC PHÍ'!$I$${STUDENT_DATA_START_ROW}:$I$${STUDENT_DYNAMIC_LAST_ROW},"Học phí tháng")+IF(${directKind}="Học phí khóa",0,${directDebt}))` };
+      sheet.getCell(rowNumber, 10).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber},'HỌC PHÍ'!$I$${STUDENT_DATA_START_ROW}:$I$${STUDENT_DYNAMIC_LAST_ROW},"Học phí khóa")+IF(${directKind}="Học phí khóa",${directDebt},0))` };
+      sheet.getCell(rowNumber, 11).value = { formula: `IF($B${rowNumber}="","","→ Học phí")` };
+      [7, 8, 9, 10].forEach((column) => { sheet.getCell(rowNumber, column).numFmt = moneyFormat; styleFormulaLink(sheet.getCell(rowNumber, column)); });
+      sheet.getCell(rowNumber, 11).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
+    }
     sheet.views = [{ state: 'frozen', ySplit: 11 }];
     sheet.columns = [{ width: 14 }, ...months.map(() => ({ width: 18 })), ...Array.from({ length: Math.max(0, 11 - (months.length + 1)) }, () => ({ width: 18 }))];
     const detailColumns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 17 }, { width: 18 }, { width: 36 }, { width: 20 }, { width: 20 }, { width: 22 }, { width: 22 }, { width: 16 }, { width: 15 }, { width: 18 }];
@@ -474,11 +476,11 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   classLookup.getCell('D4').font = { name: 'Arial', size: 9.5, italic: true, color: { argb: '475569' } };
   classLookup.getCell('D4').alignment = { vertical: 'middle', wrapText: true };
   classLookup.getCell('A6').value = 'Tên lớp';
-  classLookup.getCell('B6').value = { formula: `IFERROR(XLOOKUP($B$4,'LỚP HỌC'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},'LỚP HỌC'!$C$${STUDENT_DATA_START_ROW}:$C$${STUDENT_DYNAMIC_LAST_ROW}),"")` };
+  classLookup.getCell('B6').value = { formula: `IFERROR(INDEX('LỚP HỌC'!$C$${STUDENT_DATA_START_ROW}:$C$${STUDENT_DYNAMIC_LAST_ROW},MATCH($B$4,'LỚP HỌC'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},0)),"")` };
   classLookup.getCell('D6').value = 'Giáo viên';
-  classLookup.getCell('E6').value = { formula: `IFERROR(XLOOKUP($B$4,'LỚP HỌC'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},'LỚP HỌC'!$E$${STUDENT_DATA_START_ROW}:$E$${STUDENT_DYNAMIC_LAST_ROW}),"")` };
+  classLookup.getCell('E6').value = { formula: `IFERROR(INDEX('LỚP HỌC'!$E$${STUDENT_DATA_START_ROW}:$E$${STUDENT_DYNAMIC_LAST_ROW},MATCH($B$4,'LỚP HỌC'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},0)),"")` };
   classLookup.getCell('G6').value = 'Phòng';
-  classLookup.getCell('H6').value = { formula: `IFERROR(XLOOKUP($B$4,'LỚP HỌC'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},'LỚP HỌC'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW}),"")` };
+  classLookup.getCell('H6').value = { formula: `IFERROR(INDEX('LỚP HỌC'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW},MATCH($B$4,'LỚP HỌC'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},0)),"")` };
   ['A6', 'D6', 'G6'].forEach((address) => { classLookup.getCell(address).font = { name: 'Arial', size: 10, bold: true, color: { argb: COLOR.primary } }; });
   classLookup.getCell('A8').value = 'Tổng đã thu';
   classLookup.getCell('B8').value = { formula: `${receiptSumByClassFormula('L', '$B$4')}+${directSumByClassFormula('M', '$B$4')}` };
@@ -489,21 +491,25 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   const lookupHeaders = ['STT', 'Mã học sinh', 'Họ và tên', 'SĐT học sinh', 'SĐT phụ huynh', 'Địa chỉ', 'Tổng đã thu (VNĐ)', 'Tổng nợ (VNĐ)', 'Nợ tháng (VNĐ)', 'Nợ khóa (VNĐ)', 'Xem phiếu', 'Trạng thái', 'ID hệ thống'];
   classLookup.getRow(10).values = lookupHeaders;
   styleHeader(classLookup.getRow(10));
-  const lookupFilter = `'HỌC SINH'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW}=$B$4`;
-  const lookupMasterColumn = (column: string) => `IFERROR(FILTER('HỌC SINH'!$${column}$${STUDENT_DATA_START_ROW}:$${column}$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter}),"")`;
-  const lookupStudentCodes = `FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter})`;
-  const lookupLedgerTotal = (ledgerColumn: 'L' | 'M', directColumn: 'M' | 'N') => `IFERROR(MAP(${lookupStudentCodes},${lookupMasterColumn(directColumn)},LAMBDA(studentCode,directValue,SUMIF('HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},studentCode,'HỌC PHÍ'!$${ledgerColumn}$${STUDENT_DATA_START_ROW}:$${ledgerColumn}$${STUDENT_DYNAMIC_LAST_ROW})+directValue)),"")`;
-  const lookupDebtByKind = (paymentKind: 'monthly' | 'course') => `IFERROR(MAP(${lookupStudentCodes},${lookupMasterColumn('N')},${lookupMasterColumn('O')},LAMBDA(studentCode,directDebt,directKind,SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},studentCode,'HỌC PHÍ'!$I$${STUDENT_DATA_START_ROW}:$I$${STUDENT_DYNAMIC_LAST_ROW},"Học phí ${paymentKind === 'monthly' ? 'tháng' : 'khóa'}")+IF(directKind="Học phí khóa",${paymentKind === 'course' ? 'directDebt' : '0'},${paymentKind === 'monthly' ? 'directDebt' : '0'}))),"")`;
-  const lookupDetailFormulaByColumn: Record<number, string> = {
-    1: `IFERROR(SEQUENCE(ROWS(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter}))),"")`,
-    2: lookupMasterColumn('B'), 3: lookupMasterColumn('C'), 4: lookupMasterColumn('H'), 5: lookupMasterColumn('I'), 6: lookupMasterColumn('J'),
-    7: lookupLedgerTotal('L', 'M'), 8: lookupLedgerTotal('M', 'N'), 9: lookupDebtByKind('monthly'), 10: lookupDebtByKind('course'),
-    11: `IFERROR(IF(FILTER('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},${lookupFilter})<>"","→ Học phí",""),"")`,
-    12: lookupMasterColumn('K'), 13: lookupMasterColumn('W')
-  };
-  Object.entries(lookupDetailFormulaByColumn).forEach(([column, formula]) => { classLookup.getCell(11, Number(column)).value = { formula }; });
-  [7, 8, 9, 10].forEach((column) => { classLookup.getCell(11, column).numFmt = moneyFormat; styleFormulaLink(classLookup.getCell(11, column)); });
-  classLookup.getCell(11, 11).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
+  const lookupFirstDetailRow = 11;
+  for (let rowNumber = lookupFirstDetailRow; rowNumber < lookupFirstDetailRow + CLASS_DETAIL_MAX_ROWS; rowNumber += 1) {
+    const directPaid = legacyStudentNumberFormula('M', rowNumber);
+    const directDebt = legacyStudentNumberFormula('N', rowNumber);
+    const directKind = legacyStudentFieldFormula('O', rowNumber);
+    classLookup.getCell(rowNumber, 1).value = { formula: `IF($B${rowNumber}="","",ROWS($A$${lookupFirstDetailRow}:A${rowNumber}))` };
+    classLookup.getCell(rowNumber, 2).value = { formula: legacyStudentCodeFormula('$B$4', rowNumber, lookupFirstDetailRow) };
+    [3, 4, 5, 6, 12, 13].forEach((column) => {
+      const masterColumn = ({ 3: 'C', 4: 'H', 5: 'I', 6: 'J', 12: 'K', 13: 'W' } as Record<number, string>)[column];
+      classLookup.getCell(rowNumber, column).value = { formula: legacyStudentFieldFormula(masterColumn, rowNumber) };
+    });
+    classLookup.getCell(rowNumber, 7).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$L$${STUDENT_DATA_START_ROW}:$L$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber})+${directPaid})` };
+    classLookup.getCell(rowNumber, 8).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber})+${directDebt})` };
+    classLookup.getCell(rowNumber, 9).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber},'HỌC PHÍ'!$I$${STUDENT_DATA_START_ROW}:$I$${STUDENT_DYNAMIC_LAST_ROW},"Học phí tháng")+IF(${directKind}="Học phí khóa",0,${directDebt}))` };
+    classLookup.getCell(rowNumber, 10).value = { formula: `IF($B${rowNumber}="","",SUMIFS('HỌC PHÍ'!$M$${STUDENT_DATA_START_ROW}:$M$${STUDENT_DYNAMIC_LAST_ROW},'HỌC PHÍ'!$D$${STUDENT_DATA_START_ROW}:$D$${STUDENT_DYNAMIC_LAST_ROW},$B${rowNumber},'HỌC PHÍ'!$I$${STUDENT_DATA_START_ROW}:$I$${STUDENT_DYNAMIC_LAST_ROW},"Học phí khóa")+IF(${directKind}="Học phí khóa",${directDebt},0))` };
+    classLookup.getCell(rowNumber, 11).value = { formula: `IF($B${rowNumber}="","","→ Học phí")` };
+    [7, 8, 9, 10].forEach((column) => { classLookup.getCell(rowNumber, column).numFmt = moneyFormat; styleFormulaLink(classLookup.getCell(rowNumber, column)); });
+    classLookup.getCell(rowNumber, 11).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
+  }
   classLookup.views = [{ state: 'frozen', ySplit: 10 }];
   const lookupDetailColumns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 17 }, { width: 18 }, { width: 36 }, { width: 20 }, { width: 20 }, { width: 22 }, { width: 22 }, { width: 16 }, { width: 15 }, { width: 18 }];
   lookupDetailColumns.forEach((column, index) => { classLookup.getColumn(index + 1).width = column.width; });
