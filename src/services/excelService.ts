@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { ClassRoom, CourseProgram, Grade, Room, Student, Teacher, TimetableSlot, TuitionReceipt } from '../types';
 import { paymentMethodLabel } from '../lib/tuition';
 
@@ -44,7 +45,6 @@ const moneyFormat = '#,##0 "đ"';
 // without slowing Excel down with whole-column array calculations.
 const STUDENT_DATA_START_ROW = 6;
 const STUDENT_DYNAMIC_LAST_ROW = 1000;
-const CLASS_DETAIL_MIN_ROWS = 100;
 const CLASS_DETAIL_MAX_ROWS = 300;
 const border: Partial<ExcelJS.Borders> = {
   top: { style: 'thin', color: { argb: COLOR.border } }, left: { style: 'thin', color: { argb: COLOR.border } },
@@ -152,8 +152,57 @@ const masterStudentPaymentFormulas = (rowNumber: number): ExcelJS.CellValue[] =>
   { formula: `${receiptSumByStudentIdFormula('M', `$W${rowNumber}`, 'course')}+IF($O${rowNumber}="Học phí khóa",$N${rowNumber},0)` },
 ];
 const masterStudentClassKeyFormula = (rowNumber: number) => `IF(OR($B${rowNumber}="",$G${rowNumber}=""),"",$B${rowNumber}&"|"&$G${rowNumber})`;
-const tuitionStudentIdFormula = (rowNumber: number) => `IFERROR(INDEX('HỌC SINH'!$W$${STUDENT_DATA_START_ROW}:$W$${STUDENT_DYNAMIC_LAST_ROW},MATCH($D${rowNumber}&"|"&$F${rowNumber},'HỌC SINH'!$Y$${STUDENT_DATA_START_ROW}:$Y$${STUDENT_DYNAMIC_LAST_ROW},0)),"")`;
-const masterStudentNameByIdFormula = (rowNumber: number) => `IF($C${rowNumber}="","",IFERROR(INDEX('HỌC SINH'!$C$${STUDENT_DATA_START_ROW}:$C$${STUDENT_DYNAMIC_LAST_ROW},MATCH($C${rowNumber},'HỌC SINH'!$W$${STUDENT_DATA_START_ROW}:$W$${STUDENT_DYNAMIC_LAST_ROW},0)),""))`;
+
+const macroTemplateUrl = '/excel/PhucPhucThinhSyncTemplate.xlsm';
+const macroEnabledMimeType = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+const injectMacroProject = async (workbookBuffer: ExcelJS.Buffer) => {
+  const templateResponse = await fetch(macroTemplateUrl);
+  if (!templateResponse.ok) throw new Error('Không tải được mẫu macro đồng bộ Excel.');
+  const [workbookZip, templateZip] = await Promise.all([
+    JSZip.loadAsync(workbookBuffer),
+    JSZip.loadAsync(await templateResponse.arrayBuffer())
+  ]);
+  const vbaProject = await templateZip.file('xl/vbaProject.bin')?.async('uint8array');
+  const contentTypesFile = workbookZip.file('[Content_Types].xml');
+  const workbookRelationshipsFile = workbookZip.file('xl/_rels/workbook.xml.rels');
+  const workbookFile = workbookZip.file('xl/workbook.xml');
+  if (!vbaProject || !contentTypesFile || !workbookRelationshipsFile || !workbookFile) throw new Error('Mẫu macro Excel không hợp lệ.');
+
+  let contentTypes = await contentTypesFile.async('string');
+  contentTypes = contentTypes.replace(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml',
+    'application/vnd.ms-excel.sheet.macroEnabled.main+xml'
+  );
+  if (!contentTypes.includes('/xl/vbaProject.bin')) {
+    contentTypes = contentTypes.replace('</Types>', '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/></Types>');
+  }
+
+  let workbookRelationships = await workbookRelationshipsFile.async('string');
+  if (!workbookRelationships.includes('/relationships/vbaProject')) {
+    workbookRelationships = workbookRelationships.replace(
+      '</Relationships>',
+      '<Relationship Id="rIdVbaProject" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/></Relationships>'
+    );
+  }
+
+  // vbaProject.bin binds its workbook module to this code name. Excel otherwise
+  // opens the file but cannot resolve ThisWorkbook when a macro accesses sheets.
+  let workbookXml = await workbookFile.async('string');
+  if (!/\bcodeName="ThisWorkbook"/.test(workbookXml)) {
+    if (/<workbookPr\b[^>]*\/>/.test(workbookXml)) {
+      workbookXml = workbookXml.replace(/<workbookPr\b([^>]*)\/>/, '<workbookPr$1 codeName="ThisWorkbook"/>');
+    } else if (/<workbookPr\b[^>]*>/.test(workbookXml)) {
+      workbookXml = workbookXml.replace(/<workbookPr\b([^>]*)>/, '<workbookPr$1 codeName="ThisWorkbook">');
+    } else {
+      workbookXml = workbookXml.replace(/(<workbook\b[^>]*>)/, '$1<workbookPr codeName="ThisWorkbook"/>');
+    }
+  }
+  workbookZip.file('[Content_Types].xml', contentTypes);
+  workbookZip.file('xl/_rels/workbook.xml.rels', workbookRelationships);
+  workbookZip.file('xl/workbook.xml', workbookXml);
+  workbookZip.file('xl/vbaProject.bin', vbaProject);
+  return workbookZip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+};
 
 export async function generateMasterExcelWorkbook(data: ExcelExportData): Promise<Blob> {
   const workbook = new ExcelJS.Workbook();
@@ -301,24 +350,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     if (classLink) row.getCell(7).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
     studentSheetRowById.set(student.id, rowNumber);
   });
-  // Keep ready-to-use input rows immediately above the total. Their formulas
-  // are already in place, so a student typed in HỌC SINH is picked up by the
-  // class sheets without the user having to repair/copy hidden helper cells.
-  const studentInputReserveRows = 30;
-  const studentFooterRow = 6 + data.students.length + studentInputReserveRows;
-  for (let rowNumber = 6 + data.students.length; rowNumber < studentFooterRow; rowNumber += 1) {
-    const row = studentsSheet.getRow(rowNumber);
-    row.getCell(1).value = { formula: `IF($B${rowNumber}="","",COUNTA($B$${STUDENT_DATA_START_ROW}:$B${rowNumber}))` };
-    masterStudentPaymentFormulas(rowNumber).forEach((value, index) => { row.getCell(19 + index).value = value; });
-    row.getCell(23).value = { formula: `IF($B${rowNumber}="","","EXCEL-"&$B${rowNumber}&"-"&TEXT(ROW(),"0000"))` };
-    row.getCell(24).value = { formula: `IF($G${rowNumber}="","",$G${rowNumber}&"|"&COUNTIF($G$${STUDENT_DATA_START_ROW}:$G${rowNumber},$G${rowNumber}))` };
-    row.getCell(25).value = { formula: masterStudentClassKeyFormula(rowNumber) };
-    styleData(row, rowNumber - STUDENT_DATA_START_ROW);
-    [13, 14, 19, 20, 21, 22].forEach((column) => { row.getCell(column).numFmt = moneyFormat; });
-    [19, 20, 21, 22].forEach((column) => styleFormulaLink(row.getCell(column)));
-    [13, 14, 15, 16, 17, 18].forEach((column) => { row.getCell(column).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3C7' } }; });
-    row.getCell(17).numFmt = 'dd/mm/yyyy';
-  }
+  const studentFooterRow = 6 + data.students.length;
   writeFooter(studentsSheet, studentFooterRow, studentHeaders.length, { 3: `COUNTA(B${STUDENT_DATA_START_ROW}:B${studentFooterRow - 1})`, 19: `SUM(S${STUDENT_DATA_START_ROW}:S${studentFooterRow - 1})`, 20: `SUM(T${STUDENT_DATA_START_ROW}:T${studentFooterRow - 1})`, 21: `SUM(U${STUDENT_DATA_START_ROW}:U${studentFooterRow - 1})`, 22: `SUM(V${STUDENT_DATA_START_ROW}:V${studentFooterRow - 1})` });
   [19, 20, 21, 22].forEach((column) => { studentsSheet.getCell(studentFooterRow, column).numFmt = moneyFormat; });
   studentsSheet.autoFilter = { from: 'A5', to: `Y${studentFooterRow - 1}` };
@@ -372,26 +404,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     row.getCell(15).numFmt = 'dd/mm/yyyy';
     [18, 19].forEach((column) => { row.getCell(column).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true }; });
   });
-  // Keep receipt input rows ready so the hidden ID is filled from Mã học sinh
-  // + Mã lớp. This makes a manually entered receipt update the right student,
-  // class sheet and all totals without any ID copy/paste.
-  const tuitionInputReserveRows = 30;
-  const tuitionFooterRow = 6 + orderedReceipts.length + tuitionInputReserveRows;
-  for (let rowNumber = 6 + orderedReceipts.length; rowNumber < tuitionFooterRow; rowNumber += 1) {
-    const row = tuitionSheet.getRow(rowNumber);
-    row.getCell(1).value = { formula: `IF($B${rowNumber}="","",COUNTA($B$${STUDENT_DATA_START_ROW}:$B${rowNumber}))` };
-    row.getCell(3).value = { formula: tuitionStudentIdFormula(rowNumber) };
-    row.getCell(5).value = { formula: masterStudentNameByIdFormula(rowNumber) };
-    row.getCell(14).value = { formula: `IF($D${rowNumber}="","",IF($C${rowNumber}="","Không tìm thấy học sinh",IF($M${rowNumber}>0,"Đóng thiếu",IF($L${rowNumber}>0,"Đã đóng đủ","Chưa đóng"))))` };
-    row.getCell(15).value = { formula: `IF($D${rowNumber}="","",TODAY())` };
-    styleData(row, rowNumber - STUDENT_DATA_START_ROW);
-    [7, 8, 11, 12, 13].forEach((column) => { row.getCell(column).numFmt = moneyFormat; });
-    row.getCell(10).numFmt = 'mm/yyyy';
-    row.getCell(15).numFmt = 'dd/mm/yyyy';
-    [2, 4, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17].forEach((column) => {
-      row.getCell(column).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3C7' } };
-    });
-  }
+  const tuitionFooterRow = 6 + orderedReceipts.length;
   writeFooter(tuitionSheet, tuitionFooterRow, tuitionHeaders.length, { 12: `SUM(L6:L${tuitionFooterRow - 1})+SUM('HỌC SINH'!$M:$M)`, 13: `SUM(M6:M${tuitionFooterRow - 1})+SUM('HỌC SINH'!$N:$N)` });
   tuitionSheet.getCell(tuitionFooterRow, 12).numFmt = moneyFormat;
   tuitionSheet.getCell(tuitionFooterRow, 13).numFmt = moneyFormat;
@@ -411,29 +424,17 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   gradesSheet.getRow(5).values = gradeHeaders;
   styleHeader(gradesSheet.getRow(5));
   const gradeByStudentId = new Map(data.grades.map((grade) => [grade.studentId, grade]));
-  const gradeDataRows = STUDENT_DYNAMIC_LAST_ROW - STUDENT_DATA_START_ROW + 1;
-  for (let index = 0; index < gradeDataRows; index += 1) {
+  data.students.forEach((student, index) => {
     const rowNumber = STUDENT_DATA_START_ROW + index;
-    const student = data.students[index];
-    const grade = student ? gradeByStudentId.get(student.id) : undefined;
+    const grade = gradeByStudentId.get(student.id);
     const row = gradesSheet.getRow(rowNumber);
-    if (student) {
-      const scores = [grade?.listening, grade?.speaking, grade?.reading, grade?.writing].filter((score): score is number => typeof score === 'number');
-      const average = grade ? (Number.isFinite(grade.average) ? grade.average : (scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null)) : null;
-      const classification = average === null ? '' : (average >= 8 ? 'Giỏi' : (average >= 6.5 ? 'Khá' : (average >= 5 ? 'Trung bình' : 'Cần hỗ trợ')));
-      row.values = [index + 1, student.code, student.name, classById.get(student.classId)?.code || '', grade?.listening ?? '', grade?.speaking ?? '', grade?.reading ?? '', grade?.writing ?? '', average ?? '', classification];
-      styleData(row, index);
-      continue;
-    }
-    row.getCell(1).value = { formula: `IF(B${rowNumber}="","",ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber}))` };
-    row.getCell(2).value = { formula: `IFERROR(INDEX('HỌC SINH'!$B$${STUDENT_DATA_START_ROW}:$B$${STUDENT_DYNAMIC_LAST_ROW},ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber})),"")` };
-    row.getCell(3).value = { formula: `IFERROR(INDEX('HỌC SINH'!$C$${STUDENT_DATA_START_ROW}:$C$${STUDENT_DYNAMIC_LAST_ROW},ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber})),"")` };
-    row.getCell(4).value = { formula: `IFERROR(INDEX('HỌC SINH'!$G$${STUDENT_DATA_START_ROW}:$G$${STUDENT_DYNAMIC_LAST_ROW},ROWS($A$${STUDENT_DATA_START_ROW}:A${rowNumber})),"")` };
-    [5, 6, 7, 8].forEach((column) => { row.getCell(column).value = ''; });
-    row.getCell(9).value = { formula: `IF(B${rowNumber}="","",IF(COUNT(E${rowNumber}:H${rowNumber})=0,"",AVERAGE(E${rowNumber}:H${rowNumber})))` };
-    row.getCell(10).value = { formula: `IF(I${rowNumber}="","",IF(I${rowNumber}>=8,"Giỏi",IF(I${rowNumber}>=6.5,"Khá",IF(I${rowNumber}>=5,"Trung bình","Cần hỗ trợ"))))` };
-  }
-  const gradesFooterRow = STUDENT_DATA_START_ROW + gradeDataRows;
+    const scores = [grade?.listening, grade?.speaking, grade?.reading, grade?.writing].filter((score): score is number => typeof score === 'number');
+    const average = grade ? (Number.isFinite(grade.average) ? grade.average : (scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : null)) : null;
+    const classification = average === null ? '' : (average >= 8 ? 'Giỏi' : (average >= 6.5 ? 'Khá' : (average >= 5 ? 'Trung bình' : 'Cần hỗ trợ')));
+    row.values = [index + 1, student.code, student.name, classById.get(student.classId)?.code || '', grade?.listening ?? '', grade?.speaking ?? '', grade?.reading ?? '', grade?.writing ?? '', average ?? '', classification];
+    styleData(row, index);
+  });
+  const gradesFooterRow = STUDENT_DATA_START_ROW + data.students.length;
   writeFooter(gradesSheet, gradesFooterRow, gradeHeaders.length, { 9: `IFERROR(AVERAGE(I${STUDENT_DATA_START_ROW}:I${gradesFooterRow - 1}),0)` });
   gradesSheet.autoFilter = { from: 'A5', to: `J${gradesFooterRow - 1}` };
   gradesSheet.views = [{ state: 'frozen', ySplit: 5 }];
@@ -500,8 +501,6 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     styleHeader(sheet.getRow(11));
     const firstDetailRow = 12;
     const classStudents = data.students.filter((student) => student.classId === classroom.id);
-    const detailRowCount = Math.min(CLASS_DETAIL_MAX_ROWS, Math.max(CLASS_DETAIL_MIN_ROWS, classStudents.length + 30));
-    const classCriterionForDetails = `"${formulaText(classroom.code)}"`;
     const writeFinancialFormulas = (rowNumber: number, directPaid: string, directDebt: string, directMonthlyDebt: string, directCourseDebt: string) => {
       const studentId = `$M${rowNumber}`;
       sheet.getCell(rowNumber, 7).value = { formula: `IF($B${rowNumber}="","",${receiptSumByStudentIdFormula('L', studentId)}+${directPaid})` };
@@ -524,19 +523,6 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
       );
       sheet.getCell(rowNumber, 11).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
     });
-    for (let rowNumber = firstDetailRow + classStudents.length; rowNumber < firstDetailRow + detailRowCount; rowNumber += 1) {
-      const directPaid = masterStudentNumberAtClassPositionFormula('M', classCriterionForDetails, rowNumber, firstDetailRow);
-      const directDebt = masterStudentNumberAtClassPositionFormula('N', classCriterionForDetails, rowNumber, firstDetailRow);
-      const directKind = masterStudentFieldAtClassPositionFormula('O', classCriterionForDetails, rowNumber, firstDetailRow);
-      sheet.getCell(rowNumber, 1).value = { formula: `IF($B${rowNumber}="","",ROWS($A$${firstDetailRow}:A${rowNumber}))` };
-      [2, 3, 4, 5, 6, 12, 13].forEach((column) => {
-        const masterColumn = ({ 2: 'B', 3: 'C', 4: 'H', 5: 'I', 6: 'J', 12: 'K', 13: 'W' } as Record<number, string>)[column];
-        sheet.getCell(rowNumber, column).value = { formula: masterStudentFieldAtClassPositionFormula(masterColumn, classCriterionForDetails, rowNumber, firstDetailRow) };
-      });
-      writeFinancialFormulas(rowNumber, directPaid, directDebt, `IF(${directKind}="Học phí khóa",0,${directDebt})`, `IF(${directKind}="Học phí khóa",${directDebt},0)`);
-      sheet.getCell(rowNumber, 11).value = { formula: `IF($B${rowNumber}="","","→ Học phí")` };
-      sheet.getCell(rowNumber, 11).font = { name: 'Arial', size: 10, color: { argb: COLOR.link }, underline: true, bold: true };
-    }
     sheet.views = [{ state: 'frozen', ySplit: 11 }];
     sheet.columns = [{ width: 14 }, ...months.map(() => ({ width: 18 })), ...Array.from({ length: Math.max(0, 11 - (months.length + 1)) }, () => ({ width: 18 }))];
     const detailColumns = [{ width: 8 }, { width: 16 }, { width: 28 }, { width: 17 }, { width: 18 }, { width: 36 }, { width: 20 }, { width: 20 }, { width: 22 }, { width: 22 }, { width: 16 }, { width: 15 }, { width: 18 }];
@@ -604,12 +590,12 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   const guide = workbook.addWorksheet('HƯỚNG DẪN');
   styleTitle(guide, 'A1:H2', `${data.centerName.toUpperCase()}\nHƯỚNG DẪN NHẬP VÀ CÔNG THỨC EXCEL`);
   const guideRows = [
-    ['1. Nhập học sinh', 'Có sẵn 30 dòng trống ngay phía trên “TỔNG CỘNG” ở sheet HỌC SINH. Nhập tối thiểu Mã học sinh, Họ và tên, Mã lớp vào các dòng này; không xóa cột ID hệ thống hoặc Khóa lớp tự động. Mã lớp phải trùng chính xác với mã ở sheet LỚP HỌC.'],
+    ['1. Nhập học sinh', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC SINH, rồi nhập tối thiểu Mã học sinh, Họ và tên, Mã lớp. Macro tự tạo ID, cập nhật lớp, bảng điểm và mọi hàng tổng; không có giới hạn dòng.'],
     ['2. Thu trực tiếp cùng học sinh', 'Nếu thu ngay khi thêm học sinh, nhập số tiền ở cột “Đã thu nhập trực tiếp”; có thể điền thêm Còn nợ, Khoản thu, Kỳ/Mốc khóa, Ngày thu và Hình thức. Các sheet lớp, TỔNG QUAN và tổng HỌC PHÍ tự cập nhật.'],
-    ['3. Nhập phiếu thu chi tiết', 'Có sẵn 30 dòng trống ngay phía trên “TỔNG CỘNG” ở sheet HỌC PHÍ. Nhập Mã phiếu, Mã học sinh, Mã lớp, khoản thu, kỳ học phí, đã thu và công nợ; ID hệ thống và Họ tên tự tìm. Nếu hiện “Không tìm thấy học sinh”, hãy thêm học sinh ở HỌC SINH trước.'],
+    ['3. Nhập phiếu thu chi tiết', 'Chèn một dòng ngay phía trên “TỔNG CỘNG” ở sheet HỌC PHÍ. Nhập Mã phiếu, Mã học sinh, Mã lớp, khoản thu, kỳ học phí, đã thu và công nợ; macro tự tìm ID/Họ tên và cập nhật học sinh, lớp cùng các tổng.'],
     ['4. Công thức tổng thu tháng/lớp', "=SUMIFS('HỌC PHÍ'!$L:$L,'HỌC PHÍ'!$F:$F,$A15,'HỌC PHÍ'!$O:$O,\">=\"&D$14,'HỌC PHÍ'!$O:$O,\"<\"&EDATE(D$14,1))+SUMIFS('HỌC SINH'!$M:$M,'HỌC SINH'!$G:$G,$A15,'HỌC SINH'!$Q:$Q,\">=\"&D$14,'HỌC SINH'!$Q:$Q,\"<\"&EDATE(D$14,1))"],
     ['5. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
-    ['6. Cách hoạt động', 'Học sinh có sẵn được ghi trực tiếp vào từng sheet Lớp để mở bằng Excel/WPS luôn thấy dữ liệu. Các dòng học sinh mới ở vùng trống HỌC SINH được liên kết theo Mã lớp; tổng tiền/công nợ đối chiếu bằng ID hệ thống. Không nhập trùng học sinh vào sheet lớp.'],
+    ['6. Đồng bộ tự động', 'Đây là file .XLSM. Khi mở file, bấm Enable Macros. Sau khoảng vài giây kể từ khi thêm/sửa/xóa ở HỌC SINH hoặc HỌC PHÍ, hệ thống tự xây lại sheet Lớp, BẢNG ĐIỂM, công nợ và hàng tổng. Không nhập trùng học sinh vào sheet lớp.'],
     ['7. Đồng bộ về web', 'Khi nhập lại tệp vào website, các khoản “nhập trực tiếp” tại HỌC SINH được tạo thành phiếu thu tự động; các khoản đã có trong HỌC PHÍ vẫn được giữ nguyên.'],
     ['8. Lưu ý dữ liệu nguồn', 'Nguồn: PhucPhucThinh_BaoCaoToanHeThong_2026-08-10 (1).xlsx. Các trường thiếu được để trống. Cột T7 lặp lại ở Jolly sp4 được ghi chú và chuẩn hoá thành kỳ T8/2026. Tiền sách được lưu trong ghi chú, không cộng vào học phí.']
   ];
@@ -622,8 +608,8 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   guide.columns = [{ width: 28 }, { width: 120 }];
   guide.getColumn(2).alignment = { wrapText: true, vertical: 'top' };
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const macroBuffer = await injectMacroProject(await workbook.xlsx.writeBuffer());
+  return new Blob([macroBuffer], { type: macroEnabledMimeType });
 }
 
 const normaliseHeader = (value: unknown) => String(value ?? '').replace(/[Đđ]/g, 'd').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('vi-VN').replace(/[^a-z0-9]/g, '');

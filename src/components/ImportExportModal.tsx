@@ -71,7 +71,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const filename = `PhucPhucThinh_MasterReport_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const filename = `PhucPhucThinh_MasterReport_${new Date().toISOString().split('T')[0]}.xlsm`;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
@@ -119,7 +119,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setCenterImport(null);
     } catch (error) {
       console.error(error);
-      setValidationResult({ validRows: [], errors: [{ row: 0, field: 'Tệp Excel', message: 'Không thể đọc tệp. Vui lòng dùng tệp .xlsx hợp lệ.' }] });
+      setValidationResult({ validRows: [], errors: [{ row: 0, field: 'Tệp Excel', message: 'Không thể đọc tệp. Vui lòng dùng tệp .xlsx hoặc .xlsm hợp lệ.' }] });
     }
   };
 
@@ -255,13 +255,13 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   aria-label="Chọn hoặc kéo thả tệp Excel để nhập"
                 >
                   <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <div className="font-bold text-slate-800">Bấm để chọn hoặc kéo thả tệp Excel (.xlsx)</div>
+                  <div className="font-bold text-slate-800">Bấm để chọn hoặc kéo thả tệp Excel (.xlsx / .xlsm)</div>
                   <div className="mt-1 text-[11px] text-slate-500">Hệ thống kiểm tra dữ liệu trước khi lưu; có thể chọn lại cùng một tệp.</div>
                   <div className="mt-3 inline-flex rounded-lg bg-red-800 px-3 py-2 text-xs font-bold text-white">Chọn tệp Excel</div>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
                     onChange={handleFileUpload}
                     className="sr-only"
                   />

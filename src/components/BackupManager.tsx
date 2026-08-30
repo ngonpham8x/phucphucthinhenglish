@@ -129,7 +129,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
         grades
       });
 
-      const fileName = `PhucPhucThinh_BaoCaoToanHeThong_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `PhucPhucThinh_BaoCaoToanHeThong_${new Date().toISOString().split('T')[0]}.xlsm`;
       downloadBlob(blob, fileName);
       onBackupCreated?.(makeBackupRecord(fileName, blob.size));
 
