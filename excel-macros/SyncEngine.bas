@@ -56,6 +56,7 @@ Public Sub SyncAll()
     NormalizeStudents
     syncStage = "HOC PHI"
     NormalizeTuition
+    RecalculateTuitionBalances
     syncStage = "danh sach lop"
     RebuildClassRosters
     syncStage = "BANG DIEM"
@@ -116,6 +117,7 @@ Private Sub NormalizeStudents()
                 ws.Cells(rowNumber, 25).ClearContents
             End If
 
+            ws.Cells(rowNumber, 26).Formula = "=TRIM(LEFT(G" & rowNumber & ",FIND("","",G" & rowNumber & "&"","" )-1))"
             ws.Cells(rowNumber, 1).Value = Application.WorksheetFunction.CountA(ws.Range("B" & FIRST_DATA_ROW & ":B" & rowNumber))
             ws.Cells(rowNumber, 19).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$L:$L," & SheetReference(TuitionSheetName()) & "$C:$C,$W" & rowNumber & ")+$M" & rowNumber
             ws.Cells(rowNumber, 20).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$W" & rowNumber & ")+$N" & rowNumber
@@ -227,7 +229,7 @@ Private Sub RebuildOneClass(ByVal detailSheet As Worksheet, ByVal classCode As S
     detailRow = 12
     classCount = 0
     For sourceRow = FIRST_DATA_ROW To lastSourceRow
-        If Trim$(CStr(sourceSheet.Cells(sourceRow, 2).Value)) <> vbNullString And Trim$(CStr(sourceSheet.Cells(sourceRow, 7).Value)) = classCode Then
+        If Trim$(CStr(sourceSheet.Cells(sourceRow, 2).Value)) <> vbNullString And HasClassCode(CStr(sourceSheet.Cells(sourceRow, 7).Value), classCode) Then
             If detailRow > 12 Then CopyDetailFormat detailSheet, 12, detailRow, 13
             classCount = classCount + 1
             detailSheet.Cells(detailRow, 1).Value = classCount
@@ -238,10 +240,10 @@ Private Sub RebuildOneClass(ByVal detailSheet As Worksheet, ByVal classCode As S
             detailSheet.Cells(detailRow, 6).Value = sourceSheet.Cells(sourceRow, 10).Value
             detailSheet.Cells(detailRow, 12).Value = sourceSheet.Cells(sourceRow, 11).Value
             detailSheet.Cells(detailRow, 13).Value = sourceSheet.Cells(sourceRow, 23).Value
-            detailSheet.Cells(detailRow, 7).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$L:$L," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & ")+SUMIFS(" & SheetReference(StudentSheetName()) & "$M:$M," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & ")"
-            detailSheet.Cells(detailRow, 8).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & ")+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & ")"
-            detailSheet.Cells(detailRow, 9).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$I:$I,""" & MonthlyTuitionLabel() & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$O:$O,""<>" & CourseTuitionLabel() & """)"
-            detailSheet.Cells(detailRow, 10).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$I:$I,""" & CourseTuitionLabel() & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$O:$O,""" & CourseTuitionLabel() & """)"
+            detailSheet.Cells(detailRow, 7).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$L:$L," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$M:$M," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """)"
+            detailSheet.Cells(detailRow, 8).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """)"
+            detailSheet.Cells(detailRow, 9).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """," & SheetReference(TuitionSheetName()) & "$I:$I,""" & MonthlyTuitionLabel() & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """," & SheetReference(StudentSheetName()) & "$O:$O,""<>" & CourseTuitionLabel() & """)"
+            detailSheet.Cells(detailRow, 10).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """," & SheetReference(TuitionSheetName()) & "$I:$I,""" & CourseTuitionLabel() & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """," & SheetReference(StudentSheetName()) & "$O:$O,""" & CourseTuitionLabel() & """)"
             detailSheet.Hyperlinks.Add Anchor:=detailSheet.Cells(detailRow, 11), Address:="", SubAddress:=SheetReference(TuitionSheetName()) & "A1", TextToDisplay:="Hoc phi"
             detailRow = detailRow + 1
         End If
@@ -267,6 +269,7 @@ Private Sub RebuildGrades()
     Dim savedCount As Long
     Dim savedIndex As Long
     Dim matchedSavedGrade As Long
+    Dim enrolledClass As Variant
 
     Set gradeSheet = ThisWorkbook.Worksheets.Item(GradesSheetName())
     Set studentSheet = ThisWorkbook.Worksheets.Item(StudentSheetName())
@@ -302,11 +305,12 @@ Private Sub RebuildGrades()
     gradeRow = FIRST_DATA_ROW
     For sourceRow = FIRST_DATA_ROW To lastStudentRow
         If Trim$(CStr(studentSheet.Cells(sourceRow, 2).Value)) <> vbNullString Then
+            For Each enrolledClass In Split(Replace(CStr(studentSheet.Cells(sourceRow, 7).Value), ", ", ","), ",")
             If gradeRow > FIRST_DATA_ROW Then CopyDetailFormat gradeSheet, FIRST_DATA_ROW, gradeRow, 13
             gradeSheet.Cells(gradeRow, 1).Value = gradeRow - FIRST_DATA_ROW + 1
             gradeSheet.Cells(gradeRow, 2).Value = studentSheet.Cells(sourceRow, 2).Value
             gradeSheet.Cells(gradeRow, 3).Value = studentSheet.Cells(sourceRow, 3).Value
-            gradeSheet.Cells(gradeRow, 4).Value = studentSheet.Cells(sourceRow, 7).Value
+            gradeSheet.Cells(gradeRow, 4).Value = Trim$(CStr(enrolledClass))
             matchedSavedGrade = 0
             For savedIndex = 1 To savedCount
                 If savedCodes(savedIndex) = Trim$(CStr(gradeSheet.Cells(gradeRow, 2).Value)) And savedClasses(savedIndex) = Trim$(CStr(gradeSheet.Cells(gradeRow, 4).Value)) Then
@@ -326,6 +330,7 @@ Private Sub RebuildGrades()
             gradeSheet.Cells(gradeRow, 12).Formula = "=IF(COUNT(E" & gradeRow & ":K" & gradeRow & ")=0,"""",ROUND((AVERAGE(E" & gradeRow & ":H" & gradeRow & ")*0.4)+(I" & gradeRow & "*0.2)+(J" & gradeRow & "*0.3)+(K" & gradeRow & "*0.1),1))"
             gradeSheet.Cells(gradeRow, 13).Formula = "=IF(L" & gradeRow & "="""","""",IF(L" & gradeRow & ">=8,""" & ExcellentGradeLabel() & """,IF(L" & gradeRow & ">=6.5,""" & GoodGradeLabel() & """,IF(L" & gradeRow & ">=5,""" & AverageGradeLabel() & """,""" & NeedsSupportGradeLabel() & """))))"
             gradeRow = gradeRow + 1
+            Next enrolledClass
         End If
     Next sourceRow
 
@@ -358,7 +363,7 @@ Private Function FindStudentRow(ByVal studentSheet As Worksheet, ByVal studentCo
 
     lastRow = LastDataRow(studentSheet, 2, FIRST_DATA_ROW)
     For rowNumber = FIRST_DATA_ROW To lastRow
-        If Trim$(CStr(studentSheet.Cells(rowNumber, 2).Value)) = studentCode And Trim$(CStr(studentSheet.Cells(rowNumber, 7).Value)) = classCode Then
+        If Trim$(CStr(studentSheet.Cells(rowNumber, 2).Value)) = studentCode And HasClassCode(CStr(studentSheet.Cells(rowNumber, 7).Value), classCode) Then
             FindStudentRow = rowNumber
             Exit Function
         End If
@@ -538,3 +543,58 @@ End Function
 Private Function SheetReference(ByVal sheetName As String) As String
     SheetReference = "'" & Replace(sheetName, "'", "''") & "'!"
 End Function
+
+Private Function HasClassCode(ByVal codes As String, ByVal classCode As String) As Boolean
+    Dim entry As Variant
+    codes = Replace(Replace(Replace(codes, ";", ","), "/", ","), "|", ",")
+    For Each entry In Split(codes, ",")
+        If StrComp(Trim$(CStr(entry)), Trim$(classCode), vbTextCompare) = 0 Then
+            HasClassCode = True
+            Exit Function
+        End If
+    Next entry
+End Function
+
+Private Sub RecalculateTuitionBalances()
+    Dim ws As Worksheet, groups As Object, key As Variant, info As Variant
+    Dim r As Long, lastRow As Long, fee As Double, groupKey As String, latestDate As Double
+    Set ws = ThisWorkbook.Worksheets.Item(TuitionSheetName())
+    Set groups = CreateObject("Scripting.Dictionary")
+    lastRow = LastDataRow(ws, 2, FIRST_DATA_ROW)
+    For r = FIRST_DATA_ROW To lastRow
+        If Len(CStr(ws.Cells(r, 3).Value)) > 0 Then
+            groupKey = CStr(ws.Cells(r, 3).Value) & Chr$(30) & CStr(ws.Cells(r, 6).Value) & Chr$(30) & CStr(ws.Cells(r, 9).Value) & Chr$(30) & LCase$(Trim$(CStr(ws.Cells(r, 10).Value)))
+            fee = Val(ws.Cells(r, 8).Value)
+            If CStr(ws.Cells(r, 9).Value) = CourseTuitionLabel() Then fee = Val(ws.Cells(r, 7).Value)
+            If Not groups.Exists(groupKey) Then groups.Add groupKey, Array(0#, 0#, 0#, r, 0#)
+            info = groups(groupKey)
+            info(0) = Application.Max(info(0), fee)
+            info(1) = Application.Max(info(1), Val(ws.Cells(r, 11).Value))
+            info(2) = info(2) + Val(ws.Cells(r, 12).Value)
+            latestDate = 0
+            If IsDate(ws.Cells(r, 15).Value) Then latestDate = CDbl(CDate(ws.Cells(r, 15).Value))
+            If latestDate >= info(4) Then
+                info(3) = r
+                info(4) = latestDate
+            End If
+            groups(groupKey) = info
+        End If
+    Next r
+    For r = FIRST_DATA_ROW To lastRow
+        If Len(CStr(ws.Cells(r, 3).Value)) > 0 Then
+            groupKey = CStr(ws.Cells(r, 3).Value) & Chr$(30) & CStr(ws.Cells(r, 6).Value) & Chr$(30) & CStr(ws.Cells(r, 9).Value) & Chr$(30) & LCase$(Trim$(CStr(ws.Cells(r, 10).Value)))
+            info = groups(groupKey)
+            If info(0) > 0 Then
+                ws.Cells(r, 13).Value = 0
+                If r = info(3) Then ws.Cells(r, 13).Value = Application.Max(info(0) - info(1) - info(2), 0)
+            End If
+            If Val(ws.Cells(r, 13).Value) > 0 Then
+                ws.Cells(r, 14).Value = UnderpaidStatus()
+            ElseIf Val(ws.Cells(r, 12).Value) > 0 Then
+                ws.Cells(r, 14).Value = PaidStatus()
+            Else
+                ws.Cells(r, 14).Value = UnpaidStatus()
+            End If
+        End If
+    Next r
+End Sub

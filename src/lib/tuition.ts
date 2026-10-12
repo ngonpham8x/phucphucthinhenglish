@@ -98,3 +98,30 @@ export const feeStatusForReceipts = (receipts: TuitionReceipt[]): FeeStatus => {
   if (debt > 0) return paid > 0 ? 'partial' : 'debt';
   return paid > 0 ? 'paid' : 'unpaid';
 };
+
+// Recompute outstanding balances after every change, including deleting a final
+// installment. Historical amounts and collection dates remain unchanged.
+export const reconcileReceiptBalances = (receipts: TuitionReceipt[]): TuitionReceipt[] => {
+  const groups = new Map<string, TuitionReceipt[]>();
+  receipts.forEach(receipt => {
+    const period = (receipt.billingPeriod || receipt.paymentDate.slice(0, 7)).trim().toLowerCase();
+    const key = JSON.stringify([receipt.studentId, receipt.classId, paymentKindOf(receipt), period]);
+    const group = groups.get(key) || [];
+    group.push(receipt);
+    groups.set(key, group);
+  });
+  const balances = new Map<string, number>();
+  groups.forEach(group => {
+    const fee = Math.max(...group.map(r => paymentKindOf(r) === 'course' ? r.courseFee || 0 : r.monthlyFee || 0));
+    if (fee <= 0) return;
+    const due = Math.max(fee - Math.max(...group.map(r => r.discount || 0)), 0);
+    const paid = group.reduce((sum, r) => sum + Math.max(r.paidAmount || 0, 0), 0);
+    const latest = [...group].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate) || b.id.localeCompare(a.id))[0];
+    group.forEach(r => balances.set(r.id, r.id === latest.id ? Math.max(due - paid, 0) : 0));
+  });
+  return receipts.map(receipt => {
+    const debtAmount = balances.get(receipt.id) ?? receipt.debtAmount;
+    const status: FeeStatus = debtAmount > 0 ? (receipt.paidAmount > 0 ? 'partial' : 'debt') : (receipt.paidAmount > 0 ? 'paid' : 'unpaid');
+    return { ...receipt, debtAmount, status };
+  });
+};

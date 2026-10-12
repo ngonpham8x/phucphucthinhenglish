@@ -50,7 +50,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { UserManagementModal } from './components/UserManagementModal';
 import { profileToAccount, ProfileRow } from './lib/auth';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { feeStatusForReceipts } from './lib/tuition';
+import { feeStatusForReceipts, reconcileReceiptBalances } from './lib/tuition';
 import { isStudentInClass } from './lib/student';
 import type { CenterWorkbookData } from './services/excelService';
 import { ShieldCheck } from 'lucide-react';
@@ -170,7 +170,7 @@ const normaliseReceipt = (receipt: TuitionReceipt): TuitionReceipt => {
   };
 };
 
-const normaliseReceipts = (receipts: TuitionReceipt[]) => receipts.map(normaliseReceipt);
+const normaliseReceipts = (receipts: TuitionReceipt[]) => reconcileReceiptBalances(receipts.map(normaliseReceipt));
 
 const sameIdList = (left: string[], right: string[]) => (
   left.length === right.length && left.every((id, index) => id === right[index])
@@ -440,7 +440,7 @@ export default function App() {
           if (Array.isArray(payload.rooms)) setRooms(payload.rooms);
           const normalizedReceipts = Array.isArray(payload.receipts) ? normaliseReceipts(payload.receipts) : [];
           const hydratedStudents = Array.isArray(payload.students)
-            ? payload.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }))
+            ? reconcileStudentExtraClasses(payload.students, payload.classes || []).map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }))
             : [];
           const hydratedClasses = Array.isArray(payload.classes)
             ? reconcileClassStudentIds(payload.classes, hydratedStudents)
@@ -617,7 +617,7 @@ export default function App() {
 
   const handleImportCenterData = (data: CenterWorkbookData) => {
     const normalizedReceipts = normaliseReceipts(data.receipts);
-    const importedStudents = data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
+    const importedStudents = reconcileStudentExtraClasses(data.students, data.classes).map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
     const importedClasses = reconcileClassStudentIds(data.classes, importedStudents);
     setPrograms(data.programs);
     setTeachers(reconcileTeacherAssignments(data.teachers, importedClasses));
@@ -820,26 +820,20 @@ export default function App() {
   // Tuition Handler
   const handleAddReceipt = (r: TuitionReceipt) => {
     const normalized = normaliseReceipt(r);
-    const nextReceipts = [normalized, ...receipts];
-    setReceipts(nextReceipts);
-    setStudents(prev => prev.map(s => s.id === r.studentId ? { ...s, feeStatus: feeStatusFromReceipts(s.id, nextReceipts) } : s));
+    setReceipts(previous => reconcileReceiptBalances([normalized, ...previous]));
     addLog('THÊM', 'Học phí', `Lập phiếu thu ${r.code} số tiền ${r.paidAmount.toLocaleString('vi-VN')} đ`);
   };
 
   const handleUpdateReceipt = (updatedReceipt: TuitionReceipt) => {
     const normalized = normaliseReceipt(updatedReceipt);
-    const nextReceipts = receipts.map((receipt) => receipt.id === updatedReceipt.id ? normalized : receipt);
-    setReceipts(nextReceipts);
-    setStudents(prev => prev.map(s => s.id === updatedReceipt.studentId ? { ...s, feeStatus: feeStatusFromReceipts(s.id, nextReceipts) } : s));
+    setReceipts(previous => reconcileReceiptBalances(previous.map((receipt) => receipt.id === updatedReceipt.id ? normalized : receipt)));
     addLog('SỬA', 'Học phí', `Cập nhật phiếu thu ${updatedReceipt.code} (${updatedReceipt.paymentKind === 'course' ? 'học phí khóa' : 'học phí tháng'})`);
   };
 
   const handleDeleteReceipt = (id: string) => {
     const receipt = receipts.find((item) => item.id === id);
-    const nextReceipts = receipts.filter((item) => item.id !== id);
-    setReceipts(nextReceipts);
+    setReceipts(previous => reconcileReceiptBalances(previous.filter((item) => item.id !== id)));
     if (receipt) {
-      setStudents(prev => prev.map(s => s.id === receipt.studentId ? { ...s, feeStatus: feeStatusFromReceipts(s.id, nextReceipts) } : s));
       addLog('XÓA', 'Học phí', `Xóa phiếu thu ${receipt.code} (${receipt.paymentKind === 'course' ? 'học phí khóa' : 'học phí tháng'})`);
     }
   };
@@ -851,7 +845,7 @@ export default function App() {
 
   const handleRestoreBackup = (data: CenterBackupData, filename: string) => {
     const normalizedReceipts = normaliseReceipts(data.receipts);
-    const restoredStudents = data.students.map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
+    const restoredStudents = reconcileStudentExtraClasses(data.students, data.classes).map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
     const restoredClasses = reconcileClassStudentIds(data.classes, restoredStudents);
     setSettings(data.settings);
     setPrograms(data.programs);

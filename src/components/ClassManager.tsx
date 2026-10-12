@@ -393,8 +393,8 @@ export const ClassManager: React.FC<ClassManagerProps> = ({
                 }
                 return viewingStudents.map((st, idx) => {
                   const studentClassReceipts = receipts.filter(r => r.studentId === st.id && (r.classId === viewingClassStudents.id || !r.classId));
-                  const debt = debtBreakdown(studentClassReceipts.length > 0 ? studentClassReceipts : receipts.filter(r => r.studentId === st.id));
-                  const hasReceipt = (studentClassReceipts.length > 0 ? studentClassReceipts : receipts.filter(r => r.studentId === st.id)).length > 0;
+                  const debt = debtBreakdown(studentClassReceipts);
+                  const hasReceipt = studentClassReceipts.length > 0;
                   const isExtraClass = st.classId !== viewingClassStudents.id;
 
                   return (

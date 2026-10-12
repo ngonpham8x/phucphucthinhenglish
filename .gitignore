@@ -10,3 +10,6 @@ coverage/
 *DaChuanHoa.xlsx
 
 .vercel
+
+# Generated local regression fixtures and review scripts.
+.review/

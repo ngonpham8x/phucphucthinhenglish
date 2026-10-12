@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "tsx tests/tuition-regression.test.ts && tsx tests/excel-sync.test.ts",
+    "test:excel": "powershell -NoProfile -File tests/native-excel-sync.ps1"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

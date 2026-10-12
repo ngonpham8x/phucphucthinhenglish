@@ -98,7 +98,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const canDelete = isOwner || permissions.tuition.delete;
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
-  const totalDebt = receipts.reduce((sum, r) => sum + r.debtAmount, 0);
+  const totalDebt = debtBreakdown(receipts).total;
   const monthlyCollected = receipts.filter((receipt) => receipt.paymentKind !== 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0);
   const courseCollected = receipts.filter((receipt) => receipt.paymentKind === 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0);
   const receiptMonths: string[] = [...new Set<string>(receipts.map((receipt) => receipt.paymentDate.slice(0, 7)).filter(Boolean))].sort().reverse();
@@ -115,7 +115,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
         const matchesQuery = !normalizedQuery || [receipt.code, student?.code, student?.name, paymentPeriodLabel(receipt)]
           .filter(Boolean)
           .some((value) => String(value).toLocaleLowerCase('vi-VN').includes(normalizedQuery));
-        const matchesClass = filterClassId === 'all' || receipt.classId === filterClassId || (Boolean(student) && isStudentInClass(student!, filterClassId, classes.find(c => c.id === filterClassId)));
+        const matchesClass = filterClassId === 'all' || receipt.classId === filterClassId || (!receipt.classId && Boolean(student) && getStudentClassIds(student!, classes).length === 1 && isStudentInClass(student!, filterClassId, classes.find(c => c.id === filterClassId)));
         const matchesKind = filterPaymentKind === 'all' || (filterPaymentKind === 'course' ? receipt.paymentKind === 'course' : receipt.paymentKind !== 'course');
         const matchesStatus = filterReceiptStatus === 'all' || (filterReceiptStatus === 'paid' ? status === 'paid' : receipt.debtAmount > 0);
         const matchesMethod = filterPaymentMethod === 'all' || paymentMethodLabel(receipt.paymentMethod) === filterPaymentMethod;
@@ -153,7 +153,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCollectingStudentId(st?.id || '');
     const initialClassId = st ? (st.classId || (st.extraClassIds && st.extraClassIds[0]) || classes[0]?.id || '') : (classes[0]?.id || '');
     setCollectClassId(initialClassId);
-    const program = programs.find(p => p.id === st?.programId);
+    const program = programs.find(p => p.id === (classes.find(c => c.id === initialClassId)?.programId || st?.programId));
     const suggestedMonthlyFee = program?.tuitionFee ?? 0;
     setCourseFeeInput(0);
     setMonthlyFeeInput(suggestedMonthlyFee);
@@ -206,7 +206,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setMonthlyBillingPeriod(receipt.billingPeriod || currentMonth);
     setCourseBillingPeriod(receipt.billingPeriod || defaultCoursePeriod);
     setPaidAmountInput(receipt.debtAmount);
-    setDiscountInput(0);
+    setDiscountInput(receipt.discount || 0);
     setPaymentDateInput(new Date().toISOString().slice(0, 10));
     setPaymentMethod(receipt.paymentMethod || 'Chuyển khoản');
     setPaymentNotes(`Thu đợt tiếp cho phiếu ${receipt.code} (còn nợ ${receipt.debtAmount.toLocaleString('vi-VN')} đ)`);
@@ -284,6 +284,14 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       setCollectError('Nhập kỳ học phí hoặc mốc thời gian của khóa.');
       return;
     }
+    if (![selectedFee, discountInput, paidAmountInput].every(Number.isFinite) || discountInput < 0 || paidAmountInput < 0) {
+      setCollectError('Học phí, giảm giá và số tiền đóng phải là số hợp lệ, không âm.');
+      return;
+    }
+    if (editingReceipt && paidAmountInput > editingReceipt.paidAmount) {
+      setCollectError('Để ghi nhận tiền đóng thêm, hãy dùng Thu đợt tiếp và chọn ngày thu thực tế. Sửa phiếu chỉ dùng để điều chỉnh khoản đã ghi nhận.');
+      return;
+    }
     if (discountInput > selectedFee) {
       setCollectError('Giảm giá không thể lớn hơn học phí.');
       return;
@@ -318,12 +326,16 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       // Tự động kiểm tra nếu học viên đã có phiếu khóa cùng kỳ và còn nợ
       const priorDebtReceipt = receipts.find(r =>
         r.studentId === student.id &&
-        (targetClassId ? (r.classId === targetClassId || !r.classId) : true) &&
+        r.classId === targetClassId &&
         r.paymentKind === 'course' &&
         (r.billingPeriod || '').trim().toLowerCase() === cleanBillingPeriod.toLowerCase() &&
         r.debtAmount > 0
       );
       if (priorDebtReceipt) {
+        if (paidAmountInput > priorDebtReceipt.debtAmount) {
+          setCollectError('Số tiền đóng thêm không thể lớn hơn công nợ còn lại.');
+          return;
+        }
         const remainingDebt = Math.max(priorDebtReceipt.debtAmount - paidAmountInput, 0);
         debtAmount = remainingDebt;
         status = remainingDebt > 0 ? 'partial' : 'paid';
@@ -661,7 +673,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                       const defaultClass = st.classId || (st.extraClassIds && st.extraClassIds[0]) || classes[0]?.id || '';
                       setCollectClassId(defaultClass);
                     }
-                    const prog = programs.find(p => p.id === st?.programId);
+                    const studentClassId = st ? getStudentClassIds(st, classes)[0] : '';
+                    const prog = programs.find(p => p.id === (classes.find(c => c.id === studentClassId)?.programId || st?.programId));
                     if (prog) {
                       if (paymentKind === 'monthly') {
                         setMonthlyFeeInput(prog.tuitionFee);
@@ -686,7 +699,16 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 <select
                   value={collectClassId}
                   disabled={Boolean(installmentParentReceipt)}
-                  onChange={(e) => setCollectClassId(e.target.value)}
+                  onChange={(e) => {
+                    setCollectClassId(e.target.value);
+                    if (!editingReceipt) {
+                      const program = programs.find(p => p.id === classes.find(c => c.id === e.target.value)?.programId);
+                      const fee = program?.tuitionFee || 0;
+                      if (paymentKind === 'monthly') setMonthlyFeeInput(fee);
+                      else setCourseFeeInput(fee);
+                      setPaidAmountInput(fee);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 disabled:bg-slate-100"
                   required
                 >
