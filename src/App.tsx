@@ -1,3 +1,4 @@
+import { isRemovedActivityLog } from './lib/activityLog';
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -96,7 +97,7 @@ const mergeActivityLogs = (...lists: ActivityLog[][]) => {
   const merged: ActivityLog[] = [];
   for (const list of lists) {
     for (const log of list) {
-      if (!log?.id || seen.has(log.id)) continue;
+      if (!log?.id || seen.has(log.id) || isRemovedActivityLog(log)) continue;
       seen.add(log.id);
       merged.push(log);
       if (merged.length >= MAX_ACTIVITY_LOGS) return merged;
@@ -289,7 +290,7 @@ export default function App() {
   const [grades, setGrades] = useState<Grade[]>(() => loadStored('grades', initialGrades));
   const [receipts, setReceipts] = useState<TuitionReceipt[]>(() => normaliseReceipts(loadStored('receipts', initialTuitionReceipts)));
   const [backups, setBackups] = useState<SystemBackup[]>(() => loadStored('backups', initialBackups));
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => loadStored('activityLogs', initialActivityLogs));
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => mergeActivityLogs(loadStored('activityLogs', initialActivityLogs)));
   const [accountAuditLogs, setAccountAuditLogs] = useState<AccountAuditLog[]>([]);
   const [accountAuditError, setAccountAuditError] = useState<string | null>(null);
   const [isAccountAuditLoading, setIsAccountAuditLoading] = useState(false);
@@ -857,7 +858,7 @@ export default function App() {
     setGrades(data.grades);
     setReceipts(normalizedReceipts);
     setBackups(data.backups.slice(0, 30));
-    setActivityLogs(data.activityLogs);
+    setActivityLogs(mergeActivityLogs(data.activityLogs));
     setHasCenterData(true);
     addLog('RESTORE', 'Sao lưu', `Đã khôi phục dữ liệu từ tệp ${filename}`);
   };

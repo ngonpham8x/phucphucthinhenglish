@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AccountAuditLog, ActivityLog } from '../types';
 import { History, Search, Filter, ShieldCheck, RefreshCw } from 'lucide-react';
 import { maskEmail } from '../lib/privacy';
+import { isRemovedActivityLog } from '../lib/activityLog';
 
 interface ActivityLogViewProps {
   logs: ActivityLog[];
@@ -35,8 +36,16 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
+  const [performerFilter, setPerformerFilter] = useState('all');
+  const performerName = (name: string) => isHiddenAccount(name) ? 'Tài khoản hệ thống' : (name.trim() || 'Chủ trung tâm');
+  const visibleLogs = logs.filter(log => !isRemovedActivityLog(log));
+  const performers = [...new Set([
+    ...visibleLogs.map(log => performerName(log.userName)),
+    ...accountLogs.filter(log => !isHiddenAccount(log.targetName)).map(log => performerName(log.actorName)),
+  ])].sort((a, b) => a.localeCompare(b, 'vi'));
 
-  const filteredLogs = logs.filter(log => {
+
+  const filteredLogs = visibleLogs.filter(log => {
     const matchesSearch =
       log.userName.toLowerCase().includes(search.toLowerCase()) ||
       log.userEmail.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,11 +54,12 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
 
     const matchesAction = actionFilter === 'all' || log.action === actionFilter;
 
-    return matchesSearch && matchesAction;
+    return matchesSearch && matchesAction && (performerFilter === 'all' || performerName(log.userName) === performerFilter);
   });
 
   const filteredAccountLogs = accountLogs.filter((log) => {
     if (isHiddenAccount(log.targetName)) return false;
+    if (performerFilter !== 'all' && performerName(log.actorName) !== performerFilter) return false;
     const term = search.toLowerCase();
     return !term || [log.actorName, log.targetName, log.details, accountActionLabels[log.action]]
       .some((value) => value.toLowerCase().includes(term));
@@ -77,7 +87,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
@@ -88,6 +98,16 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
               className="pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-red-700"
             />
           </div>
+
+          <select
+            aria-label="Người thực hiện"
+            value={performerFilter}
+            onChange={(e) => setPerformerFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-700"
+          >
+            <option value="all">Tất cả người thực hiện</option>
+            {performers.map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
 
           <select
             value={actionFilter}
@@ -148,7 +168,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-[11px] text-slate-500">{new Date(log.occurredAt).toLocaleString('vi-VN')}</td>
                     <td className="px-4 py-3"><b className="text-slate-900">{log.targetName || 'Chưa đặt tên'}</b><span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">{log.targetRole === 'owner' ? 'Chủ trung tâm' : 'Nhân viên'}</span></td>
                     <td className="px-4 py-3"><span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${accountActionClass(log.action)}`}>{accountActionLabels[log.action]}</span></td>
-                    <td className="px-4 py-3 font-semibold text-slate-800">{log.actorName || 'Chủ trung tâm'}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-800">{performerName(log.actorName)}</td>
                     <td className="px-4 py-3 leading-5 text-slate-700">{log.details}</td>
                   </tr>
                 ))}
