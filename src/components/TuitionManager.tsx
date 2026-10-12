@@ -1,8 +1,9 @@
+import { localISODate } from '../lib/date';
 import React, { useMemo, useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
 import { CreditCard, Plus, PlusCircle, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2, Filter, RotateCcw, Split, Calendar } from 'lucide-react';
 import logoImg from '../assets/images/regenerated_image_1786351687546.png';
-import { paymentKindLabel, paymentMethodLabel, paymentPeriodLabel, debtBreakdown } from '../lib/tuition';
+import { paymentKindLabel, paymentMethodLabel, paymentPeriodLabel, debtBreakdown, nextReceiptCode } from '../lib/tuition';
 import { isStudentInClass, getStudentClassIds } from '../lib/student';
 
 const receiptStatus = (receipt: Pick<TuitionReceipt, 'paidAmount' | 'debtAmount' | 'status'>) => {
@@ -49,7 +50,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   onUpdateReceipt,
   onDeleteReceipt
 }) => {
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = localISODate().slice(0, 7);
   const defaultCoursePeriod = `Khóa ${new Date().getFullYear()}`;
   const [selectedReceipt, setSelectedReceipt] = useState<TuitionReceipt | null>(null);
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
@@ -83,7 +84,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [courseBillingPeriod, setCourseBillingPeriod] = useState<string>(defaultCoursePeriod);
   const [paidAmountInput, setPaidAmountInput] = useState<number>(0);
   const [discountInput, setDiscountInput] = useState<number>(0);
-  const [paymentDateInput, setPaymentDateInput] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [paymentDateInput, setPaymentDateInput] = useState<string>(localISODate());
   const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chưa xác định');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [collectError, setCollectError] = useState<string | null>(null);
@@ -162,7 +163,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCourseBillingPeriod(coursePeriodOptions[0] || defaultCoursePeriod);
     setPaidAmountInput(suggestedMonthlyFee);
     setDiscountInput(0);
-    setPaymentDateInput(new Date().toISOString().slice(0, 10));
+    setPaymentDateInput(localISODate());
     setPaymentMethod('Chưa xác định');
     setPaymentNotes('');
     setCollectError(null);
@@ -186,7 +187,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       : (coursePeriodOptions[0] || defaultCoursePeriod));
     setPaidAmountInput(receipt.paidAmount);
     setDiscountInput(receipt.discount || 0);
-    setPaymentDateInput(receipt.paymentDate || new Date().toISOString().slice(0, 10));
+    setPaymentDateInput(receipt.paymentDate || localISODate());
     setPaymentMethod(receipt.paymentMethod || 'Chưa xác định');
     setPaymentNotes(receipt.notes || '');
     setCollectError(null);
@@ -207,7 +208,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCourseBillingPeriod(receipt.billingPeriod || defaultCoursePeriod);
     setPaidAmountInput(receipt.debtAmount);
     setDiscountInput(receipt.discount || 0);
-    setPaymentDateInput(new Date().toISOString().slice(0, 10));
+    setPaymentDateInput(localISODate());
     setPaymentMethod(receipt.paymentMethod || 'Chuyển khoản');
     setPaymentNotes(`Thu đợt tiếp cho phiếu ${receipt.code} (còn nợ ${receipt.debtAmount.toLocaleString('vi-VN')} đ)`);
     setCollectError(null);
@@ -220,8 +221,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     const half = Math.floor(receipt.paidAmount / 2);
     setSplitAmount1(half);
     setSplitAmount2(receipt.paidAmount - half);
-    setSplitDate1(receipt.paymentDate || new Date().toISOString().slice(0, 10));
-    setSplitDate2(new Date().toISOString().slice(0, 10));
+    setSplitDate1(receipt.paymentDate || localISODate());
+    setSplitDate2(localISODate());
     setSplitMethod2(receipt.paymentMethod || 'Chuyển khoản');
     setSplitNotes1(`${receipt.notes || 'Thu học phí'} (Đợt 1)`);
     setSplitNotes2(`${receipt.notes || 'Thu học phí'} (Đợt 2 - hoàn tất)`);
@@ -251,8 +252,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
     const newReceipt2: TuitionReceipt = {
       ...splitReceipt,
-      id: `TR_${Date.now()}`,
-      code: `PT-${new Date().getFullYear()}-${(receipts.length + 1).toString().padStart(3, '0')}`,
+      id: `TR_${crypto.randomUUID()}`,
+      code: nextReceiptCode(receipts, new Date().getFullYear()),
       paidAmount: splitAmount2,
       debtAmount: splitReceipt.debtAmount > 0 ? splitReceipt.debtAmount : 0,
       status: splitReceipt.debtAmount > 0 ? 'partial' : 'paid',
@@ -297,6 +298,27 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       return;
     }
 
+    if (installmentParentReceipt && (
+      paymentKind !== (installmentParentReceipt.paymentKind === 'course' ? 'course' : 'monthly') ||
+      cleanBillingPeriod !== (installmentParentReceipt.billingPeriod || installmentParentReceipt.paymentDate.slice(0, 7)) ||
+      discountInput !== (installmentParentReceipt.discount || 0) ||
+      selectedFee !== (paymentKind === 'course' ? installmentParentReceipt.courseFee : installmentParentReceipt.monthlyFee || 0)
+    )) {
+      setCollectError('Thu đợt tiếp phải giữ nguyên học phí, giảm giá và kỳ của phiếu gốc.');
+      return;
+    }
+    const priorPaid = receipts.filter(r => r.id !== editingReceipt?.id && r.studentId === student.id &&
+      r.classId === collectClassId && (r.paymentKind === 'course' ? 'course' : 'monthly') === paymentKind &&
+      (r.billingPeriod || r.paymentDate.slice(0, 7)).trim().toLowerCase() === cleanBillingPeriod.toLowerCase())
+      .reduce((sum, r) => sum + Math.max(r.paidAmount || 0, 0), 0);
+    if (paidAmountInput + priorPaid > finalPrice) {
+      setCollectError('Tổng các đợt đóng không thể lớn hơn học phí sau giảm giá của kỳ này.');
+      return;
+    }
+    if (installmentParentReceipt && paidAmountInput <= 0) {
+      setCollectError('Số tiền thu đợt tiếp phải lớn hơn 0.');
+      return;
+    }
     if (installmentParentReceipt && paidAmountInput > installmentParentReceipt.debtAmount) {
       setCollectError(`Số tiền đóng đợt tiếp (${paidAmountInput.toLocaleString('vi-VN')} đ) không thể lớn hơn số nợ còn lại (${installmentParentReceipt.debtAmount.toLocaleString('vi-VN')} đ).`);
       return;
@@ -348,11 +370,11 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     }
 
     const retainContextFee = Boolean(editingReceipt);
-    const chosenDate = paymentDateInput.trim() || new Date().toISOString().slice(0, 10);
+    const chosenDate = paymentDateInput.trim() || localISODate();
     const nextReceipt: TuitionReceipt = {
       ...(editingReceipt ?? {}),
-      id: editingReceipt?.id || `TR_${Date.now()}`,
-      code: editingReceipt?.code || `PT-${new Date().getFullYear()}-${(receipts.length + 1).toString().padStart(3, '0')}`,
+      id: editingReceipt?.id || `TR_${crypto.randomUUID()}`,
+      code: editingReceipt?.code || nextReceiptCode(receipts, new Date().getFullYear()),
       studentId: student.id,
       classId: targetClassId,
       courseFee: paymentKind === 'course' || retainContextFee ? courseFeeInput : 0,

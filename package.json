@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/tuition-regression.test.ts && tsx tests/excel-sync.test.ts",
+    "test": "tsx tests/tuition-regression.test.ts && tsx tests/excel-sync.test.ts && tsx tests/date-and-activity.test.ts && tsx tests/center-sync.test.ts",
     "test:excel": "powershell -NoProfile -File tests/native-excel-sync.ps1"
   },
   "dependencies": {

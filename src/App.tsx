@@ -1,3 +1,4 @@
+import { saveCenterPayload } from './lib/centerSync';
 import { isRemovedActivityLog } from './lib/activityLog';
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
@@ -310,6 +311,11 @@ export default function App() {
   const contentViewportRef = useRef<HTMLElement>(null);
   const lastHydratedUserIdRef = useRef<string | null>(null);
   const lastSyncedPayloadRef = useRef<string>('');
+  const centerVersionRef = useRef<string | null>(null);
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const syncBlockedRef = useRef(false);
+  const syncGenerationRef = useRef(0);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -387,11 +393,16 @@ export default function App() {
     if (!supabase) return;
 
     let isMounted = true;
+    let pendingUserId: string | null = null;
+    let resolutionVersion = 0;
     const resolveSession = async (nextSession: Session | null) => {
       if (!isMounted) return;
       setSession(nextSession);
 
       if (!nextSession) {
+        resolutionVersion++;
+        syncGenerationRef.current++;
+        pendingUserId = null;
         lastHydratedUserIdRef.current = null;
         setCurrentUser(null);
         setIsCenterDataHydrated(!isSupabaseConfigured);
@@ -401,10 +412,13 @@ export default function App() {
         return;
       }
 
-      if (lastHydratedUserIdRef.current === nextSession.user.id && isCenterDataHydrated) {
+      if (lastHydratedUserIdRef.current === nextSession.user.id || pendingUserId === nextSession.user.id) {
         return;
       }
 
+      pendingUserId = nextSession.user.id;
+      const thisResolution = ++resolutionVersion;
+      syncGenerationRef.current++;
       setAuthStatus('loading');
       const { data, error } = await supabase
         .from('profiles')
@@ -412,8 +426,9 @@ export default function App() {
         .eq('id', nextSession.user.id)
         .maybeSingle();
 
-      if (!isMounted) return;
+      if (!isMounted || thisResolution !== resolutionVersion) return;
       if (error || !data || !data.is_active) {
+        pendingUserId = null;
         lastHydratedUserIdRef.current = null;
         setCurrentUser(null);
         setAuthStatus('blocked');
@@ -426,11 +441,15 @@ export default function App() {
       setHasCenterData(false);
       const { data: centerData, error: centerDataError } = await supabase
         .from('center_data')
-        .select('payload')
+        .select('payload, updated_at')
         .eq('id', 'primary')
         .maybeSingle();
 
-      if (!isMounted) return;
+      if (!isMounted || thisResolution !== resolutionVersion) return;
+      pendingUserId = null;
+      centerVersionRef.current = centerData?.updated_at || null;
+      syncBlockedRef.current = false;
+      setSyncError(null);
       if (!centerDataError) {
         const payload = centerData?.payload as Partial<CenterDataPayload> | undefined;
         const hasPayload = Boolean(payload && typeof payload === 'object' && Object.keys(payload).length > 0);
@@ -491,7 +510,7 @@ export default function App() {
 
     void supabase.auth.getSession().then(({ data }) => resolveSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      void resolveSession(nextSession);
+      window.setTimeout(() => { void resolveSession(nextSession); }, 0);
     });
 
     return () => {
@@ -506,16 +525,22 @@ export default function App() {
     const timer = window.setTimeout(() => {
       const serialized = JSON.stringify(payload);
       if (serialized === lastSyncedPayloadRef.current) return;
-      void supabase
-        .from('center_data')
-        .upsert({ id: 'primary', payload }, { onConflict: 'id' })
-        .then(({ error }) => {
-          if (error) {
-            console.error('Không thể đồng bộ dữ liệu trung tâm:', error.message);
-          } else {
-            lastSyncedPayloadRef.current = serialized;
-          }
-        });
+      const userId = currentUser.id;
+      const generation = syncGenerationRef.current;
+      syncQueueRef.current = syncQueueRef.current.then(async () => {
+        if (!supabase || syncBlockedRef.current || generation !== syncGenerationRef.current || lastHydratedUserIdRef.current !== userId || serialized === lastSyncedPayloadRef.current) return;
+        try {
+          const version = await saveCenterPayload(supabase, payload, centerVersionRef.current);
+          if (generation !== syncGenerationRef.current || lastHydratedUserIdRef.current !== userId) return;
+          centerVersionRef.current = version;
+          lastSyncedPayloadRef.current = serialized;
+        } catch (error) {
+          if (generation !== syncGenerationRef.current || lastHydratedUserIdRef.current !== userId) return;
+          syncBlockedRef.current = true;
+          setCanSyncCenterData(false);
+          setSyncError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu lên máy chủ. Hãy xuất backup trước khi tải lại trang.');
+        }
+      });
     }, 750);
     return () => window.clearTimeout(timer);
   }, [settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs, currentUser, isCenterDataHydrated, canSyncCenterData, hasCenterData]);
@@ -584,8 +609,8 @@ export default function App() {
     setClasses(prevClasses => reconcileClassStudentIds(prevClasses, nextStudents));
     if (previousStudent && previousStudent.classId !== updatedStudent.classId) {
       setGrades((previousGrades) => previousGrades.map((grade) => (
-        grade.studentId === updatedStudent.id && (!grade.classId || grade.classId === previousStudent.classId)
-          ? { ...grade, classId: updatedStudent.classId }
+        grade.studentId === updatedStudent.id && !grade.classId
+          ? { ...grade, classId: previousStudent.classId }
           : grade
       )));
     }
@@ -776,8 +801,9 @@ export default function App() {
 
   const handleUpdateSlot = (slot: TimetableSlot) => {
     setTimetableSlots(prev => {
+      const oldClassId = prev.find(s => s.id === slot.id)?.classId;
       const next = prev.map(s => s.id === slot.id ? slot : s);
-      setClasses(classrooms => classrooms.map((classroom) => classroom.id === slot.classId ? withClassScheduleSummary(classroom, next) : classroom));
+      setClasses(classrooms => classrooms.map((classroom) => classroom.id === slot.classId || classroom.id === oldClassId ? withClassScheduleSummary(classroom, next) : classroom));
       return next;
     });
     addLog('SỬA', 'Thời khóa biểu', `Cập nhật ca học vào ${slot.dayOfWeek}`);
@@ -906,6 +932,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans antialiased text-slate-900">
+      {syncError && <div role="alert" className="border-b border-red-300 bg-red-50 px-5 py-3 text-sm font-semibold text-red-900">Chưa lưu được thay đổi lên Supabase: {syncError} <button type="button" onClick={() => setIsBackupModalOpen(true)} className="ml-2 underline">Xuất backup</button></div>}
       {/* Top Header Navigation */}
       <Header
         currentUser={currentUser}

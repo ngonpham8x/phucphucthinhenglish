@@ -1,3 +1,4 @@
+import { localISODate } from '../lib/date';
 import React, { useRef, useState } from 'react';
 import {
   SystemBackup,
@@ -129,7 +130,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
         grades
       });
 
-      const fileName = `PhucPhucThinh_BaoCaoToanHeThong_${new Date().toISOString().split('T')[0]}.xlsm`;
+      const fileName = `PhucPhucThinh_BaoCaoToanHeThong_${localISODate()}.${blob.type.toLowerCase().includes('macroenabled') ? 'xlsm' : 'xlsx'}`;
       downloadBlob(blob, fileName);
       onBackupCreated?.(makeBackupRecord(fileName, blob.size));
 
@@ -146,7 +147,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
   const handleExportSystemJson = () => {
     setStatusMessage(null);
     try {
-      const fileName = `PhucPhucThinh_DatabaseBackup_Full_${new Date().toISOString().split('T')[0]}.json`;
+      const fileName = `PhucPhucThinh_DatabaseBackup_Full_${localISODate()}.json`;
       const backupRecord = makeBackupRecord(fileName, 0);
       const systemData: BackupArchive = {
         app: 'PHUC_PHUC_THINH',

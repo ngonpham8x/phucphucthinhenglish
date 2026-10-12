@@ -54,7 +54,7 @@ const border: Partial<ExcelJS.Borders> = {
 
 const dateFromIso = (value: string) => {
   const [year, month, day] = value.split('-').map(Number);
-  return new Date(year || 2000, (month || 1) - 1, day || 1);
+  return new Date(Date.UTC(year || 2000, (month || 1) - 1, day || 1));
 };
 const monthKey = (value: string) => value.slice(0, 7);
 const receiptMonth = (receipt: TuitionReceipt) => monthKey(receipt.paymentDate);
@@ -425,7 +425,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   styleTitle(tuitionSheet, 'A1:S2', `${data.centerName.toUpperCase()}\nSỔ THU HỌC PHÍ`);
   applyBackLink(tuitionSheet, 'S');
   const tuitionHeaders = ['STT', 'Mã phiếu', 'ID hệ thống', 'Mã học sinh', 'Họ và tên', 'Mã lớp', 'Học phí khóa (VNĐ)', 'Học phí tháng (VNĐ)', 'Khoản thu', 'Kỳ học phí', 'Giảm giá (VNĐ)', 'Đã thu (VNĐ)', 'Công nợ (VNĐ)', 'Tình trạng', 'Ngày thu', 'Hình thức', 'Ghi chú', 'Hồ sơ học sinh', 'Lớp chi tiết'];
-  tuitionSheet.getRow(5).values = tuitionHeaders;
+  tuitionSheet.getRow(5).values = [...tuitionHeaders, 'ID phiếu thu', 'Người thu'];
   styleHeader(tuitionSheet.getRow(5));
   orderedReceipts.forEach((receipt, index) => {
     const student = studentById.get(receipt.studentId);
@@ -439,6 +439,8 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     const periodValue = isMonthlyReceipt && /^\d{4}-\d{2}$/.test(period) ? dateFromIso(`${period}-01`) : period;
     const status = receipt.status || (receipt.debtAmount <= 0 && receipt.paidAmount > 0 ? 'paid' : (receipt.paidAmount > 0 ? 'partial' : 'unpaid'));
     row.values = [index + 1, receipt.code, receipt.studentId, student?.code || '', student?.name || '', classroom?.code || '', receipt.courseFee, receipt.monthlyFee || 0, receipt.paymentKind !== 'course' ? 'Học phí tháng' : 'Học phí khóa', periodValue, receipt.discount, receipt.paidAmount, receipt.debtAmount, status === 'paid' ? 'Đã đóng đủ' : ((status === 'partial' || status === 'debt') ? 'Đóng thiếu' : 'Chưa đóng'), dateFromIso(receipt.paymentDate), paymentMethodLabel(receipt.paymentMethod), receipt.notes || '', studentLink, classLink];
+    row.getCell(20).value = receipt.id;
+    row.getCell(21).value = receipt.collectorName;
     styleData(row, index);
     [7, 8, 11, 12, 13].forEach((column) => { row.getCell(column).numFmt = moneyFormat; });
     row.getCell(10).numFmt = 'mm/yyyy';
@@ -457,6 +459,8 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
   tuitionSheet.views = [{ state: 'frozen', ySplit: 5 }];
   tuitionSheet.columns = [{ width: 8 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 20 }, { width: 48 }, { width: 18 }, { width: 18 }];
   tuitionSheet.getColumn(3).hidden = true;
+  tuitionSheet.getColumn(20).hidden = true;
+  tuitionSheet.getColumn(21).hidden = true;
 
   const gradesSheet = workbook.addWorksheet('BẢNG ĐIỂM');
   styleTitle(gradesSheet, 'A1:M2', `${data.centerName.toUpperCase()}\nBẢNG ĐIỂM`);
@@ -810,7 +814,7 @@ const duplicatedValues = (values: string[]) => {
 
 const isoDate = (value: unknown) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+    return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
   }
   const text = cellText(value);
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
@@ -957,7 +961,6 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
 
       const programName = cellText(getByAliases(record, ['chuongtrinh', 'program', 'programname']));
       const program = programName ? ensureProgram(programName) : null;
-      if (program) classroom.programId = program.id;
       const id = cellText(getByAliases(record, ['idhethong', 'systemid'])) || `STU-IMP-MASTER-${String(index + 1).padStart(3, '0')}`;
 
       // Nếu học sinh đã tồn tại (ví dụ danh sách có dòng cho lớp 1 và dòng cho lớp 2)
@@ -1046,14 +1049,24 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
 
   const studentIds = new Set(students.map((student) => student.id));
   const tuitionRecords = readRecords(tuitionSheet, ['maphieu']);
+  const moneyAliases = [['dathuvnd', 'dathu', 'paidamount'], ['congnovnd', 'congno', 'debtamount'], ['giamgiavnd', 'giamgia', 'discount'], ['hocphikhoavnd', 'hocphikhoa', 'coursefee'], ['hocphithangvnd', 'hocphithang', 'monthlyfee']];
+  if (tuitionRecords.some(record => moneyAliases.some(aliases => {
+    const value = numberValue(getByAliases(record, aliases));
+    return !Number.isFinite(value) || value < 0;
+  }))) {
+    return { errors: [{ row: 0, field: 'HỌC PHÍ', message: 'Học phí, đã thu, công nợ và giảm giá không được âm hoặc không hợp lệ.' }] };
+  }
   const invalidTuitionReferences = tuitionRecords.filter((record) => {
-    const suppliedStudentId = cellText(getByAliases(record, ['idhethong', 'systemid']));
-    const suppliedStudentCode = cellText(getByAliases(record, ['mahocsinh', 'mahs', 'studentcode']));
-    return Boolean(suppliedStudentId || suppliedStudentCode)
-      && !students.some((student) => student.id === suppliedStudentId || student.code === suppliedStudentCode);
+    const id = cellText(getByAliases(record, ['idhethong', 'systemid']));
+    const code = cellText(getByAliases(record, ['mahocsinh', 'mahs', 'studentcode']));
+    const student = id ? students.find(s => s.id === id) : students.find(s => s.code === code);
+    const classCode = cellText(getByAliases(record, ['malop', 'classcode']));
+    return !student || Boolean(code && student.code !== code) ||
+      Boolean(classCode && !classes.some(c => c.code.toLocaleLowerCase('vi-VN') === classCode.toLocaleLowerCase('vi-VN'))) ||
+      Boolean(!classCode && student.extraClassIds?.length);
   });
   if (invalidTuitionReferences.length > 0) {
-    return { errors: [{ row: 0, field: 'HỌC PHÍ', message: `${invalidTuitionReferences.length} phiếu thu không khớp Mã HS / ID hệ thống. Đã dừng nhập để không làm mất hoặc gán nhầm học phí.` }] };
+    return { errors: [{ row: 0, field: 'HỌC PHÍ', message: `${invalidTuitionReferences.length} phiếu thu không khớp Mã HS / ID hệ thống hoặc mã lớp. Đã dừng nhập để không làm mất hoặc gán nhầm học phí.` }] };
   }
   const receipts: TuitionReceipt[] = tuitionRecords.map((record, index) => {
     const suppliedStudentId = cellText(getByAliases(record, ['idhethong', 'systemid']));
@@ -1097,7 +1110,7 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       }
     }
     return {
-      id: `RCPT-IMP-${String(index + 1).padStart(3, '0')}`,
+      id: cellText(getByAliases(record, ['idphieuthu', 'receiptid'])) || `RCPT-IMP-${String(index + 1).padStart(3, '0')}`,
       code: cellText(getByAliases(record, ['maphieu', 'receiptcode'])) || `IMP-${index + 1}`,
       studentId,
       classId: targetClassId,
@@ -1110,14 +1123,20 @@ export async function parseCenterWorkbookFile(file: File): Promise<CenterWorkboo
       debtAmount,
       status: receiptStatus,
       paymentDate: isoDate(getByAliases(record, ['ngaythu', 'paymentdate'])),
-      collectorName: '',
+      collectorName: cellText(getByAliases(record, ['nguoithu', 'collectorname'])),
       paymentMethod: normalizedPaymentMethod,
       notes: cellText(getByAliases(record, ['ghichu', 'notes']))
     };
   }).filter((receipt) => studentIds.has(receipt.studentId));
   const duplicateReceiptCodes = duplicatedValues(receipts.map((receipt) => receipt.code));
-  if (duplicateReceiptCodes.length > 0) {
-    return { errors: [{ row: 0, field: 'Mã phiếu thu', message: `Trùng mã phiếu thu: ${duplicateReceiptCodes.join(', ')}. Mỗi phiếu thu phải có một mã duy nhất.` }] };
+  const duplicateReceiptIds = duplicatedValues(receipts.map((receipt) => receipt.id));
+  // Existing historical codes may be duplicated. Preserve separate receipts
+  // only when the workbook carries their distinct original receipt IDs.
+  const ambiguousCodes = duplicateReceiptCodes.filter(code => tuitionRecords
+    .filter(record => cellText(getByAliases(record, ['maphieu', 'receiptcode'])) === code)
+    .some(record => !cellText(getByAliases(record, ['idphieuthu', 'receiptid']))));
+  if (ambiguousCodes.length > 0 || duplicateReceiptIds.length > 0) {
+    return { errors: [{ row: 0, field: 'Mã phiếu thu', message: 'Phiếu thu trùng mã không có ID riêng, hoặc bị trùng ID phiếu thu. Hãy kiểm tra trước khi nhập.' }] };
   }
   masterDirectPayments.forEach((directPayment, studentId) => {
     const student = students.find((item) => item.id === studentId);

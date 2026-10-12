@@ -1,7 +1,7 @@
 import { Student, ClassRoom, TuitionReceipt, CourseProgram } from '../types';
 
 export interface ConsistencyIssue {
-  type: 'student_not_in_class' | 'class_not_enrolled' | 'student_missing_program' | 'multiple_class_single_program' | 'orphaned_receipt';
+  type: 'student_not_in_class' | 'class_not_enrolled' | 'student_missing_program' | 'multiple_class_single_program' | 'orphaned_receipt' | 'duplicate_receipt_code';
   severity: 'critical' | 'warning' | 'info';
   studentId: string;
   studentCode: string;
@@ -201,6 +201,22 @@ export function checkDataConsistency(
     });
   });
 
+  const codes = new Map<string, TuitionReceipt[]>();
+  receipts.forEach(receipt => {
+    const key = receipt.code.trim().toLocaleUpperCase('vi-VN');
+    codes.set(key, [...(codes.get(key) || []), receipt]);
+  });
+  codes.forEach(group => {
+    if (group.length < 2) return;
+    const receipt = group[0];
+    const student = studentMap.get(receipt.studentId);
+    issues.push({
+      type: 'duplicate_receipt_code', severity: 'warning',
+      studentId: receipt.studentId, studentCode: student?.code || '', studentName: student?.name || '',
+      details: `Mã phiếu ${receipt.code} được dùng cho ${group.length} khoản thu. Giữ nguyên các khoản thu và xác minh mã trước khi điều chỉnh.`,
+      affectedIds: { receiptId: receipt.id },
+    });
+  });
   return issues;
 }
 
@@ -361,6 +377,7 @@ export function formatConsistencyReport(report: ConsistencyReport): string {
       'student_not_in_class': '❌ Học viên không có trong lớp (nhưng có học phí)',
       'class_not_enrolled': '⚠️ ClassID không khớp',
       'student_missing_program': '🔍 Thiếu programId',
+      'duplicate_receipt_code': '⚠️ Trùng mã phiếu thu',
       'multiple_class_single_program': 'ℹ️ Học nhiều lớp, 1 khoá',
       'orphaned_receipt': '💔 Record học phí mồ côi'
     };

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { localISODate, reportWeekBounds } from '../src/lib/date';
+import { isRemovedActivityLog } from '../src/lib/activityLog';
+import type { ActivityLog } from '../src/types';
+assert.equal(localISODate(new Date(2026,9,1,0,1)),'2026-10-01');
+assert.deepEqual(reportWeekBounds('2026-10-12'),['2026-10-12','2026-10-18']);
+assert.deepEqual(reportWeekBounds('2026-10-18'),['2026-10-12','2026-10-18']);
+assert.deepEqual(reportWeekBounds('2026-01-01'),['2025-12-29','2026-01-04']);
+assert.equal(isRemovedActivityLog({timestamp:'2026-10-05 17:35:20', details:'Điểm danh buổi học Unit 3 lớp Starters A1.'} as ActivityLog),true);
+assert.equal(isRemovedActivityLog({timestamp:'2026-10-06 17:35:20', details:'Điểm danh buổi học Unit 3 lớp Starters A1.'} as ActivityLog),false);
+console.log('Passed: local calendar dates, week boundaries, exact obsolete log matching.');

@@ -53,8 +53,9 @@ export default function DataConsistencyChecker({
     try {
       await new Promise(resolve => setTimeout(resolve, 800));
       const result = autoFixConsistency(students, classrooms, receipts, programs);
-      setIssues(result.issues);
-      const updatedReport = generateConsistencyReport(result.issues);
+      const remainingIssues = checkDataConsistency(result.fixedStudents, result.fixedClassrooms, result.fixedReceipts, programs);
+      setIssues(remainingIssues);
+      const updatedReport = generateConsistencyReport(remainingIssues);
       updatedReport.fixedCount = result.fixedCount;
       setReport(updatedReport);
       
@@ -101,6 +102,7 @@ export default function DataConsistencyChecker({
       'student_not_in_class': '❌ Học viên không có trong lớp (nhưng có học phí)',
       'class_not_enrolled': '⚠️ ClassID không khớp với danh sách lớp',
       'student_missing_program': '🔍 Thiếu programId',
+      'duplicate_receipt_code': '⚠️ Trùng mã phiếu thu',
       'multiple_class_single_program': 'ℹ️ Học nhiều lớp cùng chương trình',
       'orphaned_receipt': '💔 Record học phí không tìm thấy học viên'
     };

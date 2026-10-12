@@ -32,64 +32,14 @@ export interface TuitionDebtBreakdown {
 }
 
 export const debtBreakdown = (receipts: TuitionReceipt[]): TuitionDebtBreakdown => {
-  // Nhóm các phiếu thu theo học viên và kỳ/khóa để tính công nợ chính xác
-  // khi học viên đóng học phí nhiều đợt (đợt 1, đợt 2, đợt cuối...)
-  const courseGroups = new Map<string, TuitionReceipt[]>();
-  const monthlyGroups = new Map<string, TuitionReceipt[]>();
-
-  for (const receipt of receipts) {
-    const periodKey = (receipt.billingPeriod || '').trim().toLowerCase();
-    const key = `${receipt.studentId}::${receipt.classId || 'default'}::${periodKey}`;
-    if (paymentKindOf(receipt) === 'course') {
-      const group = courseGroups.get(key) || [];
-      group.push(receipt);
-      courseGroups.set(key, group);
-    } else {
-      const group = monthlyGroups.get(key) || [];
-      group.push(receipt);
-      monthlyGroups.set(key, group);
-    }
-  }
-
-  let courseDebt = 0;
-  for (const group of courseGroups.values()) {
-    if (group.length === 1) {
-      courseDebt += Math.max(group[0].debtAmount || 0, 0);
-    } else {
-      const maxCourseFee = Math.max(...group.map(r => r.courseFee || 0));
-      const maxDiscount = Math.max(...group.map(r => r.discount || 0));
-      const totalPaid = group.reduce((sum, r) => sum + Math.max(r.paidAmount || 0, 0), 0);
-      const totalDue = Math.max(maxCourseFee - maxDiscount, 0);
-      if (totalDue > 0) {
-        courseDebt += Math.max(totalDue - totalPaid, 0);
-      } else {
-        courseDebt += group.reduce((sum, r) => sum + Math.max(r.debtAmount || 0, 0), 0);
-      }
-    }
-  }
-
-  let monthlyDebt = 0;
-  for (const group of monthlyGroups.values()) {
-    if (group.length === 1) {
-      monthlyDebt += Math.max(group[0].debtAmount || 0, 0);
-    } else {
-      const maxMonthlyFee = Math.max(...group.map(r => r.monthlyFee || 0));
-      const maxDiscount = Math.max(...group.map(r => r.discount || 0));
-      const totalPaid = group.reduce((sum, r) => sum + Math.max(r.paidAmount || 0, 0), 0);
-      const totalDue = Math.max(maxMonthlyFee - maxDiscount, 0);
-      if (totalDue > 0) {
-        monthlyDebt += Math.max(totalDue - totalPaid, 0);
-      } else {
-        monthlyDebt += group.reduce((sum, r) => sum + Math.max(r.debtAmount || 0, 0), 0);
-      }
-    }
-  }
-
-  return {
-    total: courseDebt + monthlyDebt,
-    monthly: monthlyDebt,
-    course: courseDebt,
-  };
+  // Balances are reconciled against the complete ledger when it changes.
+  // Summing stored balances keeps month/class filters from recreating debt
+  // by dropping earlier installments from the calculation.
+  const monthly = receipts.filter(r => paymentKindOf(r) === 'monthly')
+    .reduce((sum, r) => sum + Math.max(r.debtAmount || 0, 0), 0);
+  const course = receipts.filter(r => paymentKindOf(r) === 'course')
+    .reduce((sum, r) => sum + Math.max(r.debtAmount || 0, 0), 0);
+  return { total: monthly + course, monthly, course };
 };
 
 export const feeStatusForReceipts = (receipts: TuitionReceipt[]): FeeStatus => {
@@ -124,4 +74,13 @@ export const reconcileReceiptBalances = (receipts: TuitionReceipt[]): TuitionRec
     const status: FeeStatus = debtAmount > 0 ? (receipt.paidAmount > 0 ? 'partial' : 'debt') : (receipt.paidAmount > 0 ? 'paid' : 'unpaid');
     return { ...receipt, debtAmount, status };
   });
+};
+
+export const nextReceiptCode = (receipts: Pick<TuitionReceipt, 'code'>[], year: number): string => {
+  const prefix = `PT-${year}-`;
+  const highest = receipts.reduce((max, receipt) => {
+    const suffix = receipt.code.startsWith(prefix) ? receipt.code.slice(prefix.length) : '';
+    return /^\d+$/.test(suffix) ? Math.max(max, Number(suffix)) : max;
+  }, 0);
+  return `${prefix}${String(highest + 1).padStart(3, '0')}`;
 };

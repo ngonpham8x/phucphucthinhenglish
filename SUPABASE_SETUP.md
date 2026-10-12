@@ -74,3 +74,7 @@ Trong thời gian bootstrap, bất kỳ email không nằm trong allowlist vẫn
 3. Xác nhận staff không mở được phần quản lý tài khoản.
 4. Đăng xuất, thử một email chưa được cấp quyền; ứng dụng phải hiển thị trạng thái chưa được cấp quyền.
 5. Mở Excel Import / Export và xác nhận báo cáo tổng quan có tổng thu theo tháng/từng lớp; thêm một dòng ở sheet `HỌC PHÍ` của file xuất để kiểm tra công thức tự cộng.
+
+## Bản vá quyền hàm
+
+Sau các migration 001–005, chạy `supabase/migrations/006_restrict_function_access.sql` trong SQL Editor bằng quyền quản trị. Bản vá thu hồi quyền RPC của hàm trigger, giữ quyền helper RLS cho authenticated. Kiểm tra lại đăng nhập và lưu dữ liệu sau khi áp dụng.

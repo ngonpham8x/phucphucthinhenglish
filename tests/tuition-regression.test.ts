@@ -1,5 +1,5 @@
-﻿import assert from 'node:assert/strict';
-import { debtBreakdown, feeStatusForReceipts, reconcileReceiptBalances } from '../src/lib/tuition';
+import assert from 'node:assert/strict';
+import { debtBreakdown, feeStatusForReceipts, reconcileReceiptBalances, nextReceiptCode } from '../src/lib/tuition';
 import { getEnrolledStudentsForClass, getStudentClassIds } from '../src/lib/student';
 import type { TuitionReceipt, Student, ClassRoom } from '../src/types';
 
@@ -30,3 +30,12 @@ const students = ['A', 'B', 'C', 'D', 'E', 'F'].map((id, index) => ({ id, classI
 assert.equal(getEnrolledStudentsForClass(classroom, students).length, 6);
 assert.deepEqual(getStudentClassIds(students[3], [classroom]).sort(), ['10', '11']);
 console.log('Passed: installments, monthly revenue, deletion, discounts, separate class debts, six-student roster, multiple classes.');
+
+const multiMonth = reconcileReceiptBalances([
+ receipt({}),
+ receipt({id:'oct-1',paidAmount:500_000,paymentDate:'2026-10-01'}),
+ receipt({id:'oct-2',paidAmount:1_500_000,paymentDate:'2026-10-10'}),
+]);
+assert.equal(debtBreakdown(multiMonth.filter(r => r.paymentDate.startsWith('2026-10'))).total,0);
+assert.equal(nextReceiptCode([{code:'PT-2026-095'},{code:'PT-2026-129'}],2026),'PT-2026-130');
+assert.equal(nextReceiptCode([{code:'PT-2025-999'}],2026),'PT-2026-001');

@@ -1,3 +1,4 @@
+import { localISODate, reportWeekBounds } from '../lib/date';
 import React, { useState } from 'react';
 import { Student, Teacher, ClassRoom, TuitionReceipt } from '../types';
 import { BarChart3, Calendar, Download, Printer, DollarSign, Users, BookOpen, X } from 'lucide-react';
@@ -22,19 +23,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('month');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(
-    [...receipts.map((receipt) => receipt.paymentDate).filter(Boolean)].sort().at(-1) || new Date().toISOString().slice(0, 10)
+    [...receipts.map((receipt) => receipt.paymentDate).filter(Boolean)].sort().at(-1) || localISODate()
   );
 
-  const reportDate = selectedDate || new Date().toISOString().slice(0, 10);
-  const referenceDate = new Date(`${reportDate}T00:00:00`);
-  const weekStart = new Date(referenceDate);
-  weekStart.setDate(referenceDate.getDate() - ((referenceDate.getDay() + 6) % 7));
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+  const reportDate = selectedDate || localISODate();
+  const [weekStart, weekEnd] = reportWeekBounds(reportDate);
   const reportReceipts = receipts.filter((receipt) => {
     if (timeFilter === 'day') return receipt.paymentDate === reportDate;
-    if (timeFilter === 'week') return receipt.paymentDate >= isoDay(weekStart) && receipt.paymentDate <= isoDay(weekEnd);
+    if (timeFilter === 'week') return receipt.paymentDate >= weekStart && receipt.paymentDate <= weekEnd;
     return receipt.paymentDate.startsWith(reportDate.slice(0, 7));
   });
   const totalRevenue = reportReceipts.reduce((sum, r) => sum + r.paidAmount, 0);

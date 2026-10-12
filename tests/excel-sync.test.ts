@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import ExcelJS from 'exceljs';
 import { generateMasterExcelWorkbook, parseCenterWorkbookFile } from '../src/services/excelService';
@@ -26,3 +26,26 @@ assert.equal(result.data!.students.length,1);
 assert.equal(result.data!.students[0].extraClassIds!.length,1);
 assert.equal(result.data!.receipts.length,3);
 console.log('Passed: multiple-class export/import, class-specific financial formulas, receipt round trip.');
+
+assert.deepEqual(result.data!.receipts.map(r => r.id).sort(),['r1','r2','r3']);
+assert.ok(result.data!.receipts.every(r => r.collectorName === 'Test'));
+assert.equal(book.getWorksheet('HỌC PHÍ')!.getCell('O6').value instanceof Date,true);
+assert.equal((book.getWorksheet('HỌC PHÍ')!.getCell('O6').value as Date).toISOString().slice(0,10),'2026-08-10');
+const parseBook = async () => parseCenterWorkbookFile(new File([Buffer.from(await book.xlsx.writeBuffer())],'edited.xlsx'));
+book.getWorksheet('HỌC PHÍ')!.getCell('B8').value = 'PT1';
+const legacyDuplicate = await parseBook();
+assert.deepEqual(legacyDuplicate.errors,[]);
+assert.equal(legacyDuplicate.data!.receipts.length,3);
+book.getWorksheet('HỌC PHÍ')!.getCell('T8').value = null;
+assert.ok((await parseBook()).errors.length > 0,'Ambiguous duplicate code must be rejected');
+book.getWorksheet('HỌC PHÍ')!.getCell('B8').value = 'PT3';
+book.getWorksheet('HỌC PHÍ')!.getCell('C6').value = 'wrong-student-id';
+assert.ok((await parseBook()).errors.length > 0,'Wrong ID must not fall back to a different student code');
+book.getWorksheet('HỌC PHÍ')!.getCell('C6').value = 'A';
+book.getWorksheet('HỌC PHÍ')!.getCell('F6').value = 'unknown-class';
+assert.ok((await parseBook()).errors.length > 0,'Unknown class must not silently use primary class');
+console.log('Passed: stable receipt IDs, collector, Excel dates, historical duplicate codes, invalid student/class references.');
+
+book.getWorksheet('HỌC PHÍ')!.getCell('F6').value = '10';
+book.getWorksheet('HỌC PHÍ')!.getCell('L6').value = -1;
+assert.ok((await parseBook()).errors.length > 0,'Negative imported payment must be rejected');

@@ -1,3 +1,4 @@
+import { localISODate } from '../lib/date';
 import React, { useMemo, useState } from 'react';
 import { Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, Building2, Calendar, CheckCircle2, DollarSign, GraduationCap, Users, UserCheck, UserMinus } from 'lucide-react';
@@ -39,7 +40,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ students, teachers
   const totalDebtBreakdown = debtBreakdown(receipts);
   const totalDebt = totalDebtBreakdown.total;
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = localISODate().slice(0, 7);
   const availableMonths = useMemo(() => {
     const months = [...new Set(receipts.map((r) => r.paymentDate.slice(0, 7)).filter(Boolean))].sort().reverse();
     if (!months.includes(currentMonth)) {

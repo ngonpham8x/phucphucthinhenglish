@@ -1,3 +1,4 @@
+import { localISODate } from '../lib/date';
 import React, { useRef, useState } from 'react';
 import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult, ImportedStudentRow } from '../services/excelService';
 import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings, StaffPermissions, CourseProgram } from '../types';
@@ -71,7 +72,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const filename = `PhucPhucThinh_MasterReport_${new Date().toISOString().split('T')[0]}.xlsm`;
+      const filename = `PhucPhucThinh_MasterReport_${localISODate()}.${blob.type.toLowerCase().includes('macroenabled') ? 'xlsm' : 'xlsx'}`;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
@@ -180,7 +181,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         phone: item.phone || '',
         parentName: item.parentName || '',
         parentPhone: item.parentPhone || '',
-        enrollDate: new Date().toISOString().split('T')[0],
+        enrollDate: localISODate(),
         notes: `Nhập từ Excel: ${fileName || 'tệp không rõ tên'}`,
         status: 'active',
         feeStatus: 'unpaid'

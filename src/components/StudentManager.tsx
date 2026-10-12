@@ -1,3 +1,4 @@
+import { localISODate } from '../lib/date';
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { debtBreakdown, paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
@@ -165,7 +166,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       phone: '',
       parentName: '',
       parentPhone: '',
-      enrollDate: new Date().toISOString().split('T')[0],
+      enrollDate: localISODate(),
       notes: '',
       status: 'active',
       feeStatus: 'unpaid'
