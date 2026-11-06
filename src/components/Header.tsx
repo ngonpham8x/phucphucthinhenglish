@@ -25,6 +25,7 @@ interface HeaderProps {
   onOpenBackupModal: () => void;
   onOpenSettingsModal: () => void;
   onOpenPwaInstall?: () => void;
+  onOpenPrivacyPolicy?: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   onLogout: () => void;
@@ -38,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLogin,
   onOpenUserManagement,
   onOpenPwaInstall,
+  onOpenPrivacyPolicy,
   searchQuery,
   setSearchQuery,
   sidebarCollapsed,
@@ -114,6 +116,19 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
               <span>{t('permissions')}</span>
+            </button>
+          )}
+
+          {/* Privacy Policy / Legal Compliance button */}
+          {onOpenPrivacyPolicy && (
+            <button
+              type="button"
+              onClick={onOpenPrivacyPolicy}
+              className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-red-800 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-slate-200 transition-colors shadow-2xs"
+              title="Xem Chính sách bảo vệ dữ liệu cá nhân (Luật 91/2025/QH15)"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-red-700" />
+              <span className="hidden sm:inline">Chính sách bảo mật</span>
             </button>
           )}
 

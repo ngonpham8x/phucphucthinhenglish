@@ -1,9 +1,18 @@
 import { localISODate } from '../lib/date';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
-import { CreditCard, Plus, PlusCircle, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2, Filter, RotateCcw, Split, Calendar } from 'lucide-react';
+import { CreditCard, Plus, PlusCircle, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2, Filter, RotateCcw, Split, Calendar, GraduationCap, ArrowRight } from 'lucide-react';
 import logoImg from '../assets/images/regenerated_image_1786351687546.png';
-import { paymentKindLabel, paymentMethodLabel, paymentPeriodLabel, debtBreakdown, nextReceiptCode } from '../lib/tuition';
+import {
+  paymentKindLabel,
+  paymentMethodLabel,
+  paymentPeriodLabel,
+  debtBreakdown,
+  nextReceiptCode,
+  suggestNextCoursePeriod,
+  getStudentCourseProgress,
+  COURSE_PERIOD_PRESETS
+} from '../lib/tuition';
 import { isStudentInClass, getStudentClassIds } from '../lib/student';
 
 const receiptStatus = (receipt: Pick<TuitionReceipt, 'paidAmount' | 'debtAmount' | 'status'>) => {
@@ -36,6 +45,8 @@ interface TuitionManagerProps {
   onAddReceipt: (r: TuitionReceipt) => void;
   onUpdateReceipt: (r: TuitionReceipt) => void;
   onDeleteReceipt: (id: string) => void;
+  collectRequest?: { studentId: string; classId?: string; isNextCourse?: boolean; targetPeriod?: string } | null;
+  onCollectRequestHandled?: () => void;
 }
 
 export const TuitionManager: React.FC<TuitionManagerProps> = ({
@@ -48,7 +59,9 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   isOwner,
   onAddReceipt,
   onUpdateReceipt,
-  onDeleteReceipt
+  onDeleteReceipt,
+  collectRequest,
+  onCollectRequestHandled
 }) => {
   const currentMonth = localISODate().slice(0, 7);
   const defaultCoursePeriod = `Khóa ${new Date().getFullYear()}`;
@@ -73,6 +86,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [splitNotes1, setSplitNotes1] = useState<string>('');
   const [splitNotes2, setSplitNotes2] = useState<string>('');
 
+  const [nextCourseContext, setNextCourseContext] = useState<{
+    isNextCourse: boolean;
+    previousPeriod?: string;
+    previousReceiptCode?: string;
+  } | null>(null);
+
   const [collectingStudentId, setCollectingStudentId] = useState<string>(students[0]?.id || '');
   const [collectClassId, setCollectClassId] = useState<string>('');
   const [courseFeeInput, setCourseFeeInput] = useState<number>(0);
@@ -85,7 +104,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [paidAmountInput, setPaidAmountInput] = useState<number>(0);
   const [discountInput, setDiscountInput] = useState<number>(0);
   const [paymentDateInput, setPaymentDateInput] = useState<string>(localISODate());
-  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chưa xác định');
+  const [paymentMethod, setPaymentMethod] = useState<'Tiền mặt' | 'Chuyển khoản' | 'Thẻ' | 'Chưa xác định'>('Chuyển khoản');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [collectError, setCollectError] = useState<string | null>(null);
   const [receiptQuery, setReceiptQuery] = useState('');
@@ -95,6 +114,43 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
 
+  const currentStudentProgress = useMemo(() => (
+    getStudentCourseProgress(collectingStudentId, collectClassId, receipts, programs, classes)
+  ), [collectingStudentId, collectClassId, receipts, programs, classes]);
+
+  useEffect(() => {
+    if (!collectRequest) return;
+    setEditingReceipt(null);
+    setInstallmentParentReceipt(null);
+    const student = students.find(s => s.id === collectRequest.studentId);
+    if (!student) return;
+
+    setCollectingStudentId(student.id);
+    const targetClassId = collectRequest.classId || student.classId || (student.extraClassIds && student.extraClassIds[0]) || classes[0]?.id || '';
+    setCollectClassId(targetClassId);
+
+    const progress = getStudentCourseProgress(student.id, targetClassId, receipts, programs, classes);
+    setPaymentKind('course');
+    const fee = progress.suggestedFee || programs.find(p => p.id === classes.find(c => c.id === targetClassId)?.programId)?.tuitionFee || 0;
+    setCourseFeeInput(fee);
+    setPaidAmountInput(fee);
+    setDiscountInput(0);
+
+    const nextPeriod = collectRequest.targetPeriod || progress.nextSuggestedPeriod || 'Mức độ 2 (Khóa 3 tháng)';
+    setCourseBillingPeriod(nextPeriod);
+    setPaymentDateInput(localISODate());
+    setPaymentMethod('Chuyển khoản');
+    setPaymentNotes(`Thu học phí ${nextPeriod} - Khóa tiếp theo cho học viên ${student.name}`);
+    setNextCourseContext({
+      isNextCourse: true,
+      previousPeriod: progress.latestReceipt?.billingPeriod,
+      previousReceiptCode: progress.latestReceipt?.code
+    });
+    setCollectError(null);
+    setIsCollectModalOpen(true);
+    onCollectRequestHandled?.();
+  }, [collectRequest, classes, onCollectRequestHandled, programs, receipts, students]);
+
   const canCollect = isOwner || permissions.tuition.collect;
   const canDelete = isOwner || permissions.tuition.delete;
 
@@ -103,10 +159,13 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const monthlyCollected = receipts.filter((receipt) => receipt.paymentKind !== 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0);
   const courseCollected = receipts.filter((receipt) => receipt.paymentKind === 'course').reduce((sum, receipt) => sum + receipt.paidAmount, 0);
   const receiptMonths: string[] = [...new Set<string>(receipts.map((receipt) => receipt.paymentDate.slice(0, 7)).filter(Boolean))].sort().reverse();
-  const coursePeriodOptions = [...new Set(receipts
-    .filter((receipt) => receipt.paymentKind === 'course')
-    .map((receipt) => receipt.billingPeriod?.trim())
-    .filter((period): period is string => Boolean(period)))];
+  const coursePeriodOptions = [...new Set([
+    ...COURSE_PERIOD_PRESETS,
+    ...receipts
+      .filter((receipt) => receipt.paymentKind === 'course')
+      .map((receipt) => receipt.billingPeriod?.trim())
+      .filter((period): period is string => Boolean(period))
+  ])];
   const filteredReceipts = useMemo(() => {
     const normalizedQuery = receiptQuery.trim().toLocaleLowerCase('vi-VN');
     return [...receipts]
@@ -150,21 +209,24 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const handleOpenCollect = () => {
     setEditingReceipt(null);
     setInstallmentParentReceipt(null);
+    setNextCourseContext(null);
     const st = students[0];
     setCollectingStudentId(st?.id || '');
     const initialClassId = st ? (st.classId || (st.extraClassIds && st.extraClassIds[0]) || classes[0]?.id || '') : (classes[0]?.id || '');
     setCollectClassId(initialClassId);
     const program = programs.find(p => p.id === (classes.find(c => c.id === initialClassId)?.programId || st?.programId));
     const suggestedMonthlyFee = program?.tuitionFee ?? 0;
-    setCourseFeeInput(0);
+    const progress = st ? getStudentCourseProgress(st.id, initialClassId, receipts, programs, classes) : null;
+    const initialCourseFee = progress?.suggestedFee || program?.tuitionFee || (suggestedMonthlyFee * 3) || 0;
+    setCourseFeeInput(initialCourseFee);
     setMonthlyFeeInput(suggestedMonthlyFee);
     setPaymentKind('monthly');
     setMonthlyBillingPeriod(currentMonth);
-    setCourseBillingPeriod(coursePeriodOptions[0] || defaultCoursePeriod);
+    setCourseBillingPeriod(progress?.hasCompletedCourse ? progress.nextSuggestedPeriod : (coursePeriodOptions[0] || 'Mức độ 1 (Khóa 3 tháng)'));
     setPaidAmountInput(suggestedMonthlyFee);
     setDiscountInput(0);
     setPaymentDateInput(localISODate());
-    setPaymentMethod('Chưa xác định');
+    setPaymentMethod('Chuyển khoản');
     setPaymentNotes('');
     setCollectError(null);
     setIsCollectModalOpen(true);
@@ -173,6 +235,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const handleOpenEditReceipt = (receipt: TuitionReceipt) => {
     setEditingReceipt(receipt);
     setInstallmentParentReceipt(null);
+    setNextCourseContext(null);
     setCollectingStudentId(receipt.studentId);
     setCollectClassId(receipt.classId || '');
     setCourseFeeInput(receipt.courseFee || 0);
@@ -198,6 +261,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   const handleOpenNextInstallment = (receipt: TuitionReceipt) => {
     setInstallmentParentReceipt(receipt);
     setEditingReceipt(null);
+    setNextCourseContext(null);
     setCollectingStudentId(receipt.studentId);
     setCollectClassId(receipt.classId || '');
     setCourseFeeInput(receipt.courseFee || 0);
@@ -211,6 +275,39 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setPaymentDateInput(localISODate());
     setPaymentMethod(receipt.paymentMethod || 'Chuyển khoản');
     setPaymentNotes(`Thu đợt tiếp cho phiếu ${receipt.code} (còn nợ ${receipt.debtAmount.toLocaleString('vi-VN')} đ)`);
+    setCollectError(null);
+    setIsCollectModalOpen(true);
+  };
+
+  // Mở modal thu học phí khóa tiếp theo (Mức độ tiếp theo / 3 tháng tiếp theo)
+  const handleOpenNextCourse = (receipt: TuitionReceipt) => {
+    setEditingReceipt(null);
+    setInstallmentParentReceipt(null);
+    setCollectingStudentId(receipt.studentId);
+    setCollectClassId(receipt.classId || '');
+    setPaymentKind('course');
+
+    const targetClass = classes.find(c => c.id === receipt.classId);
+    const prog = programs.find(p => p.id === targetClass?.programId);
+    const fee = receipt.courseFee > 0 ? receipt.courseFee : (prog?.tuitionFee || 0);
+
+    setCourseFeeInput(fee);
+    setMonthlyFeeInput(receipt.monthlyFee || 0);
+
+    const progress = getStudentCourseProgress(receipt.studentId, receipt.classId, receipts, programs, classes);
+    const nextPeriod = progress.nextSuggestedPeriod || suggestNextCoursePeriod(receipt.billingPeriod);
+
+    setCourseBillingPeriod(nextPeriod);
+    setPaidAmountInput(fee);
+    setDiscountInput(0);
+    setPaymentDateInput(localISODate());
+    setPaymentMethod(receipt.paymentMethod || 'Chuyển khoản');
+    setPaymentNotes(`Thu học phí ${nextPeriod} - Khóa tiếp theo sau khi hoàn thành ${receipt.billingPeriod || 'khóa trước'}`);
+    setNextCourseContext({
+      isNextCourse: true,
+      previousPeriod: receipt.billingPeriod,
+      previousReceiptCode: receipt.code
+    });
     setCollectError(null);
     setIsCollectModalOpen(true);
   };
@@ -312,7 +409,12 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       (r.billingPeriod || r.paymentDate.slice(0, 7)).trim().toLowerCase() === cleanBillingPeriod.toLowerCase())
       .reduce((sum, r) => sum + Math.max(r.paidAmount || 0, 0), 0);
     if (paidAmountInput + priorPaid > finalPrice) {
-      setCollectError('Tổng các đợt đóng không thể lớn hơn học phí sau giảm giá của kỳ này.');
+      if (priorPaid >= finalPrice) {
+        const nextSuggested = suggestNextCoursePeriod(cleanBillingPeriod);
+        setCollectError(`Học viên đã đóng đủ toàn bộ học phí cho kỳ/mốc "${cleanBillingPeriod}". Để thu cho khóa tiếp theo (Mức độ 2, Khóa 2, 3 tháng tiếp theo), vui lòng đổi mốc khóa sang "${nextSuggested}".`);
+      } else {
+        setCollectError('Tổng các đợt đóng không thể lớn hơn học phí sau giảm giá của kỳ này.');
+      }
       return;
     }
     if (installmentParentReceipt && paidAmountInput <= 0) {
@@ -580,6 +682,16 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                           <PlusCircle className="w-3.5 h-3.5 text-emerald-600" /> Thu đợt tiếp
                         </button>
                       )}
+                      {canCollect && rc.paymentKind === 'course' && rc.debtAmount === 0 && (
+                        <button
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); handleOpenNextCourse(rc); }}
+                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold rounded-lg text-[11px] inline-flex items-center gap-1 border border-indigo-200"
+                          title={`Thu tiếp khóa tiếp theo / mức độ tiếp theo (Gợi ý: ${suggestNextCoursePeriod(rc.billingPeriod)})`}
+                        >
+                          <GraduationCap className="w-3.5 h-3.5 text-indigo-600" /> Thu khóa tiếp
+                        </button>
+                      )}
                       {canCollect && rc.paidAmount > 0 && rc.paymentKind === 'course' && (
                         <button
                           type="button"
@@ -639,10 +751,53 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
               <CreditCard className="w-5 h-5 text-red-700" />
               {installmentParentReceipt
                 ? `Thu Đợt Tiếp — Phiếu ${installmentParentReceipt.code}`
-                : editingReceipt
-                  ? `Sửa Phiếu Thu ${editingReceipt.code}`
-                  : 'Lập Phiếu Thu Học Phí'}
+                : nextCourseContext?.isNextCourse
+                  ? `Thu Học Phí Khóa Tiếp Theo (${courseBillingPeriod})`
+                  : editingReceipt
+                    ? `Sửa Phiếu Thu ${editingReceipt.code}`
+                    : 'Lập Phiếu Thu Học Phí'}
             </h3>
+
+            {nextCourseContext?.isNextCourse && (
+              <div className="mb-3 rounded-xl border border-indigo-300 bg-indigo-50 p-3 text-xs text-indigo-950">
+                <div className="flex items-center gap-1.5 font-bold text-indigo-900">
+                  <GraduationCap className="w-4 h-4 text-indigo-700 shrink-0" />
+                  Đang thu khóa tiếp theo: {courseBillingPeriod}
+                </div>
+                <p className="mt-1 text-indigo-800">
+                  Học viên đã hoàn tất kỳ trước{nextCourseContext.previousPeriod ? ` (${nextCourseContext.previousPeriod})` : ''}. Hệ thống sẽ lập phiếu thu mới độc lập cho khóa này.
+                </p>
+              </div>
+            )}
+
+            {currentStudentProgress.hasCompletedCourse && !installmentParentReceipt && !editingReceipt && !nextCourseContext && (
+              <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50/80 p-3 text-xs text-indigo-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div>
+                  <div className="font-extrabold text-indigo-900 flex items-center gap-1.5">
+                    <GraduationCap className="w-4 h-4 text-indigo-700 shrink-0" />
+                    <span>Đã hoàn tất: <b>{currentStudentProgress.completedPeriods.join(', ') || currentStudentProgress.latestReceipt?.billingPeriod || 'Khóa trước'}</b></span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] text-indigo-700">
+                    Gợi ý khóa tiếp theo: <b>{currentStudentProgress.nextSuggestedPeriod}</b>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentKind('course');
+                    setCourseBillingPeriod(currentStudentProgress.nextSuggestedPeriod);
+                    if (currentStudentProgress.suggestedFee > 0) {
+                      setCourseFeeInput(currentStudentProgress.suggestedFee);
+                      setPaidAmountInput(currentStudentProgress.suggestedFee);
+                    }
+                    setCollectError(null);
+                  }}
+                  className="shrink-0 px-2.5 py-1 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded-lg text-[11px] shadow-xs flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-300" /> Thu tiếp: {currentStudentProgress.nextSuggestedPeriod.replace(/\s*\(.*?\)/, '')}
+                </button>
+              </div>
+            )}
 
             {installmentParentReceipt && (
               <div className="mb-3 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-950">
@@ -691,20 +846,23 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     setCollectingStudentId(e.target.value);
                     setCollectError(null);
                     const st = students.find(s => s.id === e.target.value);
-                    if (st) {
-                      const defaultClass = st.classId || (st.extraClassIds && st.extraClassIds[0]) || classes[0]?.id || '';
-                      setCollectClassId(defaultClass);
-                    }
+                    const defaultClass = st ? (st.classId || (st.extraClassIds && st.extraClassIds[0]) || classes[0]?.id || '') : (classes[0]?.id || '');
+                    setCollectClassId(defaultClass);
                     const studentClassId = st ? getStudentClassIds(st, classes)[0] : '';
                     const prog = programs.find(p => p.id === (classes.find(c => c.id === studentClassId)?.programId || st?.programId));
+                    const progress = st ? getStudentCourseProgress(st.id, defaultClass, receipts, programs, classes) : null;
                     if (prog) {
                       if (paymentKind === 'monthly') {
                         setMonthlyFeeInput(prog.tuitionFee);
                         setPaidAmountInput(prog.tuitionFee);
                       } else {
-                        setCourseFeeInput(prog.tuitionFee);
-                        setPaidAmountInput(prog.tuitionFee);
+                        const fee = progress?.suggestedFee || prog.tuitionFee || (prog.tuitionFee * 3);
+                        setCourseFeeInput(fee);
+                        setPaidAmountInput(fee);
                       }
+                    }
+                    if (progress?.hasCompletedCourse) {
+                      setCourseBillingPeriod(progress.nextSuggestedPeriod);
                     }
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 disabled:bg-slate-100"
@@ -725,10 +883,19 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     setCollectClassId(e.target.value);
                     if (!editingReceipt) {
                       const program = programs.find(p => p.id === classes.find(c => c.id === e.target.value)?.programId);
+                      const progress = getStudentCourseProgress(collectingStudentId, e.target.value, receipts, programs, classes);
                       const fee = program?.tuitionFee || 0;
-                      if (paymentKind === 'monthly') setMonthlyFeeInput(fee);
-                      else setCourseFeeInput(fee);
-                      setPaidAmountInput(fee);
+                      if (paymentKind === 'monthly') {
+                        setMonthlyFeeInput(fee);
+                        setPaidAmountInput(fee);
+                      } else {
+                        const courseFee = progress.suggestedFee || fee;
+                        setCourseFeeInput(courseFee);
+                        setPaidAmountInput(courseFee);
+                        if (progress.hasCompletedCourse) {
+                          setCourseBillingPeriod(progress.nextSuggestedPeriod);
+                        }
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 disabled:bg-slate-100"
@@ -816,6 +983,24 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                       const nextKind = e.target.value as 'course' | 'monthly';
                       setPaymentKind(nextKind);
                       setCollectError(null);
+                      if (nextKind === 'course') {
+                        if (courseFeeInput <= 0) {
+                          const prog = programs.find(p => p.id === (classes.find(c => c.id === collectClassId)?.programId));
+                          const fee = currentStudentProgress.suggestedFee || prog?.tuitionFee || (monthlyFeeInput > 0 ? monthlyFeeInput * 3 : 0);
+                          setCourseFeeInput(fee);
+                          setPaidAmountInput(fee);
+                        }
+                        if (currentStudentProgress.hasCompletedCourse && (!courseBillingPeriod || courseBillingPeriod.startsWith('Khóa 20'))) {
+                          setCourseBillingPeriod(currentStudentProgress.nextSuggestedPeriod);
+                        }
+                      } else {
+                        if (monthlyFeeInput <= 0) {
+                          const prog = programs.find(p => p.id === (classes.find(c => c.id === collectClassId)?.programId));
+                          const fee = prog?.tuitionFee || (courseFeeInput > 0 ? Math.round(courseFeeInput / 3) : 0);
+                          setMonthlyFeeInput(fee);
+                          setPaidAmountInput(fee);
+                        }
+                      }
                     }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:bg-slate-100"
                   >
@@ -829,8 +1014,9 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <input type="month" value={monthlyBillingPeriod} disabled={Boolean(installmentParentReceipt)} onChange={(e) => setMonthlyBillingPeriod(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:bg-slate-100" required />
                   ) : (
                     <>
-                      <input type="text" value={courseBillingPeriod} disabled={Boolean(installmentParentReceipt)} onChange={(e) => setCourseBillingPeriod(e.target.value)} list="course-period-options" placeholder="Ví dụ: Khóa 09/2026–12/2026" className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:bg-slate-100" required />
+                      <input type="text" value={courseBillingPeriod} disabled={Boolean(installmentParentReceipt)} onChange={(e) => setCourseBillingPeriod(e.target.value)} list="course-period-options" placeholder="Ví dụ: Mức độ 2 (Khóa 3 tháng)" className="w-full px-3 py-2 border border-slate-300 rounded-xl disabled:bg-slate-100" required />
                       <datalist id="course-period-options">
+                        {COURSE_PERIOD_PRESETS.map((preset) => <option key={preset} value={preset} />)}
                         {coursePeriodOptions.map((period) => <option key={period} value={period} />)}
                         <option value={defaultCoursePeriod} />
                       </datalist>
@@ -838,6 +1024,31 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                   )}
                 </div>
               </div>
+
+              {paymentKind === 'course' && (
+                <div className="space-y-1">
+                  <span className="text-[10px] font-semibold text-slate-500">Gợi ý mốc khóa luyện thi (3 tháng / khóa):</span>
+                  <div className="flex flex-wrap gap-1">
+                    {COURSE_PERIOD_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          setCourseBillingPeriod(preset);
+                          setCollectError(null);
+                        }}
+                        className={`px-2 py-0.5 text-[10px] rounded-md border transition-colors ${
+                          courseBillingPeriod === preset
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">{paymentKind === 'course' ? 'Học Phí Khóa (VNĐ) *' : 'Học Phí Tháng (VNĐ) *'}</label>
@@ -909,7 +1120,24 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 );
               })()}
 
-              {collectError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">{collectError}</p>}
+              {collectError && (
+                <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-800 space-y-1.5">
+                  <p className="font-semibold">{collectError}</p>
+                  {paymentKind === 'course' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = suggestNextCoursePeriod(courseBillingPeriod);
+                        setCourseBillingPeriod(next);
+                        setCollectError(null);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-700 hover:bg-rose-800 text-white font-bold rounded-lg text-[11px] shadow-xs"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5 text-amber-300" /> Chuyển sang mốc: {suggestNextCoursePeriod(courseBillingPeriod)}
+                    </button>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1215,6 +1443,19 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
               >
                 Đóng
               </button>
+              {canCollect && selectedReceipt.paymentKind === 'course' && selectedReceipt.debtAmount === 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = selectedReceipt;
+                    setSelectedReceipt(null);
+                    handleOpenNextCourse(target);
+                  }}
+                  className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <GraduationCap className="w-4 h-4 text-amber-300" /> Thu Khóa Tiếp Theo
+                </button>
+              )}
               <button
                 onClick={handlePrintReceipt}
                 className="px-5 py-2 bg-red-800 text-white rounded-xl text-xs font-bold hover:bg-red-900 flex items-center gap-1.5 shadow-sm"

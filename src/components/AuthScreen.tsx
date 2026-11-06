@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { LoaderCircle } from 'lucide-react';
+import { LoaderCircle, ShieldCheck } from 'lucide-react';
 import { Logo } from './Logo';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 
 export const AuthScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPolicyOpen, setIsPolicyOpen] = useState(false);
 
   const handleGoogleLogin = async () => {
     if (!supabase) return;
@@ -59,7 +61,28 @@ export const AuthScreen: React.FC = () => {
         </button>
 
         {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2.5 text-xs text-red-800">{error}</p>}
+
+        {/* Legal & Privacy Policy Notice */}
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Bằng việc đăng nhập, bạn đồng ý tuân thủ quy chế vận hành và{' '}
+            <button
+              type="button"
+              onClick={() => setIsPolicyOpen(true)}
+              className="text-red-700 font-bold hover:underline inline-flex items-center gap-1"
+            >
+              <ShieldCheck className="w-3 h-3 inline" />
+              Chính sách bảo vệ dữ liệu cá nhân
+            </button>{' '}
+            của Trung tâm (theo Luật 91/2025/QH15).
+          </p>
+        </div>
       </section>
+
+      <PrivacyPolicyModal
+        isOpen={isPolicyOpen}
+        onClose={() => setIsPolicyOpen(false)}
+      />
     </main>
   );
 };

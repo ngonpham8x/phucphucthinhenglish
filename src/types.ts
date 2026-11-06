@@ -39,6 +39,7 @@ export interface Student {
   phone: string;
   parentName: string;
   parentPhone: string;
+  parentConsent?: boolean; // Xác nhận đồng ý của cha mẹ/người giám hộ theo Điều 24 Luật 91/2025/QH15
   enrollDate: string;
   notes?: string;
   status: StudentStatus;

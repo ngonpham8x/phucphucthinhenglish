@@ -46,6 +46,7 @@ import { TuitionManager } from './components/TuitionManager';
 import { ReportView } from './components/ReportView';
 import { ActivityLogView } from './components/ActivityLogView';
 import { SystemSettingsModal } from './components/SystemSettingsModal';
+import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { LoginModal } from './components/LoginModal';
 import { PwaInstallModal } from './components/PwaInstallModal';
 import { AuthScreen } from './components/AuthScreen';
@@ -308,6 +309,12 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [classEditRequest, setClassEditRequest] = useState<ClassRoom | null>(null);
+  const [tuitionCollectRequest, setTuitionCollectRequest] = useState<{
+    studentId: string;
+    classId?: string;
+    isNextCourse?: boolean;
+    targetPeriod?: string;
+  } | null>(null);
   const contentViewportRef = useRef<HTMLElement>(null);
   const lastHydratedUserIdRef = useRef<string | null>(null);
   const lastSyncedPayloadRef = useRef<string>('');
@@ -354,6 +361,7 @@ export default function App() {
   const [isImportExportModalOpen, setIsImportExportModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isPwaModalOpen, setIsPwaModalOpen] = useState<boolean>(false);
+  const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState<boolean>(false);
 
   // Sync to LocalStorage
   useEffect(() => saveStored('settings', settings), [settings]);
@@ -942,6 +950,7 @@ export default function App() {
         onOpenBackupModal={() => setIsBackupModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenPwaInstall={() => setIsPwaModalOpen(true)}
+        onOpenPrivacyPolicy={() => setIsPrivacyPolicyOpen(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onLogout={() => void handleLogout()}
@@ -993,6 +1002,10 @@ export default function App() {
               onDeleteStudent={handleDeleteStudent}
               onOpenImportExportModal={() => setIsImportExportModalOpen(true)}
               onOpenTuition={() => navigateTo('tuition')}
+              onOpenTuitionCollect={(req) => {
+                setTuitionCollectRequest(req);
+                navigateTo('tuition');
+              }}
               onCreateProgram={handleCreateProgram}
             />
           )}
@@ -1092,6 +1105,8 @@ export default function App() {
               onAddReceipt={handleAddReceipt}
               onUpdateReceipt={handleUpdateReceipt}
               onDeleteReceipt={handleDeleteReceipt}
+              collectRequest={tuitionCollectRequest}
+              onCollectRequestHandled={() => setTuitionCollectRequest(null)}
             />
           )}
 
@@ -1273,6 +1288,12 @@ export default function App() {
       <PwaInstallModal
         isOpen={isPwaModalOpen}
         onClose={() => setIsPwaModalOpen(false)}
+      />
+
+      <PrivacyPolicyModal
+        isOpen={isPrivacyPolicyOpen}
+        onClose={() => setIsPrivacyPolicyOpen(false)}
+        centerName={settings.name}
       />
     </div>
   );

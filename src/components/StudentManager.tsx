@@ -1,7 +1,7 @@
 import { localISODate } from '../lib/date';
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { debtBreakdown, paymentKindLabel, paymentPeriodLabel } from '../lib/tuition';
+import { debtBreakdown, paymentKindLabel, paymentPeriodLabel, getStudentCourseProgress, suggestNextCoursePeriod } from '../lib/tuition';
 import { isStudentInClass, getStudentClassIds } from '../lib/student';
 import {
   Student,
@@ -85,6 +85,7 @@ interface StudentManagerProps {
   onDeleteStudent: (id: string) => void;
   onOpenImportExportModal: () => void;
   onOpenTuition: () => void;
+  onOpenTuitionCollect?: (req: { studentId: string; classId?: string; isNextCourse?: boolean; targetPeriod?: string }) => void;
   onCreateProgram: (program: CourseProgram) => void;
 }
 
@@ -104,6 +105,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   onDeleteStudent,
   onOpenImportExportModal,
   onOpenTuition,
+  onOpenTuitionCollect,
   onCreateProgram
 }) => {
   const { t, language } = useLanguage();
@@ -169,7 +171,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       enrollDate: localISODate(),
       notes: '',
       status: 'active',
-      feeStatus: 'unpaid'
+      feeStatus: 'unpaid',
+      parentConsent: true
     });
     setProgramEntryMode('catalog');
     setManualProgramName('');
@@ -496,6 +499,28 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               <Eye className="w-3.5 h-3.5 text-blue-600" />
                             </button>
 
+                            {(() => {
+                              const prog = getStudentCourseProgress(st.id, st.classId, receipts, programs, classes);
+                              if (prog.hasCompletedCourse && onOpenTuitionCollect) {
+                                return (
+                                  <button
+                                    onClick={() => onOpenTuitionCollect({
+                                      studentId: st.id,
+                                      classId: st.classId,
+                                      isNextCourse: true,
+                                      targetPeriod: prog.nextSuggestedPeriod
+                                    })}
+                                    className="px-2 py-1 text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1 border border-indigo-200"
+                                    title={`Thu học phí khóa tiếp theo (${prog.nextSuggestedPeriod})`}
+                                  >
+                                    <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span className="hidden xl:inline">Thu {prog.nextSuggestedPeriod.split(' ')[0]} {prog.nextSuggestedPeriod.split(' ')[1] || ''}</span>
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
+
                             {canEdit && (
                               <button
                                 onClick={() => {
@@ -638,6 +663,28 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       <Eye className="w-3.5 h-3.5 text-amber-400" />
                       <span>Xem chi tiết & Lịch học</span>
                     </button>
+
+                    {(() => {
+                      const prog = getStudentCourseProgress(st.id, st.classId, receipts, programs, classes);
+                      if (prog.hasCompletedCourse && onOpenTuitionCollect) {
+                        return (
+                          <button
+                            onClick={() => onOpenTuitionCollect({
+                              studentId: st.id,
+                              classId: st.classId,
+                              isNextCourse: true,
+                              targetPeriod: prog.nextSuggestedPeriod
+                            })}
+                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                            title={`Thu học phí khóa tiếp theo (${prog.nextSuggestedPeriod})`}
+                          >
+                            <GraduationCap className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Thu khóa tiếp</span>
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()}
 
                     {canEdit && (
                       <button
@@ -844,6 +891,10 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   <div className="text-slate-400 text-[10px] font-bold uppercase">Địa chỉ nhà</div>
                   <div className="font-bold text-slate-800 mt-0.5">{viewingStudent.address || 'TP. Tây Ninh'}</div>
                 </div>
+                <div className="sm:col-span-2 pt-2 border-t border-slate-200/60 flex items-center gap-1.5 text-[11px] text-emerald-800">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                  <span>Cam kết dữ liệu (Luật 91/2025/QH15): <strong>{viewingStudent.parentConsent !== false ? 'Đã xác nhận sự đồng ý của cha mẹ / người giám hộ' : 'Chưa ghi nhận'}</strong></span>
+                </div>
               </div>
             </div>
 
@@ -882,6 +933,56 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                           <strong>{receipt.debtAmount.toLocaleString('vi-VN')} đ</strong>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const courseProgress = getStudentCourseProgress(viewingStudent.id, viewingStudent.classId, receipts, programs, classes);
+                if (!courseProgress.courseReceipts.length && !courseProgress.hasCompletedCourse) return null;
+                return (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-3.5 text-xs text-indigo-950 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="font-extrabold text-indigo-900 flex items-center gap-1.5">
+                        <GraduationCap className="w-4 h-4 text-indigo-700" />
+                        <span>Khóa Luyện Thi & Cấp Độ (3 tháng / khóa)</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+                        {courseProgress.courseReceipts.length} đợt / khóa
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {courseProgress.courseReceipts.map(rc => (
+                        <div key={rc.id} className="flex justify-between items-center text-[11px] border-b border-indigo-100 pb-1 last:border-b-0">
+                          <span>{paymentPeriodLabel(rc)} ({rc.paymentDate}):</span>
+                          <b className={rc.debtAmount > 0 ? "text-rose-700" : "text-emerald-700"}>
+                            Đã thu {rc.paidAmount.toLocaleString('vi-VN')} đ {rc.debtAmount > 0 ? `(Nợ ${rc.debtAmount.toLocaleString('vi-VN')} đ)` : '✓ Hoàn tất'}
+                          </b>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-2 border-t border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                      <span className="text-[11px] text-indigo-800">
+                        Gợi ý khóa tiếp theo: <b>{courseProgress.nextSuggestedPeriod}</b>
+                      </span>
+                      {onOpenTuitionCollect && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewingStudent(null);
+                            onOpenTuitionCollect({
+                              studentId: viewingStudent.id,
+                              classId: viewingStudent.classId,
+                              isNextCourse: true,
+                              targetPeriod: courseProgress.nextSuggestedPeriod
+                            });
+                          }}
+                          className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white font-bold rounded-lg text-xs inline-flex items-center gap-1.5 shadow-xs"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-amber-300" /> Thu học phí {courseProgress.nextSuggestedPeriod.replace(/\s*\(.*?\)/, '')}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -994,14 +1095,30 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Khối Lớp</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Khối Lớp / Cấp Độ Luyện Thi</label>
                   <input
                     type="text"
                     value={editingStudent.gradeLevel}
                     onChange={(e) => setEditingStudent({ ...editingStudent, gradeLevel: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700"
-                    placeholder="Khối 11"
+                    placeholder="Ví dụ: Mức độ 1, Mức độ 2, hoặc Khối 11"
                   />
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {['Mức độ 1', 'Mức độ 2', 'Mức độ 3', 'Mức độ 4', 'Khối 10', 'Khối 11', 'Khối 12'].map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setEditingStudent({ ...editingStudent, gradeLevel: lvl })}
+                        className={`px-2 py-0.5 text-[10px] rounded border font-semibold ${
+                          editingStudent.gradeLevel === lvl
+                            ? 'bg-red-700 text-white border-red-700 font-bold shadow-2xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
@@ -1195,6 +1312,26 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700"
                   placeholder="Ghi chú thêm về học sinh..."
                 />
+              </div>
+
+              {/* Compliance & Parental Consent (Điều 24 Luật 91/2025/QH15 & Nghị định 356/2025/NĐ-CP) */}
+              <div className="p-3.5 bg-red-50/70 rounded-xl border border-red-200">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingStudent.parentConsent !== false}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, parentConsent: e.target.checked })}
+                    className="mt-0.5 w-4 h-4 text-red-700 rounded border-slate-300 focus:ring-red-600 cursor-pointer"
+                  />
+                  <div className="text-xs text-slate-700">
+                    <span className="font-bold text-red-900 block">
+                      Đã có sự đồng ý của cha mẹ / người giám hộ (Điều 24 Luật 91/2025/QH15)
+                    </span>
+                    <span className="text-[11px] text-slate-600 leading-relaxed block mt-0.5">
+                      Xác nhận phụ huynh/người giám hộ đã chấp thuận cho trung tâm thu thập và xử lý dữ liệu học viên (học tập, liên lạc, học phí) theo Chính sách bảo vệ dữ liệu cá nhân.
+                    </span>
+                  </div>
+                </label>
               </div>
 
               <div className="pt-4 border-t border-slate-200 flex justify-end gap-2">
