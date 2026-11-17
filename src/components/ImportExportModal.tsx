@@ -53,6 +53,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const [fileName, setFileName] = useState('');
   const [centerImport, setCenterImport] = useState<CenterWorkbookData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileReadIdRef = useRef(0);
 
   if (!isOpen) return null;
 
@@ -92,10 +93,15 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
   const handleSelectedFile = async (file: File) => {
     if (!canImport) return;
+    const readId = ++fileReadIdRef.current;
     setFileName(file.name);
+    setCenterImport(null);
+    setValidationResult(null);
+    setIsImportingSuccess(false);
 
     try {
       const centerResult = await parseCenterWorkbookFile(file, {students,programs,teachers,rooms,classes,receipts,grades,timetableSlots});
+      if (readId !== fileReadIdRef.current) return;
       if (centerResult.data) {
         setCenterImport(centerResult.data);
         setValidationResult(null);
@@ -115,6 +121,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         return;
       }
       const result = await parseExcelStudentFile(file);
+      if (readId !== fileReadIdRef.current) return;
       const existingCodes = new Set(students.map((student) => student.code.trim().toLocaleUpperCase('vi-VN')));
       const duplicateRows: ImportedStudentRow[] = [];
       const validRows: ImportedStudentRow[] = [];
@@ -138,6 +145,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       });
       setCenterImport(null);
     } catch (error) {
+      if (readId !== fileReadIdRef.current) return;
       console.error(error);
       setValidationResult({ validRows: [], errors: [{ row: 0, field: 'Tệp Excel', message: 'Không thể đọc tệp. Vui lòng dùng tệp .xlsx hoặc .xlsm hợp lệ.' }] });
     }

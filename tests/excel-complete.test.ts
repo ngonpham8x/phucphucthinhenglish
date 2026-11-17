@@ -65,6 +65,10 @@ master.spliceRows(7,1);
 assert.equal((await parse(book)).data!.students.length,1,'Deleted rows must not be restored from metadata');
 book.getWorksheet('BẢNG ĐIỂM')!.getCell('E6').value = 10;
 assert.equal((await parse(book)).data!.grades[0].average,8.2,'A stale cached average must not override edited scores');
+book.getWorksheet('LỚP HỌC')!.getCell('H6').value = 'Chưa cập nhật';
+assert.equal((await parse(book)).data!.classes[0].capacity,0,'An optional capacity placeholder must not become NaN');
+book.getWorksheet('LỚP HỌC')!.getCell('H6').value = 'invalid';
+assert.ok((await parse(book)).errors.length,'Invalid capacity must be reported');
 
 const zip = await JSZip.loadAsync(bytes);
 const summaryXml = await zip.file('xl/worksheets/sheet1.xml')!.async('string');

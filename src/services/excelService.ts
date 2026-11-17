@@ -995,8 +995,12 @@ function parseCenterWorkbook(workbook: ExcelJS.Workbook, existingData: Partial<C
     const plainTime = /^\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}$/.test(schedule);
     return { id: suppliedId || original?.id || `CLASS-IMP-${String(index + 1).padStart(2, '0')}`, code, name, programName, teacherName, roomName,
       days: original && schedule === original.scheduleTime ? original.days : (plainTime ? [] : days),
-      scheduleTime: individualSlots.length || plainTime ? schedule : (timeMatch?.[1] || ''), capacity: numberValue(getByAliases(record, ['succhua', 'capacity'])), studentIds: [] as string[] };
+      scheduleTime: individualSlots.length || plainTime ? schedule : (timeMatch?.[1] || ''),
+      capacity: normaliseHeader(getByAliases(record, ['succhua','capacity'])) === 'chuacapnhat' ? 0 : numberValue(getByAliases(record, ['succhua', 'capacity'])), studentIds: [] as string[] };
   }).filter((item) => item.code && item.name);
+  if (importedClasses.some(classroom => !Number.isFinite(classroom.capacity) || classroom.capacity < 0)) {
+    return {errors:[{row:0,field:'Sức chứa lớp',message:'Sức chứa phải là số không âm hoặc để trống khi chưa cập nhật.'}]};
+  }
 
   const teacherMaster = workbook.getWorksheet('GIÁO VIÊN');
   const teacherRecords = teacherMaster ? readRecords(teacherMaster, ['magiaovien', 'hovaten']) : [];
