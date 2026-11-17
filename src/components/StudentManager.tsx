@@ -210,13 +210,15 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
     }
 
     const cleanExtraClasses = (editingStudent.extraClassIds || []).filter(id => id && id !== (selectedClass?.id || ''));
-    let studentToSave = { ...editingStudent, code, classId: selectedClass?.id || '', extraClassIds: cleanExtraClasses };
-    if (programEntryMode === 'manual') {
+    let studentToSave = {
+      ...editingStudent,
+      code,
+      classId: selectedClass?.id || '',
+      extraClassIds: cleanExtraClasses,
+      programId: programEntryMode === 'manual' ? '' : editingStudent.programId,
+    };
+    if (programEntryMode === 'manual' && manualProgramName.trim()) {
       const name = manualProgramName.trim();
-      if (!name) {
-        alert('Vui lòng nhập tên chương trình học.');
-        return;
-      }
       const classProgram = selectedClass ? programs.find((program) => program.id === selectedClass.programId) : undefined;
       if (classProgram && classProgram.name.trim().toLocaleUpperCase('vi-VN') !== name.toLocaleUpperCase('vi-VN')) {
         alert(`Học sinh đã được xếp vào ${selectedClass.name}; chương trình phải là “${classProgram.name}” để đồng bộ với lớp.`);
@@ -235,13 +237,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       studentToSave = { ...studentToSave, programId: program.id };
     }
 
-    if (selectedClass) {
-      studentToSave = { ...studentToSave, classId: selectedClass.id, programId: selectedClass.programId, extraClassIds: cleanExtraClasses };
-    }
-
-    if (!studentToSave.programId) {
-      alert('Vui lòng chọn hoặc nhập chương trình học.');
-      return;
+    if (selectedClass?.programId) {
+      studentToSave = { ...studentToSave, programId: selectedClass.programId };
     }
 
     const existing = students.find(s => s.id === studentToSave.id);
@@ -453,7 +450,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               </div>
                             );
                           })()}
-                          <div className="text-[11px] text-amber-700 font-medium">{program ? program.name : ''}</div>
+                          <div className="text-[11px] text-amber-700 font-medium">{program?.name || 'Chưa chọn chương trình'}</div>
                         </td>
 
                         <td className="py-3 px-4">
@@ -525,7 +522,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               <button
                                 onClick={() => {
                                   setEditingStudent(st);
-                                  setProgramEntryMode(programs.some((program) => program.id === st.programId) ? 'catalog' : 'manual');
+                                  setProgramEntryMode(!st.programId || programs.some((program) => program.id === st.programId) ? 'catalog' : 'manual');
                                   setManualProgramName(programs.find((program) => program.id === st.programId)?.name || st.programId);
                                   setIsModalOpen(true);
                                 }}
@@ -627,7 +624,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               {enrolledClasses.length ? enrolledClasses.map(c => c.name).join(' + ') : (st.classId || 'Chưa xếp lớp')}
                             </span>
                             <span className="text-[10px] text-amber-800 bg-amber-100 font-bold px-1.5 py-0.5 rounded">
-                              {program?.name || 'Khóa Tiếng Anh'}
+                              {program?.name || 'Chưa chọn chương trình'}
                             </span>
                           </div>
                           {enrolledClasses.map(c => (
@@ -690,7 +687,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       <button
                         onClick={() => {
                           setEditingStudent(st);
-                          setProgramEntryMode(programs.some((program) => program.id === st.programId) ? 'catalog' : 'manual');
+                          setProgramEntryMode(!st.programId || programs.some((program) => program.id === st.programId) ? 'catalog' : 'manual');
                           setManualProgramName(programs.find((program) => program.id === st.programId)?.name || st.programId);
                           setIsModalOpen(true);
                         }}
@@ -799,7 +796,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-1.5 text-slate-700">
                         <BookOpen className="w-4 h-4 text-red-700 shrink-0" />
-                        <span>Chương trình: <strong className="text-slate-900">{program?.name || 'Anh Văn Phổ Thông'}</strong></span>
+                        <span>Chương trình: <strong className="text-slate-900">{program?.name || 'Chưa chọn chương trình'}</strong></span>
                       </div>
                       <div className="flex items-center gap-1.5 text-slate-700">
                         <Clock className="w-4 h-4 text-purple-600 shrink-0" />
@@ -1122,7 +1119,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Chương Trình Học</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Chương Trình Học (không bắt buộc)</label>
                   <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-[10px] font-bold">
                     <button type="button" onClick={() => setProgramEntryMode('catalog')} className={`rounded-lg px-2 py-1.5 transition ${programEntryMode === 'catalog' ? 'bg-white text-red-800 shadow-sm' : 'text-slate-500'}`}>Từ danh mục / Excel</button>
                     <button type="button" onClick={() => setProgramEntryMode('manual')} className={`rounded-lg px-2 py-1.5 transition ${programEntryMode === 'manual' ? 'bg-white text-red-800 shadow-sm' : 'text-slate-500'}`}>Nhập tay</button>
@@ -1133,12 +1130,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                         value={editingStudent.programId}
                         onChange={(e) => setEditingStudent({ ...editingStudent, programId: e.target.value })}
                         className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold"
-                        required
                       >
-                        <option value="">Chọn chương trình đã nhập từ Excel / danh mục</option>
+                        <option value="">Chưa chọn chương trình</option>
                         {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      <p className="mt-1 text-[10px] text-slate-500">Danh sách gồm cả chương trình đã nhập từ file Excel.</p>
+                      <p className="mt-1 text-[10px] text-slate-500">Có thể để trống và bổ sung sau. Nếu lớp đã có chương trình, hồ sơ sẽ tự lấy theo lớp khi lưu.</p>
                     </>
                   ) : (
                     <>
@@ -1147,12 +1143,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                         value={manualProgramName}
                         onChange={(e) => setManualProgramName(e.target.value)}
                         list="student-program-options"
-                        placeholder="Nhập tên chương trình học..."
+                        placeholder="Có thể để trống và bổ sung sau"
                         className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold"
-                        required
                       />
                       <datalist id="student-program-options">{programs.map((program) => <option key={program.id} value={program.name} />)}</datalist>
-                      <p className="mt-1 text-[10px] text-slate-500">Tên mới sẽ được tạo trong danh mục và dùng được khi xuất/nhập Excel.</p>
+                      <p className="mt-1 text-[10px] text-slate-500">Không bắt buộc nhập. Tên mới sẽ được tạo trong danh mục; nếu để trống, hồ sơ sẽ lấy chương trình của lớp khi có.</p>
                     </>
                   )}
                 </div>
@@ -1165,6 +1160,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       onChange={(e) => setEditingStudent({ ...editingStudent, classId: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-700 font-semibold text-slate-900"
                     >
+                      <option value="">Chưa xếp lớp</option>
                       <optgroup label="Danh Sách Lớp Học Tại Trung Tâm">
                         {classes.map(c => (
                           <option key={c.id} value={c.id}>{c.name} ({c.code})</option>

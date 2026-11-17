@@ -97,22 +97,20 @@ export function checkDataConsistency(
     }
   });
 
-  // 2. Kiểm tra học viên có trong lớp nhưng không có đăng ký khoá học (thiếu programId)
+  // 2. Chương trình là tùy chọn; chỉ đề nghị đồng bộ khi lớp đã có chương trình.
   students.forEach(student => {
     const enrolledClasses = studentToClasses.get(student.id);
-    if (enrolledClasses && enrolledClasses.length > 0) {
-      // Kiểm tra programId
-      if (!student.programId) {
-        issues.push({
-          type: 'student_missing_program',
-          severity: 'warning',
-          studentId: student.id,
-          studentCode: student.code,
-          studentName: student.name,
-          details: `Đăng ký ${enrolledClasses.length} lớp nhưng không có programId trong profile`,
-          affectedIds: { classId: enrolledClasses[0].id }
-        });
-      }
+    const classWithProgram = enrolledClasses?.find(classroom => programMap.has(classroom.programId));
+    if (!student.programId && classWithProgram) {
+      issues.push({
+        type: 'student_missing_program',
+        severity: 'warning',
+        studentId: student.id,
+        studentCode: student.code,
+        studentName: student.name,
+        details: `Chưa đồng bộ chương trình học theo lớp ${classWithProgram.code}`,
+        affectedIds: { classId: classWithProgram.id }
+      });
     }
   });
 
@@ -120,10 +118,10 @@ export function checkDataConsistency(
   students.forEach(student => {
     const enrolledClasses = studentToClasses.get(student.id);
     if (enrolledClasses && enrolledClasses.length > 1) {
-      const uniquePrograms = new Set(enrolledClasses.map(c => c.programId));
+      const uniquePrograms = new Set(enrolledClasses.map(c => c.programId).filter(Boolean));
       
       // Nếu học nhiều lớp nhưng chỉ 1 khoá -> có thể lỗi
-      if (uniquePrograms.size < enrolledClasses.length) {
+      if (uniquePrograms.size > 0 && uniquePrograms.size < enrolledClasses.length) {
         const programDetails = Array.from(uniquePrograms)
           .map(pid => programMap.get(pid)?.name || `Program ${pid}`)
           .join(', ');
