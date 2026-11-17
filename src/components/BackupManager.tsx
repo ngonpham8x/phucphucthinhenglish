@@ -127,7 +127,8 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
         teachers,
         rooms,
         receipts,
-        grades
+        grades,
+        timetableSlots
       });
 
       const fileName = `PhucPhucThinh_BaoCaoToanHeThong_${localISODate()}.${blob.type.toLowerCase().includes('macroenabled') ? 'xlsm' : 'xlsx'}`;

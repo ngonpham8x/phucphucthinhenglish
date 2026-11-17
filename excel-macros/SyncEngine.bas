@@ -3,11 +3,21 @@ Option Explicit
 Private mIsSyncing As Boolean
 Private mLastError As String
 Private mSyncScheduled As Boolean
+Private mSyncTime As Date
+Private mSyncProcedure As String
 Private Const FIRST_DATA_ROW As Long = 6
 
 Public Function IsSyncing() As Boolean
     IsSyncing = mIsSyncing
 End Function
+
+Public Function HasQueuedSync() As Boolean
+    HasQueuedSync = mSyncScheduled
+End Function
+
+Public Sub NotifyPendingSave()
+    MsgBox ChrW$(272) & "ang c" & ChrW$(7853) & "p nh" & ChrW$(7853) & "t b" & ChrW$(225) & "o c" & ChrW$(225) & "o. Vui l" & ChrW$(242) & "ng " & ChrW$(273) & ChrW$(7907) & "i v" & ChrW$(224) & "i gi" & ChrW$(226) & "y r" & ChrW$(7891) & "i l" & ChrW$(432) & "u l" & ChrW$(7841) & "i.", vbInformation
+End Sub
 
 Public Function LastSyncError() As String
     LastSyncError = mLastError
@@ -21,11 +31,21 @@ Public Function IsTuitionSheet(ByVal sheetName As String) As Boolean
     IsTuitionSheet = (sheetName = TuitionSheetName())
 End Function
 
-Public Sub QueueSync()
+Public Sub QueueSync(Optional ByVal showStatus As Boolean = True)
     If mIsSyncing Or mSyncScheduled Then Exit Sub
     mSyncScheduled = True
-    WriteSyncStatus SyncQueuedMessage()
-    Application.OnTime Now + TimeSerial(0, 0, 2), "'" & ThisWorkbook.Name & "'!SyncEngine.RunQueuedSync"
+    If showStatus Then WriteSyncStatus SyncQueuedMessage()
+    mSyncTime = Now + TimeSerial(0, 0, 2)
+    mSyncProcedure = "'" & ThisWorkbook.Name & "'!SyncEngine.RunQueuedSync"
+    Application.OnTime mSyncTime, mSyncProcedure
+End Sub
+
+Public Sub CancelQueuedSync()
+    If Not mSyncScheduled Then Exit Sub
+    On Error Resume Next
+    Application.OnTime mSyncTime, mSyncProcedure, , False
+    On Error GoTo 0
+    mSyncScheduled = False
 End Sub
 
 Public Sub RunQueuedSync()
@@ -52,17 +72,26 @@ Public Sub SyncAll()
     Application.EnableEvents = False
     Application.ScreenUpdating = False
 
+    syncStage = "classes"
+    ValidateClassCodes
+    NormalizeClasses
+    ValidateSourceKeys
     syncStage = "HOC SINH"
     NormalizeStudents
     syncStage = "HOC PHI"
     NormalizeTuition
     RecalculateTuitionBalances
+    RefreshReceiptStatus
+    ResizeSourceRanges
     syncStage = "danh sach lop"
     RebuildClassRosters
     syncStage = "BANG DIEM"
     RebuildGrades
+    RebuildReports
+    ResizeLookup
     syncStage = "tong hop"
     RefreshTotals
+    RefreshSourceLinks
     mLastError = vbNullString
     WriteSyncStatus SyncSuccessMessage()
 
@@ -148,6 +177,7 @@ Private Sub NormalizeTuition()
     Dim receiptCode As String
     Dim studentCode As String
     Dim classCode As String
+    Dim selectedRow As Long
 
     Set ws = ThisWorkbook.Worksheets.Item(TuitionSheetName())
     Set studentSheet = ThisWorkbook.Worksheets.Item(StudentSheetName())
@@ -161,14 +191,16 @@ Private Sub NormalizeTuition()
         studentCode = Trim$(CStr(ws.Cells(rowNumber, 4).Value))
         classCode = Trim$(CStr(ws.Cells(rowNumber, 6).Value))
         If Len(receiptCode) > 0 Or Len(studentCode) > 0 Or Len(classCode) > 0 Then
-            studentRow = FindStudentRow(studentSheet, studentCode, classCode)
+            studentRow = FindStudentById(studentSheet, CStr(ws.Cells(rowNumber, 3).Value))
+            selectedRow = FindStudentRow(studentSheet, studentCode, classCode)
+            If selectedRow > 0 Then studentRow = selectedRow
             If studentRow > 0 Then
                 ws.Cells(rowNumber, 3).Value = studentSheet.Cells(studentRow, 23).Value
+                ws.Cells(rowNumber, 4).Value = studentSheet.Cells(studentRow, 2).Value
                 ws.Cells(rowNumber, 5).Value = studentSheet.Cells(studentRow, 3).Value
                 If Len(receiptCode) = 0 Then ws.Cells(rowNumber, 2).Value = "PT-" & Format$(rowNumber - FIRST_DATA_ROW + 1, "0000")
             Else
-                ws.Cells(rowNumber, 3).ClearContents
-                ws.Cells(rowNumber, 5).ClearContents
+                Err.Raise vbObjectError + 514, "NormalizeTuition", "Receipt " & receiptCode & ": student not found. Restore the student or remove this receipt."
             End If
 
             If Len(CStr(ws.Cells(rowNumber, 3).Value)) = 0 Then
@@ -201,8 +233,8 @@ Private Sub RebuildClassRosters()
     lastClassRow = LastDataRow(classSheet, 2, FIRST_DATA_ROW)
     For rowNumber = FIRST_DATA_ROW To lastClassRow
         classCode = Trim$(CStr(classSheet.Cells(rowNumber, 2).Value))
-        If Len(classCode) > 0 And WorksheetExists(ClassDetailSheetName(classCode)) Then
-            Set detailSheet = ThisWorkbook.Worksheets.Item(ClassDetailSheetName(classCode))
+        If Len(classCode) > 0 And WorksheetExists(CStr(classSheet.Cells(rowNumber, 12).Value)) Then
+            Set detailSheet = ThisWorkbook.Worksheets.Item(CStr(classSheet.Cells(rowNumber, 12).Value))
             RebuildOneClass detailSheet, classCode
         End If
     Next rowNumber
@@ -218,7 +250,7 @@ Private Sub RebuildOneClass(ByVal detailSheet As Worksheet, ByVal classCode As S
 
     Set sourceSheet = ThisWorkbook.Worksheets.Item(StudentSheetName())
     lastSourceRow = LastDataRow(sourceSheet, 2, FIRST_DATA_ROW)
-    lastDetailRow = LastDataRow(detailSheet, 2, 12)
+    lastDetailRow = Application.Max(LastDataRow(detailSheet, 2, 12), LastDataRow(detailSheet, 1, 12))
     If lastDetailRow >= 12 Then
         detailSheet.Range("A12:M" & lastDetailRow).ClearContents
         On Error Resume Next
@@ -244,10 +276,22 @@ Private Sub RebuildOneClass(ByVal detailSheet As Worksheet, ByVal classCode As S
             detailSheet.Cells(detailRow, 8).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """)"
             detailSheet.Cells(detailRow, 9).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """," & SheetReference(TuitionSheetName()) & "$I:$I,""" & MonthlyTuitionLabel() & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """," & SheetReference(StudentSheetName()) & "$O:$O,""<>" & CourseTuitionLabel() & """)"
             detailSheet.Cells(detailRow, 10).Formula = "=SUMIFS(" & SheetReference(TuitionSheetName()) & "$M:$M," & SheetReference(TuitionSheetName()) & "$C:$C,$M" & detailRow & "," & SheetReference(TuitionSheetName()) & "$F:$F,""" & classCode & """," & SheetReference(TuitionSheetName()) & "$I:$I,""" & CourseTuitionLabel() & """)+SUMIFS(" & SheetReference(StudentSheetName()) & "$N:$N," & SheetReference(StudentSheetName()) & "$W:$W,$M" & detailRow & "," & SheetReference(StudentSheetName()) & "$Z:$Z,""" & classCode & """," & SheetReference(StudentSheetName()) & "$O:$O,""" & CourseTuitionLabel() & """)"
+            Dim linkColumn As Long
+            For linkColumn = 7 To 10
+                AddLink detailSheet.Cells(detailRow, linkColumn), ReceiptSource(CStr(sourceSheet.Cells(sourceRow, 23).Value), classCode)
+            Next linkColumn
             detailSheet.Hyperlinks.Add Anchor:=detailSheet.Cells(detailRow, 11), Address:="", SubAddress:=SheetReference(TuitionSheetName()) & "A1", TextToDisplay:="Hoc phi"
             detailRow = detailRow + 1
         End If
     Next sourceRow
+    If detailRow > 12 Then
+        detailSheet.Cells(detailRow, 1).Value = TotalLabel()
+        detailSheet.Cells(detailRow, 3).Formula = "=COUNTA(B12:B" & detailRow - 1 & ")"
+        Dim totalColumn As Long
+        For totalColumn = 7 To 10
+            detailSheet.Cells(detailRow, totalColumn).Formula = "=SUM(" & detailSheet.Range(detailSheet.Cells(12, totalColumn), detailSheet.Cells(detailRow - 1, totalColumn)).Address & ")"
+        Next totalColumn
+    End If
 End Sub
 
 Private Sub RebuildGrades()
@@ -288,7 +332,8 @@ Private Sub RebuildGrades()
     For gradeRow = FIRST_DATA_ROW To lastGradeRow
         If Trim$(CStr(gradeSheet.Cells(gradeRow, 2).Value)) <> vbNullString Then
             savedCount = savedCount + 1
-            savedCodes(savedCount) = Trim$(CStr(gradeSheet.Cells(gradeRow, 2).Value))
+            savedCodes(savedCount) = Trim$(CStr(gradeSheet.Cells(gradeRow, 14).Value))
+            If Len(savedCodes(savedCount)) = 0 Then savedCodes(savedCount) = Trim$(CStr(gradeSheet.Cells(gradeRow, 2).Value))
             savedClasses(savedCount) = Trim$(CStr(gradeSheet.Cells(gradeRow, 4).Value))
             savedListening(savedCount) = gradeSheet.Cells(gradeRow, 5).Value
             savedSpeaking(savedCount) = gradeSheet.Cells(gradeRow, 6).Value
@@ -299,7 +344,7 @@ Private Sub RebuildGrades()
             savedAttendance(savedCount) = gradeSheet.Cells(gradeRow, 11).Value
         End If
     Next gradeRow
-    If lastGradeRow >= FIRST_DATA_ROW Then gradeSheet.Range("A" & FIRST_DATA_ROW & ":M" & lastGradeRow).ClearContents
+    If lastGradeRow >= FIRST_DATA_ROW Then gradeSheet.Range("A" & FIRST_DATA_ROW & ":N" & lastGradeRow).ClearContents
 
     lastStudentRow = LastDataRow(studentSheet, 2, FIRST_DATA_ROW)
     gradeRow = FIRST_DATA_ROW
@@ -311,9 +356,10 @@ Private Sub RebuildGrades()
             gradeSheet.Cells(gradeRow, 2).Value = studentSheet.Cells(sourceRow, 2).Value
             gradeSheet.Cells(gradeRow, 3).Value = studentSheet.Cells(sourceRow, 3).Value
             gradeSheet.Cells(gradeRow, 4).Value = Trim$(CStr(enrolledClass))
+            gradeSheet.Cells(gradeRow, 14).Value = studentSheet.Cells(sourceRow, 23).Value
             matchedSavedGrade = 0
             For savedIndex = 1 To savedCount
-                If savedCodes(savedIndex) = Trim$(CStr(gradeSheet.Cells(gradeRow, 2).Value)) And savedClasses(savedIndex) = Trim$(CStr(gradeSheet.Cells(gradeRow, 4).Value)) Then
+                If (savedCodes(savedIndex) = CStr(studentSheet.Cells(sourceRow, 23).Value) Or savedCodes(savedIndex) = CStr(studentSheet.Cells(sourceRow, 2).Value)) And savedClasses(savedIndex) = Trim$(CStr(gradeSheet.Cells(gradeRow, 4).Value)) Then
                     matchedSavedGrade = savedIndex
                     Exit For
                 End If
@@ -327,7 +373,7 @@ Private Sub RebuildGrades()
                 gradeSheet.Cells(gradeRow, 10).Value = savedFinalExam(matchedSavedGrade)
                 gradeSheet.Cells(gradeRow, 11).Value = savedAttendance(matchedSavedGrade)
             End If
-            gradeSheet.Cells(gradeRow, 12).Formula = "=IF(COUNT(E" & gradeRow & ":K" & gradeRow & ")=0,"""",ROUND((AVERAGE(E" & gradeRow & ":H" & gradeRow & ")*0.4)+(I" & gradeRow & "*0.2)+(J" & gradeRow & "*0.3)+(K" & gradeRow & "*0.1),1))"
+            gradeSheet.Cells(gradeRow, 12).Formula = "=IF(COUNT(E" & gradeRow & ":K" & gradeRow & ")=0,"""",ROUND((SUM(E" & gradeRow & ":H" & gradeRow & ")/4*0.4)+(I" & gradeRow & "*0.2)+(J" & gradeRow & "*0.3)+(K" & gradeRow & "*0.1),1))"
             gradeSheet.Cells(gradeRow, 13).Formula = "=IF(L" & gradeRow & "="""","""",IF(L" & gradeRow & ">=8,""" & ExcellentGradeLabel() & """,IF(L" & gradeRow & ">=6.5,""" & GoodGradeLabel() & """,IF(L" & gradeRow & ">=5,""" & AverageGradeLabel() & """,""" & NeedsSupportGradeLabel() & """))))"
             gradeRow = gradeRow + 1
             Next enrolledClass
@@ -335,6 +381,7 @@ Private Sub RebuildGrades()
     Next sourceRow
 
     SetFooter gradeSheet, gradeRow, 13, vbNullString, vbNullString, vbNullString, vbNullString, "=IFERROR(AVERAGE(L" & FIRST_DATA_ROW & ":L" & gradeRow - 1 & "),0)"
+    gradeSheet.Columns(14).Hidden = True
 End Sub
 
 Private Sub RefreshTotals()
@@ -347,9 +394,355 @@ Private Sub RefreshTotals()
     Application.Calculate
 End Sub
 
+Private Sub RefreshReceiptStatus()
+    Dim ws As Worksheet, r As Long
+    Set ws = ThisWorkbook.Worksheets(TuitionSheetName())
+    For r = 6 To LastDataRow(ws, 2, 6)
+        If Val(ws.Cells(r, 13).Value) > 0 Then
+            ws.Cells(r, 14).Value = UnderpaidStatus()
+        ElseIf Val(ws.Cells(r, 12).Value) > 0 Then
+            ws.Cells(r, 14).Value = PaidStatus()
+        Else
+            ws.Cells(r, 14).Value = UnpaidStatus()
+        End If
+    Next r
+End Sub
+
+Private Function ReceiptSource(ByVal studentId As String, Optional ByVal classCode As String = "") As String
+    Dim ws As Worksheet, r As Long
+    Set ws = ThisWorkbook.Worksheets(TuitionSheetName())
+    ReceiptSource = SheetReference(ws.Name) & "A1"
+    For r = 6 To LastDataRow(ws, 2, 6)
+        If CStr(ws.Cells(r, 3).Value) = studentId And (Len(classCode) = 0 Or CStr(ws.Cells(r, 6).Value) = classCode) Then
+            ReceiptSource = SheetReference(ws.Name) & "A" & r
+            Exit Function
+        End If
+    Next r
+End Function
+
+Private Sub RefreshSourceLinks()
+    Dim ws As Worksheet, studentSheet As Worksheet, r As Long, c As Long, studentRow As Long
+    Set studentSheet = ThisWorkbook.Worksheets(StudentSheetName())
+    For r = 6 To LastDataRow(studentSheet, 2, 6)
+        For c = 19 To 22
+            AddLink studentSheet.Cells(r, c), ReceiptSource(CStr(studentSheet.Cells(r, 23).Value))
+        Next c
+    Next r
+    Set ws = ThisWorkbook.Worksheets(TuitionSheetName())
+    For r = 6 To LastDataRow(ws, 2, 6)
+        studentRow = FindStudentById(studentSheet, CStr(ws.Cells(r, 3).Value))
+        If studentRow > 0 Then AddLink ws.Cells(r, 18), SheetReference(studentSheet.Name) & "A" & studentRow, StudentSheetName()
+    Next r
+End Sub
+
+Private Function FindStudentById(ByVal ws As Worksheet, ByVal studentId As String) As Long
+    Dim r As Long
+    If Len(Trim$(studentId)) = 0 Then Exit Function
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        If CStr(ws.Cells(r, 23).Value) = studentId Then
+            FindStudentById = r
+            Exit Function
+        End If
+    Next r
+End Function
+
+Private Sub ValidateSourceKeys()
+    Dim keys As Object, ws As Worksheet, r As Long, key As String, code As Variant
+    Dim classKeys As Object
+    Set classKeys = CreateObject("Scripting.Dictionary")
+    classKeys.CompareMode = vbTextCompare
+    Set ws = ThisWorkbook.Worksheets(ClassSheetName())
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        key = Trim$(CStr(ws.Cells(r, 2).Value))
+        If Len(key) > 0 Then
+            If classKeys.Exists(key) Then Err.Raise vbObjectError + 520, , "Duplicate class code: " & key
+            classKeys.Add key, True
+        End If
+    Next r
+    Set keys = CreateObject("Scripting.Dictionary")
+    keys.CompareMode = vbTextCompare
+    Set ws = ThisWorkbook.Worksheets(StudentSheetName())
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        key = Trim$(CStr(ws.Cells(r, 2).Value))
+        If Len(key) > 0 Then
+            If keys.Exists(key) Then Err.Raise vbObjectError + 521, , "Duplicate student code: " & key
+            keys.Add key, True
+            For Each code In Split(CStr(ws.Cells(r, 7).Value), ",")
+                If Len(Trim$(CStr(code))) > 0 Then
+                    If Not classKeys.Exists(Trim$(CStr(code))) Then Err.Raise vbObjectError + 522, , "Unknown class " & code & " for student " & key
+                End If
+            Next code
+        End If
+    Next r
+End Sub
+
+Private Sub ValidateClassCodes()
+    Dim seen As Object, ws As Worksheet, r As Long, code As String
+    Set seen = CreateObject("Scripting.Dictionary")
+    seen.CompareMode = vbTextCompare
+    Set ws = ThisWorkbook.Worksheets(ClassSheetName())
+    For r = 6 To LastDataRow(ws, 2, 6)
+        code = Trim$(CStr(ws.Cells(r, 2).Value))
+        If Len(code) > 0 Then
+            If seen.Exists(code) Then Err.Raise vbObjectError + 524, , "Duplicate class code: " & code
+            seen.Add code, True
+            If Len(Trim$(CStr(ws.Cells(r, 3).Value))) = 0 Then Err.Raise vbObjectError + 525, , "Missing class name: " & code
+        End If
+    Next r
+End Sub
+
+Private Sub NormalizeClasses()
+    Dim ws As Worksheet, detail As Worksheet, r As Long, code As String
+    Dim previousCode As String, targetName As String, id As String, item As Worksheet
+    Dim activeIds As Object, oldAlerts As Boolean, i As Long
+    Set activeIds = CreateObject("Scripting.Dictionary")
+    Set ws = ThisWorkbook.Worksheets(ClassSheetName())
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        code = Trim$(CStr(ws.Cells(r, 2).Value))
+        If Len(code) > 0 Then
+            id = CStr(ws.Cells(r, 11).Value)
+            If Len(id) = 0 Then id = "CLASS-EXCEL-" & Format$(Now, "yyyymmddhhnnss") & "-" & r
+            If activeIds.Exists(id) Then Err.Raise vbObjectError + 523, , "Duplicate class ID: " & code
+            activeIds.Add id, True
+            ws.Cells(r, 11).Value = id
+            targetName = CStr(ws.Cells(r, 12).Value)
+            Set detail = Nothing
+            If Len(targetName) > 0 And WorksheetExists(targetName) Then Set detail = ThisWorkbook.Worksheets(targetName)
+            If detail Is Nothing Then
+                targetName = SafeDetailName(code)
+                Set detail = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+                detail.Name = targetName
+                SetupDetailSheet detail
+            Else
+                previousCode = CStr(detail.Range("C5").Value)
+                If Len(previousCode) > 0 And previousCode <> code Then RewriteClassCode previousCode, code
+            End If
+            detail.Range("A5").Value = "PPTE_CLASS_DETAIL_V2"
+            detail.Range("B5").Value = id
+            detail.Range("C5").Value = code
+            detail.Rows(5).Hidden = True
+            ws.Cells(r, 12).Value = detail.Name
+            ws.Cells(r, 1).Value = r - FIRST_DATA_ROW + 1
+            ws.Cells(r, 9).Formula = "=SUMPRODUCT(--ISNUMBER(SEARCH("",""&B" & r & "&"","","",""&SUBSTITUTE(PPTE_HS_G,"" "","""")&"","")))"
+            AddLink ws.Cells(r, 10), SheetReference(detail.Name) & "A1", code
+            detail.Range("A1").Value = CStr(ws.Cells(r, 3).Value)
+            detail.Range("A4").Value = CStr(ws.Cells(r, 5).Value) & " | " & CStr(ws.Cells(r, 6).Value) & " | " & CStr(ws.Cells(r, 7).Value)
+        End If
+    Next r
+    ' Delete only generated, derived class views; never a manually created sheet.
+    oldAlerts = Application.DisplayAlerts
+    Application.DisplayAlerts = False
+    For i = ThisWorkbook.Worksheets.Count To 1 Step -1
+        Set item = ThisWorkbook.Worksheets(i)
+        If CStr(item.Range("A5").Value) = "PPTE_CLASS_DETAIL_V2" Then
+            If Not activeIds.Exists(CStr(item.Range("B5").Value)) Then item.Delete
+        End If
+    Next i
+    Application.DisplayAlerts = oldAlerts
+    ws.Columns("K:L").Hidden = True
+End Sub
+
+Private Function SafeDetailName(ByVal code As String) As String
+    Dim candidate As String, symbol As Variant, suffix As Long
+    candidate = ClassDetailSheetName(code)
+    For Each symbol In Array("[", "]", ":", "*", "?", "/", "\")
+        candidate = Replace(candidate, CStr(symbol), "-")
+    Next symbol
+    candidate = Left$(candidate, 31)
+    If Not WorksheetExists(candidate) Then SafeDetailName = candidate: Exit Function
+    suffix = 2
+    Do While WorksheetExists(Left$(candidate, 26) & "-" & suffix)
+        suffix = suffix + 1
+    Loop
+    SafeDetailName = Left$(candidate, 26) & "-" & suffix
+End Function
+
+Private Sub SetupDetailSheet(ByVal ws As Worksheet)
+    Dim lookup As Worksheet, c As Long
+    Set lookup = ThisWorkbook.Worksheets(LookupSheetName())
+    ws.Range("A1:M2").Merge
+    ws.Range("A1").Font.Size = 14
+    ws.Range("A1").Font.Bold = True
+    ws.Range("A3:M3").Merge
+    AddLink ws.Range("A3"), SheetReference(DashboardSheetName()) & "A1", DashboardSheetName()
+    ws.Range("A4:M4").Merge
+    lookup.Range("A10:M10").Copy Destination:=ws.Range("A11")
+    For c = 1 To 13
+        ws.Columns(c).ColumnWidth = lookup.Columns(c).ColumnWidth
+    Next c
+    ws.Columns(13).Hidden = True
+    ws.Range("A1:M40").Font.Name = "Arial"
+    ws.Range("G9:J40").NumberFormat = "#,##0"
+End Sub
+
+Private Sub RewriteClassCode(ByVal previousCode As String, ByVal nextCode As String)
+    Dim ws As Worksheet, r As Long, codes As Variant, i As Long
+    Set ws = ThisWorkbook.Worksheets(StudentSheetName())
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        codes = Split(CStr(ws.Cells(r, 7).Value), ",")
+        For i = LBound(codes) To UBound(codes)
+            If StrComp(Trim$(codes(i)), previousCode, vbTextCompare) = 0 Then codes(i) = nextCode
+        Next i
+        ws.Cells(r, 7).Value = Join(codes, ",")
+    Next r
+    Set ws = ThisWorkbook.Worksheets(TuitionSheetName())
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        If StrComp(CStr(ws.Cells(r, 6).Value), previousCode, vbTextCompare) = 0 Then ws.Cells(r, 6).Value = nextCode
+    Next r
+    Set ws = ThisWorkbook.Worksheets(GradesSheetName())
+    For r = FIRST_DATA_ROW To LastDataRow(ws, 2, FIRST_DATA_ROW)
+        If StrComp(CStr(ws.Cells(r, 4).Value), previousCode, vbTextCompare) = 0 Then ws.Cells(r, 4).Value = nextCode
+    Next r
+End Sub
+
+Private Sub ResizeSourceRanges()
+    Dim names As Variant, prefixes As Variant, counts As Variant, i As Long, c As Long
+    Dim ws As Worksheet, lastRow As Long, column As String
+    names = Array(StudentSheetName(), TuitionSheetName(), ClassSheetName())
+    prefixes = Array("HS", "HP", "LOP")
+    counts = Array(33, 21, 12)
+    For i = 0 To 2
+        Set ws = ThisWorkbook.Worksheets(CStr(names(i)))
+        lastRow = Application.Max(6, LastDataRow(ws, 2, FIRST_DATA_ROW))
+        For c = 1 To counts(i)
+            column = Split(ws.Cells(1, c).Address, "$")(1)
+            ThisWorkbook.Names.Add Name:="PPTE_" & prefixes(i) & "_" & column, RefersTo:="=" & SheetReference(ws.Name) & ws.Range(ws.Cells(6, c), ws.Cells(lastRow, c)).Address
+        Next c
+    Next i
+End Sub
+
+Private Function LookupSheetName() As String
+    LookupSheetName = "TRA C" & ChrW$(7912) & "U L" & ChrW$(7898) & "P"
+End Function
+
+Private Sub ResizeLookup()
+    Dim ws As Worksheet, newLast As Long, oldLast As Long
+    Set ws = ThisWorkbook.Worksheets(LookupSheetName())
+    newLast = Application.Max(40, LastDataRow(ThisWorkbook.Worksheets(StudentSheetName()), 2, 6) + 15)
+    oldLast = ws.UsedRange.Row + ws.UsedRange.Rows.Count - 1
+    If oldLast > newLast Then ws.Range("A" & newLast + 1 & ":M" & oldLast).ClearContents
+    ws.Range("A11:M11").AutoFill Destination:=ws.Range("A11:M" & newLast), Type:=xlFillDefault
+End Sub
+
+Private Sub AddLink(ByVal anchor As Range, ByVal target As String, Optional ByVal caption As String = "")
+    Dim savedFormula As Variant
+    savedFormula = anchor.Formula
+    anchor.Hyperlinks.Delete
+    If Len(caption) > 0 Then
+        anchor.Parent.Hyperlinks.Add Anchor:=anchor, Address:="", SubAddress:=target, TextToDisplay:=caption
+    Else
+        anchor.Parent.Hyperlinks.Add Anchor:=anchor, Address:="", SubAddress:=target
+        anchor.Formula = savedFormula
+    End If
+End Sub
+
+Private Function FinancialFormula(ByVal amountColumn As String, ByVal classCriterion As String, Optional ByVal dateCell As String = "") As String
+    Dim receiptDates As String, directDates As String, directColumn As String
+    directColumn = "M"
+    If amountColumn = "M" Then directColumn = "N"
+    If Len(dateCell) > 0 Then
+        receiptDates = ",PPTE_HP_O,"">=""&" & dateCell & ",PPTE_HP_O,""<""&EDATE(" & dateCell & ",1)"
+        directDates = ",PPTE_HS_Q,"">=""&" & dateCell & ",PPTE_HS_Q,""<""&EDATE(" & dateCell & ",1)"
+    End If
+    FinancialFormula = "=SUMIFS(PPTE_HP_" & amountColumn & ",PPTE_HP_F," & classCriterion & receiptDates & ")+SUMIFS(PPTE_HS_" & directColumn & ",PPTE_HS_Z," & classCriterion & directDates & ")"
+End Function
+
+Private Sub RebuildReports()
+    Dim months As Object, ws As Worksheet, cls As Worksheet, summary As Worksheet, detail As Worksheet
+    Dim r As Long, i As Long, j As Long, monthValues As Variant, swap As Variant, d As Date
+    Dim lastRow As Long, totalColumn As Long, code As String, criterion As String, captions As Variant
+    Set months = CreateObject("Scripting.Dictionary")
+    For Each ws In ArraySheets()
+        lastRow = LastDataRow(ws, 2, 6)
+        For r = 6 To lastRow
+            i = 15
+            If ws.Name = StudentSheetName() Then i = 17
+            If IsDate(ws.Cells(r, i).Value) Then
+                d = DateSerial(Year(CDate(ws.Cells(r, i).Value)), Month(CDate(ws.Cells(r, i).Value)), 1)
+                months(CStr(CLng(d))) = d
+            End If
+        Next r
+    Next ws
+    monthValues = months.Items
+    For i = 0 To months.Count - 2
+        For j = i + 1 To months.Count - 1
+            If monthValues(i) > monthValues(j) Then swap = monthValues(i): monthValues(i) = monthValues(j): monthValues(j) = swap
+        Next j
+    Next i
+    Set summary = ThisWorkbook.Worksheets(DashboardSheetName())
+    captions = Array(summary.Cells(16, 1).Value, summary.Cells(16, 2).Value, summary.Cells(16, 3).Value)
+    summary.Range("A16:" & summary.Cells(Application.Max(17, summary.UsedRange.Rows.Count), Application.Max(5, summary.UsedRange.Columns.Count)).Address).ClearContents
+    For i = 0 To 2
+        summary.Cells(16, i + 1).Value = captions(i)
+    Next i
+    totalColumn = 4 + months.Count
+    summary.Cells(16, totalColumn).Value = PaidStatus()
+    summary.Cells(16, totalColumn + 1).Value = UnpaidStatus()
+    With summary.Range(summary.Cells(16, 1), summary.Cells(16, totalColumn + 1))
+        .Interior.Color = RGB(198, 40, 40)
+        .Font.Color = RGB(255, 255, 255)
+        .Font.Bold = True
+    End With
+    For i = 4 To totalColumn + 1
+        summary.Columns(i).ColumnWidth = 18
+    Next i
+    For i = 0 To months.Count - 1
+        summary.Cells(16, 4 + i).Value = monthValues(i)
+        summary.Cells(16, 4 + i).NumberFormat = "mm/yyyy"
+    Next i
+    Set cls = ThisWorkbook.Worksheets(ClassSheetName())
+    lastRow = LastDataRow(cls, 2, 6)
+    For r = 6 To lastRow
+        code = CStr(cls.Cells(r, 2).Value)
+        If Len(code) > 0 Then
+            Set detail = ThisWorkbook.Worksheets(CStr(cls.Cells(r, 12).Value))
+            criterion = """" & Replace(code, """", """""") & """"
+            summary.Cells(r + 11, 1).Value = code
+            summary.Cells(r + 11, 2).Value = cls.Cells(r, 3).Value
+            summary.Cells(r + 11, 3).Formula = "=" & SheetReference(cls.Name) & "I" & r
+            detail.Range(detail.Cells(6, 2), detail.Cells(8, Application.Max(2, detail.UsedRange.Columns.Count))).ClearContents
+            detail.Range("A6").Value = "Thang"
+            detail.Range("A7").Value = PaidStatus()
+            detail.Range("A8").Value = UnpaidStatus()
+            For i = 0 To months.Count - 1
+                detail.Cells(6, i + 2).Value = monthValues(i)
+                detail.Cells(6, i + 2).NumberFormat = "mm/yyyy"
+                detail.Cells(7, i + 2).Formula = FinancialFormula("L", criterion, detail.Cells(6, i + 2).Address)
+                detail.Cells(8, i + 2).Formula = FinancialFormula("M", criterion, detail.Cells(6, i + 2).Address)
+                summary.Cells(r + 11, i + 4).Formula = FinancialFormula("L", "$A" & r + 11, summary.Cells(16, i + 4).Address)
+                AddLink summary.Cells(r + 11, i + 4), SheetReference(detail.Name) & detail.Cells(6, i + 2).Address
+            Next i
+            summary.Cells(r + 11, totalColumn).Formula = FinancialFormula("L", "$A" & r + 11)
+            summary.Cells(r + 11, totalColumn + 1).Formula = FinancialFormula("M", "$A" & r + 11)
+            AddLink summary.Cells(r + 11, totalColumn), SheetReference(detail.Name) & "A6"
+            AddLink summary.Cells(r + 11, totalColumn + 1), SheetReference(detail.Name) & "A6"
+            detail.Range("B9").Formula = FinancialFormula("L", criterion)
+            detail.Range("C9").Formula = FinancialFormula("M", criterion)
+            detail.Range("D9").Formula = "=SUMIFS(PPTE_HP_M,PPTE_HP_F," & criterion & ",PPTE_HP_I,""" & MonthlyTuitionLabel() & """)+SUMIFS(PPTE_HS_N,PPTE_HS_Z," & criterion & ",PPTE_HS_O,""<>" & CourseTuitionLabel() & """)"
+            detail.Range("E9").Formula = "=SUMIFS(PPTE_HP_M,PPTE_HP_F," & criterion & ",PPTE_HP_I,""" & CourseTuitionLabel() & """)+SUMIFS(PPTE_HS_N,PPTE_HS_Z," & criterion & ",PPTE_HS_O,""" & CourseTuitionLabel() & """)"
+            detail.Range(detail.Cells(7, 2), detail.Cells(9, Application.Max(5, months.Count + 1))).NumberFormat = "#,##0"
+        End If
+    Next r
+    r = lastRow + 12
+    summary.Cells(r, 1).Value = TotalLabel()
+    If r > 17 Then
+        For i = 3 To totalColumn + 1
+            summary.Cells(r, i).Formula = "=SUM(" & summary.Range(summary.Cells(17, i), summary.Cells(r - 1, i)).Address & ")"
+        Next i
+    End If
+    If lastRow >= 6 Then summary.Range(summary.Cells(17, 4), summary.Cells(r, totalColumn + 1)).NumberFormat = "#,##0"
+End Sub
+
+Private Function ArraySheets() As Collection
+    Dim result As New Collection
+    result.Add ThisWorkbook.Worksheets(TuitionSheetName())
+    result.Add ThisWorkbook.Worksheets(StudentSheetName())
+    Set ArraySheets = result
+End Function
+
 Private Sub WriteSyncStatus(ByVal message As String)
     On Error Resume Next
-    With ThisWorkbook.Worksheets.Item(GuideSheetName()).Range("A14")
+    With ThisWorkbook.Worksheets.Item(GuideSheetName()).Range("A17")
         .Value = message
         .Font.Bold = True
         .Font.Color = IIf(Left$(message, 4) = "Kh" & ChrW$(244) & "ng", RGB(185, 28, 28), RGB(5, 150, 105))
@@ -363,7 +756,7 @@ Private Function FindStudentRow(ByVal studentSheet As Worksheet, ByVal studentCo
 
     lastRow = LastDataRow(studentSheet, 2, FIRST_DATA_ROW)
     For rowNumber = FIRST_DATA_ROW To lastRow
-        If Trim$(CStr(studentSheet.Cells(rowNumber, 2).Value)) = studentCode And HasClassCode(CStr(studentSheet.Cells(rowNumber, 7).Value), classCode) Then
+        If Trim$(CStr(studentSheet.Cells(rowNumber, 2).Value)) = studentCode And (Len(classCode) = 0 Or HasClassCode(CStr(studentSheet.Cells(rowNumber, 7).Value), classCode)) Then
             FindStudentRow = rowNumber
             Exit Function
         End If
@@ -415,6 +808,13 @@ Private Sub CopyDetailFormat(ByVal ws As Worksheet, ByVal templateRow As Long, B
 End Sub
 
 Private Sub SetFooter(ByVal ws As Worksheet, ByVal rowNumber As Long, ByVal lastColumn As Long, ByVal countFormula As String, ByVal paidFormula As String, ByVal debtFormula As String, ByVal monthlyDebtFormula As String, ByVal courseDebtOrAverageFormula As String)
+    If rowNumber = FIRST_DATA_ROW Then
+        countFormula = "=0"
+        paidFormula = Replace(Replace(paidFormula, "SUM(L6:L5)", "0"), "SUM(S6:S5)", "0")
+        debtFormula = Replace(Replace(debtFormula, "SUM(M6:M5)", "0"), "SUM(T6:T5)", "0")
+        monthlyDebtFormula = Replace(monthlyDebtFormula, "SUM(U6:U5)", "0")
+        courseDebtOrAverageFormula = Replace(Replace(courseDebtOrAverageFormula, "SUM(V6:V5)", "0"), "AVERAGE(L6:L5)", "0")
+    End If
     ws.Range(ws.Cells(rowNumber, 1), ws.Cells(rowNumber, lastColumn)).ClearContents
     ws.Cells(rowNumber, 1).Value = TotalLabel()
     If Len(countFormula) > 0 Then ws.Cells(rowNumber, 3).Formula = countFormula

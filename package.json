@@ -9,8 +9,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/tuition-regression.test.ts && tsx tests/excel-sync.test.ts && tsx tests/date-and-activity.test.ts && tsx tests/center-sync.test.ts",
-    "test:excel": "powershell -NoProfile -File tests/native-excel-sync.ps1"
+    "test": "tsx tests/tuition-regression.test.ts && tsx tests/excel-sync.test.ts && tsx tests/excel-complete.test.ts && tsx tests/date-and-activity.test.ts && tsx tests/center-sync.test.ts",
+    "build:excel": "node scripts/build-excel-template.mjs",
+    "test:excel": "powershell -NoProfile -File tests/native-excel-sync.ps1 && tsx tests/native-excel-import.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -32,6 +33,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "cfb": "^1.2.2",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

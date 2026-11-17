@@ -19,12 +19,13 @@ await fs.mkdir('.review',{recursive:true});
 await fs.writeFile('.review/excel-sync-fixture.xlsm',bytes);
 const book = new ExcelJS.Workbook(); await book.xlsx.load(bytes as any);
 assert.equal(book.getWorksheet('HỌC SINH')!.getCell('G6').text,'10, 11');
-assert.match(book.getWorksheet('Lớp 11')!.getCell('G12').formula, /\$F\$6:\$F\$1000,"11"/);
+assert.match(book.getWorksheet('Lớp 11')!.getCell('G12').formula, /PPTE_HP_F,"11"/);
 const result = await parseCenterWorkbookFile(new File([bytes],'test.xlsm'));
 assert.deepEqual(result.errors,[]);
 assert.equal(result.data!.students.length,1);
 assert.equal(result.data!.students[0].extraClassIds!.length,1);
 assert.equal(result.data!.receipts.length,3);
+assert.equal(result.data!.receipts.find(receipt => receipt.id === 'r3')!.billingPeriod,'2026-10','Excel dates must retain their original tuition month');
 console.log('Passed: multiple-class export/import, class-specific financial formulas, receipt round trip.');
 
 assert.deepEqual(result.data!.receipts.map(r => r.id).sort(),['r1','r2','r3']);

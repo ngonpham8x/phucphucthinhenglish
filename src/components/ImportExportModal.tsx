@@ -14,6 +14,7 @@ interface ImportExportModalProps {
   classes: ClassRoom[];
   receipts: TuitionReceipt[];
   grades: Grade[];
+  timetableSlots?: import('../types').TimetableSlot[];
   settings: CenterSettings;
   canSyncCenterData: boolean;
   isOwner: boolean;
@@ -33,6 +34,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   classes,
   receipts,
   grades,
+  timetableSlots = [],
   settings,
   canSyncCenterData,
   isOwner,
@@ -66,7 +68,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         teachers,
         rooms,
         receipts,
-        grades
+        grades,
+        timetableSlots
       });
 
       const url = window.URL.createObjectURL(blob);
@@ -92,10 +95,15 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
     setFileName(file.name);
 
     try {
-      const centerResult = await parseCenterWorkbookFile(file);
+      const centerResult = await parseCenterWorkbookFile(file, {students,programs,teachers,rooms,classes,receipts,grades,timetableSlots});
       if (centerResult.data) {
         setCenterImport(centerResult.data);
         setValidationResult(null);
+        return;
+      }
+      if (centerResult.recognized) {
+        setCenterImport(null);
+        setValidationResult({validRows:[],errors:centerResult.errors});
         return;
       }
       if (classes.length === 0) {
@@ -300,7 +308,9 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
                     <div className="font-bold">Đã nhận diện báo cáo chuẩn hoá: {fileName}</div>
                     <div className="mt-1 text-[11px]">{centerImport.classes.length} lớp · {centerImport.students.length} học sinh · {centerImport.receipts.length} phiếu thu</div>
+                    <p className="mt-2 text-[11px] font-semibold">Học viên chưa xếp lớp: {centerImport.students.filter(student => !student.classId).length}. Không có trong tệp sẽ bị xóa: {students.filter(student => !centerImport.students.some(item => item.id === student.id || item.code === student.code)).length} học viên, {classes.filter(classroom => !centerImport.classes.some(item => item.id === classroom.id || item.code === classroom.code)).length} lớp.</p>
                     <p className="mt-2 text-[11px]">Dữ liệu sẽ thay toàn bộ dữ liệu hiện có của trung tâm và đồng bộ vào Supabase theo quyền tài khoản đã đăng nhập.</p>
+                    <p className="mt-1 text-[11px]">Trước khi nhập, hệ thống tải xuống bản sao lưu JSON của dữ liệu hiện tại để có thể khôi phục.</p>
                     {canSyncCenterData && isOwner ? (
                       <button onClick={handleConfirmCenterImport} className="mt-3 w-full rounded-xl bg-red-800 py-2 font-bold text-white hover:bg-red-900">
                         Xác nhận nhập toàn bộ dữ liệu

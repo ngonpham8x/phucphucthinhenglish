@@ -650,6 +650,21 @@ export default function App() {
   };
 
   const handleImportCenterData = (data: CenterWorkbookData) => {
+    // Keep a recoverable copy before applying the authoritative Excel snapshot.
+    const archive = JSON.stringify({app:'PHUC_PHUC_THINH',schemaVersion:1,exportedAt:new Date().toISOString(),centerName:settings.name,
+      data:{settings,programs,teachers,rooms,classes,students,timetableSlots,grades,receipts,backups,activityLogs}});
+    const backupFile = `PhucPhucThinh_TruocNhapExcel_${Date.now()}.json`;
+    const backupBlob = new Blob([archive],{type:'application/json'});
+    const backupUrl = URL.createObjectURL(backupBlob);
+    const backupLink = document.createElement('a');
+    backupLink.href = backupUrl;
+    backupLink.download = backupFile;
+    document.body.appendChild(backupLink);
+    backupLink.click();
+    backupLink.remove();
+    window.setTimeout(() => URL.revokeObjectURL(backupUrl),1000);
+    setBackups(previous => [{id:`BACKUP_BEFORE_EXCEL_${Date.now()}`,filename:backupFile,timestamp:new Date().toLocaleString('vi-VN'),
+      sizeKb:Math.ceil(backupBlob.size/1024),type:'Thủ công' as const,status:'Thành công' as const},...previous].slice(0,30));
     const normalizedReceipts = normaliseReceipts(data.receipts);
     const importedStudents = reconcileStudentExtraClasses(data.students, data.classes).map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }));
     const importedClasses = reconcileClassStudentIds(data.classes, importedStudents);
@@ -661,7 +676,6 @@ export default function App() {
     setTimetableSlots(data.timetableSlots);
     setGrades(data.grades);
     setReceipts(normalizedReceipts);
-    setBackups([]);
     setHasCenterData(true);
     const importLog: ActivityLog[] = currentUser ? [{
       id: `LOG_IMPORT_${Date.now()}`,
@@ -1244,6 +1258,7 @@ export default function App() {
             permissions={currentUser.permissions}
             onImportStudents={handleImportStudents}
             onImportCenterData={handleImportCenterData}
+            timetableSlots={timetableSlots}
             onExportExcel={(filename) => addLog('EXPORT', 'Excel', `Xuất báo cáo Excel ${filename}`)}
           />
         </Suspense>
