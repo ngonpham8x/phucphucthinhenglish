@@ -1,0 +1,14 @@
+{
+  "name": "@phucphucthinh/picomatch-secure",
+  "version": "4.0.7",
+  "private": true,
+  "description": "Local security backport of picomatch 4.0.7 for CVE-2026-112366",
+  "type": "commonjs",
+  "main": "index.js",
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "Jon Schlinkert (upstream)",
+  "repository": "https://github.com/ngonpham8x/phucphucthinhenglish",
+  "engines": {"node": ">=12"},
+  "files": ["index.js", "posix.js", "lib", "LICENSE", "SECURITY.md"]
+}

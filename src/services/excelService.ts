@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { ClassRoom, CourseProgram, Grade, Room, Student, Teacher, TimetableSlot, TuitionReceipt } from '../types';
 import { paymentMethodLabel } from '../lib/tuition';
+import {newReceiptCodeConflicts,newTuitionOverpayments} from '../lib/receiptPolicy';
 import { isStudentInClass, getStudentClassIds } from '../lib/student';
 
 export interface ExcelExportData {
@@ -756,7 +757,7 @@ export async function generateMasterExcelWorkbook(data: ExcelExportData): Promis
     ['5. Công thức tổng thu tháng/lớp', '=SUMIFS(PPTE_HP_L,PPTE_HP_F,$A17,PPTE_HP_O,">="&D$16,PPTE_HP_O,"<"&EDATE(D$16,1))+SUMIFS(PPTE_HS_M,PPTE_HS_Z,$A17,PPTE_HS_Q,">="&D$16,PPTE_HS_Q,"<"&EDATE(D$16,1))'],
     ['6. Liên kết khi bấm', 'Các ô màu xanh gạch chân và cột “Nguồn công thức” là liên kết: bấm để mở sheet nguồn, tháng/lớp hoặc phiếu thu. Nếu Excel đang bật bảo vệ liên kết, hãy giữ Ctrl rồi bấm.'],
     ['7. Đồng bộ tự động', 'File .XLSM cần được cho phép chạy macro. Sau khoảng 2 giây kể từ khi sửa HỌC SINH, HỌC PHÍ hoặc LỚP HỌC, macro cập nhật các báo cáo. Chờ ô A17 báo hoàn tất rồi lưu tệp. Chỉ nhập dữ liệu tại các sheet nguồn; nội dung nhập trực tiếp vào sheet Lớp có thể bị ghi đè. File .XLSX không có macro.'],
-    ['8. Đồng bộ về web', 'Khi nhập lại tệp vào website, các khoản “nhập trực tiếp” tại HỌC SINH được tạo thành phiếu thu tự động; các khoản đã có trong HỌC PHÍ vẫn được giữ nguyên. Tệp có mã HS, mã lớp hoặc mã phiếu thu trùng/sai sẽ bị chặn để tránh liên kết nhầm.'],
+    ['8. Đồng bộ về web', 'Khi nhập lại tệp vào website, các khoản “nhập trực tiếp” tại HỌC SINH được tạo thành phiếu thu tự động; các khoản đã có trong HỌC PHÍ vẫn được giữ nguyên. Mã HS, mã lớp và ID phiếu cần liên kết hợp lệ. Kiểm tra trùng mã phiếu và thu vượt học phí áp dụng cho Ngày thu từ 19/11/2026.'],
     ['9. Không làm đứt liên kết', 'Không xóa hay sửa cột ẩn hoặc sheet dữ liệu hệ thống. Muốn xóa, xóa nguyên dòng nguồn. Nếu học viên còn phiếu thu hoặc lớp còn học viên, hãy xử lý các liên kết đó trước; lỗi sẽ hiện tại ô A17.'],
     ['10. Lớp và tháng mới', 'Thêm lớp tại LỚP HỌC để macro tạo sheet chi tiết và dòng tổng quan. Ngày thu thuộc tháng mới sẽ tự tạo cột tháng. Đổi mã lớp tại LỚP HỌC sẽ cập nhật mã ở học viên, phiếu thu và bảng điểm.'],
     ['11. Nhập lại website', 'Website kiểm tra tệp và cho biết số học viên/lớp bị xóa. Xác nhận nhập sẽ tải xuống bản sao lưu JSON trước khi thay dữ liệu. Website không tự nhận thay đổi từ tệp trên máy; cần lưu Excel rồi Import lại.']
@@ -1320,6 +1321,10 @@ function parseCenterWorkbook(workbook: ExcelJS.Workbook, existingData: Partial<C
       notes: 'Khoản thu nhập trực tiếp tại sheet HỌC SINH.'
     });
   });
+  const newCodeConflicts=newReceiptCodeConflicts(receipts);
+  if(newCodeConflicts.length) return {errors:[{row:0,field:'Mã phiếu thu',message:`Phiếu từ 19/11/2026 cần mã duy nhất. Mã bị trùng: ${newCodeConflicts.map(group=>group[0].code).join(', ')}.`}]};
+  const newOverpayments=newTuitionOverpayments(receipts);
+  if(newOverpayments.length) return {errors:newOverpayments.map(group=>({row:0,field:'HỌC PHÍ',message:`Học viên ${students.find(student=>student.id===group.studentId)?.code || group.studentId}, kỳ ${group.period}: chênh lệch phát sinh từ 19/11/2026 là ${group.excess.toLocaleString('vi-VN')} đ.`}))};
   students.forEach((student) => {
     const studentReceipts = receipts.filter((receipt) => receipt.studentId === student.id);
     const debt = studentReceipts.reduce((sum, receipt) => sum + receipt.debtAmount, 0);

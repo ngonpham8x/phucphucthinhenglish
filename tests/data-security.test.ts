@@ -72,7 +72,7 @@ const full = canonicalCenter({
       discount: 0,
       paidAmount: 200000,
       debtAmount: 700000,
-      paymentDate: "2026-11-01",
+      paymentDate: "2026-11-19",
       paymentMethod: "Tiền mặt",
       collectorName: "Test Owner",
     },

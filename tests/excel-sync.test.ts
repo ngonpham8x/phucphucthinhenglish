@@ -50,3 +50,8 @@ console.log('Passed: stable receipt IDs, collector, Excel dates, historical dupl
 book.getWorksheet('HỌC PHÍ')!.getCell('F6').value = '10';
 book.getWorksheet('HỌC PHÍ')!.getCell('L6').value = -1;
 assert.ok((await parseBook()).errors.length > 0,'Negative imported payment must be rejected');
+book.getWorksheet('HỌC PHÍ')!.getCell('L6').value = 2000000;
+book.getWorksheet('HỌC PHÍ')!.getCell('B8').value = 'PT1';
+book.getWorksheet('HỌC PHÍ')!.getCell('T8').value = 'r3';
+book.getWorksheet('HỌC PHÍ')!.getCell('O8').value = new Date('2026-11-19T00:00:00Z');
+assert.ok((await parseBook()).errors.some(error=>error.message.includes('mã duy nhất')),'A duplicate receipt dated 19/11/2026 must fail even with stable receipt IDs');

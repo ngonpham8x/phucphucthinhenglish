@@ -14,8 +14,11 @@ import {
   reconcileReceiptBalances,
   feeStatusForReceipts,
   paymentKindOf,
-  tuitionOverpayments,
 } from "../src/lib/tuition.js";
+import {
+  newReceiptCodeConflicts,
+  newTuitionOverpayments,
+} from "../src/lib/receiptPolicy.js";
 import type { StaffPermissions, ActivityLog } from "../src/types.js";
 
 export interface CenterActor {
@@ -428,6 +431,8 @@ function validate(
       ) / 10;
   }
   for (const receipt of data.receipts) {
+    if (typeof receipt.code !== "string" || !receipt.code.trim())
+      bad("Mã phiếu thu không hợp lệ.");
     if (!receipt.studentId) bad("Phiếu thu cần liên kết học viên.");
     reference(receipt.studentId, studentIds);
     reference(receipt.classId, classIds);
@@ -462,13 +467,15 @@ function validate(
     }
   }
   if (touched.has("receipts")) {
+    if (newReceiptCodeConflicts(data.receipts).length)
+      bad("Mã phiếu thu từ ngày 19/11/2026 phải duy nhất trên hệ thống.");
     const previous = new Map(
-      tuitionOverpayments(before.receipts).map((group) => [
+      newTuitionOverpayments(before.receipts).map((group) => [
         group.key,
         group.excess,
       ]),
     );
-    for (const { key, excess } of tuitionOverpayments(data.receipts)) {
+    for (const { key, excess } of newTuitionOverpayments(data.receipts)) {
       if (excess > (previous.get(key) || 0))
         bad("Tổng thu vượt học phí phải đóng của học viên trong kỳ.");
     }

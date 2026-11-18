@@ -1,5 +1,5 @@
 import { Student, ClassRoom, TuitionReceipt, CourseProgram } from '../types';
-import {tuitionOverpayments} from '../lib/tuition';
+import {isReceiptSubjectToNewRules,newReceiptCodeConflicts,newTuitionOverpayments} from '../lib/receiptPolicy';
 
 export interface ConsistencyIssue {
   type: 'student_not_in_class' | 'class_not_enrolled' | 'student_missing_program' | 'multiple_class_single_program' | 'orphaned_receipt' | 'duplicate_receipt_code' | 'tuition_overpayment';
@@ -200,26 +200,20 @@ export function checkDataConsistency(
     });
   });
 
-  const codes = new Map<string, TuitionReceipt[]>();
-  receipts.forEach(receipt => {
-    const key = receipt.code.trim().toLocaleUpperCase('vi-VN');
-    codes.set(key, [...(codes.get(key) || []), receipt]);
-  });
-  codes.forEach(group => {
-    if (group.length < 2) return;
-    const receipt = group[0];
+  newReceiptCodeConflicts(receipts).forEach(group => {
+    const receipt = group.find(isReceiptSubjectToNewRules)!;
     const student = studentMap.get(receipt.studentId);
     issues.push({
       type: 'duplicate_receipt_code', severity: 'warning',
       studentId: receipt.studentId, studentCode: student?.code || '', studentName: student?.name || '',
-      details: `Mã phiếu ${receipt.code} được dùng cho ${group.length} khoản thu. Giữ nguyên các khoản thu và xác minh mã trước khi điều chỉnh.`,
+      details: `Mã phiếu ${receipt.code} được dùng cho ${group.length} khoản thu, có phiếu từ ngày 19/11/2026.`,
       affectedIds: { receiptId: receipt.id },
     });
   });
-  for(const group of tuitionOverpayments(receipts)) {
+  for(const group of newTuitionOverpayments(receipts)) {
     const student=studentMap.get(group.studentId);
     issues.push({type:'tuition_overpayment',severity:'warning',studentId:group.studentId,studentCode:student?.code || '?',studentName:student?.name || 'Học viên',
-      details:`Kỳ ${group.period}, lớp ${classMap.get(group.classId)?.code || 'chưa xếp'}. Đã thu ${group.paid.toLocaleString('vi-VN')} đ, phải đóng theo mức phí đang ghi ${group.due.toLocaleString('vi-VN')} đ. Chênh lệch ${group.excess.toLocaleString('vi-VN')} đ cần Chủ trung tâm đối soát.`,
+      details:`Kỳ ${group.period}, lớp ${classMap.get(group.classId)?.code || 'chưa xếp'}. Đã thu ${group.paid.toLocaleString('vi-VN')} đ, phải đóng theo mức phí đang ghi ${group.due.toLocaleString('vi-VN')} đ. Chênh lệch phát sinh từ 19/11/2026 là ${group.excess.toLocaleString('vi-VN')} đ.${group.historicalExcess ? ` Chênh lệch trước mốc là ${group.historicalExcess.toLocaleString('vi-VN')} đ.` : ''}`,
       affectedIds:{classId:group.classId,receiptId:group.receiptId}});
   }
   return issues;

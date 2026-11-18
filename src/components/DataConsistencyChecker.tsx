@@ -131,6 +131,7 @@ export default function DataConsistencyChecker({
 
       {/* Main Content */}
       <div className="p-6">
+        <p className="mb-4 text-xs text-slate-600">Kiểm tra trùng mã phiếu và thu vượt học phí áp dụng cho Ngày thu từ 19/11/2026.</p>
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
