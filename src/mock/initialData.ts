@@ -10,7 +10,7 @@ import {
   Teacher,
   TimetableSlot,
   TuitionReceipt
-} from '../types';
+} from '../types.js';
 
 // No student, parent, financial, or staff personal data is bundled with the web app.
 // The owner imports the private workbook after Google sign-in; the payload is stored in Supabase under RLS.

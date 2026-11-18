@@ -1,4 +1,4 @@
-import type { CenterBackupData } from "../types";
+import type { CenterBackupData } from "../types.js";
 
 export const CENTER_COLLECTIONS = [
   "programs",

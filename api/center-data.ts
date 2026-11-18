@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { allowedOrigin, authorizeCenter, sendJson } from "../server/auth";
+import { allowedOrigin, authorizeCenter, sendJson } from "../server/auth.js";
 import {
   applyCenterChanges,
   canonicalCenter,
   PolicyError,
   projectCenter,
-} from "../server/centerPolicy";
-import { initialSettings } from "../src/mock/initialData";
-import type { CenterPayload } from "../src/lib/centerChanges";
+} from "../server/centerPolicy.js";
+import { initialSettings } from "../src/mock/initialData.js";
+import type { CenterPayload } from "../src/lib/centerChanges.js";
 
 export default async function handler(req: any, res: any) {
   if (!["GET", "PATCH"].includes(req.method)) {

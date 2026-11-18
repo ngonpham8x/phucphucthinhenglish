@@ -1,4 +1,4 @@
-import type { StaffPermissions, UserAccount } from "../types";
+import type { StaffPermissions, UserAccount } from "../types.js";
 
 export const EMPTY_PERMISSIONS: StaffPermissions = {
   student: {

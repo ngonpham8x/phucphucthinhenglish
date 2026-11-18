@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { PolicyError, type CenterActor } from "./centerPolicy";
+import { PolicyError, type CenterActor } from "./centerPolicy.js";
 
 export function sendJson(res: any, status: number, body: unknown) {
   res.setHeader("Cache-Control", "no-store, max-age=0");

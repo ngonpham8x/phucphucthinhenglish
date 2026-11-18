@@ -1,4 +1,4 @@
-import { FeeStatus, TuitionReceipt, CourseProgram, ClassRoom } from '../types';
+import type { FeeStatus, TuitionReceipt, CourseProgram, ClassRoom } from '../types.js';
 
 export type TuitionPaymentKind = 'course' | 'monthly';
 

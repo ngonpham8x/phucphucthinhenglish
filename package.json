@@ -10,6 +10,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx tests/tuition-regression.test.ts && tsx tests/excel-sync.test.ts && tsx tests/excel-complete.test.ts && tsx tests/date-and-activity.test.ts && tsx tests/center-sync.test.ts && tsx tests/data-security.test.ts && tsx tests/database-security.test.ts && tsx tests/api-security.test.ts",
+    "test:server": "tsc --module NodeNext --moduleResolution NodeNext --target ES2022 --skipLibCheck --outDir .review/server-runtime --rootDir . api/center-data.ts && node tests/server-runtime.test.mjs",
     "build:excel": "node scripts/build-excel-template.mjs",
     "test:excel": "powershell -NoProfile -File tests/native-excel-sync.ps1 && tsx tests/native-excel-import.test.ts"
   },

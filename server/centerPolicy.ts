@@ -2,21 +2,21 @@ import type {
   CenterPayload,
   CenterChanges,
   CenterCollection,
-} from "../src/lib/centerChanges";
-import { CENTER_COLLECTIONS } from "../src/lib/centerChanges";
+} from "../src/lib/centerChanges.js";
+import { CENTER_COLLECTIONS } from "../src/lib/centerChanges.js";
 import {
   normalizePermissions,
   canSeeDebt,
   canSeeRevenue,
   canExportCenter,
-} from "../src/lib/access";
+} from "../src/lib/access.js";
 import {
   reconcileReceiptBalances,
   feeStatusForReceipts,
   paymentKindOf,
   tuitionOverpayments,
-} from "../src/lib/tuition";
-import type { StaffPermissions, ActivityLog } from "../src/types";
+} from "../src/lib/tuition.js";
+import type { StaffPermissions, ActivityLog } from "../src/types.js";
 
 export interface CenterActor {
   id: string;
