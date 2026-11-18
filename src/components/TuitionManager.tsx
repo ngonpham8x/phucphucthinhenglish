@@ -1,4 +1,5 @@
 import { localISODate } from '../lib/date';
+import {canSeeDebt} from '../lib/access';
 import React, { useEffect, useMemo, useState } from 'react';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
 import { CreditCard, Plus, PlusCircle, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2, Filter, RotateCcw, Split, Calendar, GraduationCap, ArrowRight } from 'lucide-react';
@@ -119,7 +120,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   ), [collectingStudentId, collectClassId, receipts, programs, classes]);
 
   useEffect(() => {
-    if (!collectRequest) return;
+    if (!collectRequest || (!isOwner && !(permissions.tuition.view && permissions.tuition.showDebt && permissions.tuition.collect))) return;
     setEditingReceipt(null);
     setInstallmentParentReceipt(null);
     const student = students.find(s => s.id === collectRequest.studentId);
@@ -149,10 +150,11 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
     setCollectError(null);
     setIsCollectModalOpen(true);
     onCollectRequestHandled?.();
-  }, [collectRequest, classes, onCollectRequestHandled, programs, receipts, students]);
+  }, [collectRequest, classes, onCollectRequestHandled, programs, receipts, students,isOwner,permissions]);
 
-  const canCollect = isOwner || permissions.tuition.collect;
-  const canDelete = isOwner || permissions.tuition.delete;
+  const showDebt=canSeeDebt(isOwner,permissions);
+  const canCollect = isOwner || (showDebt && permissions.tuition.collect);
+  const canDelete = isOwner || (showDebt && permissions.tuition.delete);
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);
   const totalDebt = debtBreakdown(receipts).total;
@@ -177,13 +179,13 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
           .some((value) => String(value).toLocaleLowerCase('vi-VN').includes(normalizedQuery));
         const matchesClass = filterClassId === 'all' || receipt.classId === filterClassId || (!receipt.classId && Boolean(student) && getStudentClassIds(student!, classes).length === 1 && isStudentInClass(student!, filterClassId, classes.find(c => c.id === filterClassId)));
         const matchesKind = filterPaymentKind === 'all' || (filterPaymentKind === 'course' ? receipt.paymentKind === 'course' : receipt.paymentKind !== 'course');
-        const matchesStatus = filterReceiptStatus === 'all' || (filterReceiptStatus === 'paid' ? status === 'paid' : receipt.debtAmount > 0);
+        const matchesStatus = !showDebt || filterReceiptStatus === 'all' || (filterReceiptStatus === 'paid' ? status === 'paid' : receipt.debtAmount > 0);
         const matchesMethod = filterPaymentMethod === 'all' || paymentMethodLabel(receipt.paymentMethod) === filterPaymentMethod;
         const matchesMonth = filterMonth === 'all' || receipt.paymentDate.startsWith(filterMonth);
         return matchesQuery && matchesClass && matchesKind && matchesStatus && matchesMethod && matchesMonth;
       })
       .sort((left, right) => right.paymentDate.localeCompare(left.paymentDate) || right.code.localeCompare(left.code));
-  }, [classes, filterClassId, filterMonth, filterPaymentKind, filterPaymentMethod, filterReceiptStatus, receiptQuery, receipts, students]);
+  }, [classes, filterClassId, filterMonth, filterPaymentKind, filterPaymentMethod, filterReceiptStatus, receiptQuery, receipts, students,showDebt]);
 
   const selectedStudentReceiptHistory = useMemo(() => (
     receipts
@@ -570,14 +572,14 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
           <CheckCircle className="w-10 h-10 text-emerald-300 opacity-80" />
         </button>
 
-        <button type="button" onClick={() => showReceiptDetail('debt')} className="bg-rose-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2">
+        {showDebt && <button type="button" onClick={() => showReceiptDetail('debt')} className="bg-rose-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2">
           <div>
             <div className="text-xs uppercase font-bold text-rose-200">Tổng Công Nợ Còn Lại</div>
             <div className="text-2xl font-extrabold mt-1">{totalDebt.toLocaleString('vi-VN')} đ</div>
             <div className="text-[11px] text-rose-100 mt-1">Bấm để xem các phiếu còn nợ</div>
           </div>
           <AlertCircle className="w-10 h-10 text-rose-300 opacity-80" />
-        </button>
+        </button>}
 
         <button type="button" onClick={() => showReceiptDetail('monthly')} className="bg-blue-800 text-left text-white p-5 rounded-2xl shadow-md flex items-center justify-between transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
           <div>
@@ -615,9 +617,9 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
           <select value={filterPaymentKind} onChange={(event) => setFilterPaymentKind(event.target.value as 'all' | 'monthly' | 'course')} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
             <option value="all">Tất cả khoản thu</option><option value="monthly">Học phí tháng</option><option value="course">Học phí khóa</option>
           </select>
-          <select value={filterReceiptStatus} onChange={(event) => setFilterReceiptStatus(event.target.value as 'all' | 'paid' | 'debt')} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
+          {showDebt && <select value={filterReceiptStatus} onChange={(event) => setFilterReceiptStatus(event.target.value as 'all' | 'paid' | 'debt')} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
             <option value="all">Tất cả tình trạng</option><option value="paid">Đã đóng đủ</option><option value="debt">Còn nợ / đóng thiếu</option>
-          </select>
+          </select>}
           <select value={filterMonth} onChange={(event) => setFilterMonth(event.target.value)} className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">
             <option value="all">Tất cả tháng thu</option>{receiptMonths.map((month) => <option key={month} value={month}>Tháng {month.slice(5)}/{month.slice(0, 4)}</option>)}
           </select>
@@ -644,8 +646,8 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                 <th className="py-3 px-4">Học Phí Tháng</th>
                 <th className="py-3 px-4">Khoản Thu</th>
                 <th className="py-3 px-4">Đã Đóng (VNĐ)</th>
-                <th className="py-3 px-4">Còn Thiếu (VNĐ)</th>
-                <th className="py-3 px-4">Tình Trạng</th>
+                {showDebt && <th className="py-3 px-4">Còn Thiếu (VNĐ)</th>}
+                {showDebt && <th className="py-3 px-4">Tình Trạng</th>}
                 <th className="py-3 px-4">Ngày Thu</th>
                 <th className="py-3 px-4">Hình Thức</th>
                 <th className="py-3 px-4 text-right">Thao Tác</th>
@@ -664,10 +666,10 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <td className="py-3 px-4">{(rc.monthlyFee || 0) > 0 ? `${(rc.monthlyFee || 0).toLocaleString('vi-VN')} đ` : '—'}</td>
                     <td className="py-3 px-4"><span className="font-semibold text-slate-700">{paymentKindLabel(rc)} · {paymentPeriodLabel(rc)}</span></td>
                     <td className="py-3 px-4 font-bold text-emerald-700">{rc.paidAmount.toLocaleString('vi-VN')} đ</td>
-                    <td className="py-3 px-4 font-bold text-rose-700">
+                    {showDebt && <td className="py-3 px-4 font-bold text-rose-700">
                       {rc.debtAmount > 0 ? `${rc.debtAmount.toLocaleString('vi-VN')} đ` : '—'}
-                    </td>
-                    <td className="py-3 px-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>
+                    </td>}
+                    {showDebt && <td className="py-3 px-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>}
                     <td className="py-3 px-4">{rc.paymentDate}</td>
                     <td className="py-3 px-4">{paymentMethodLabel(rc.paymentMethod)}</td>
                     <td className="py-3 px-4 text-right">
@@ -1409,16 +1411,16 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
                     <div>Họ và tên học sinh: <strong className="text-sm">{student?.name}</strong> (Mã HS: {student?.code})</div>
                     <div>Phụ huynh đại diện: <strong>{student?.parentName}</strong> - SĐT: <strong>{student?.parentPhone}</strong></div>
                     <div>Lớp đăng ký học: <strong>{cls?.name}</strong></div>
-                    {selectedReceipt.paymentKind === 'course'
+                    {showDebt && (selectedReceipt.paymentKind === 'course'
                       ? <div>Số tiền học phí khóa: <strong>{selectedReceipt.courseFee.toLocaleString('vi-VN')} đ</strong></div>
-                      : <div>Số tiền học phí tháng: <strong>{(selectedReceipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</strong></div>}
+                      : <div>Số tiền học phí tháng: <strong>{(selectedReceipt.monthlyFee || 0).toLocaleString('vi-VN')} đ</strong></div>)}
                     <div>Khoản thu: <strong>{paymentKindLabel(selectedReceipt)} · {paymentPeriodLabel(selectedReceipt)}</strong></div>
                     <div>Số tiền thực đóng: <strong className="text-base text-red-800">{selectedReceipt.paidAmount.toLocaleString('vi-VN')} đ</strong></div>
-                    {selectedReceipt.debtAmount > 0 && <div>Số tiền còn thiếu: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>}
-                    <div>Tình trạng: <strong>{receiptStatusLabel[receiptStatus(selectedReceipt)]}</strong></div>
+                    {showDebt && selectedReceipt.debtAmount > 0 && <div>Số tiền còn thiếu: <strong className="text-rose-700">{selectedReceipt.debtAmount.toLocaleString('vi-VN')} đ</strong></div>}
+                    {showDebt && <div>Tình trạng: <strong>{receiptStatusLabel[receiptStatus(selectedReceipt)]}</strong></div>}
                     <div>Hình thức thanh toán: <strong>{paymentMethodLabel(selectedReceipt.paymentMethod)}</strong></div>
                     <div>Ngày lập phiếu: <strong>{selectedReceipt.paymentDate}</strong></div>
-                    <div>Ghi chú: <em>{selectedReceipt.notes || 'Đã hoàn tất thanh toán'}</em></div>
+                    <div>Ghi chú: <em>{selectedReceipt.notes || '—'}</em></div>
                   </div>
                 );
               })()}

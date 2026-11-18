@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import type { StaffPermissions, UserAccount, UserRole } from '../types';
+import {EMPTY_PERMISSIONS,normalizePermissions} from './access';
 
 export interface ProfileRow {
   id: string;
@@ -10,14 +11,7 @@ export interface ProfileRow {
   permissions: Partial<StaffPermissions> | null;
 }
 
-export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
-  student: { view: true, add: true, edit: true, delete: false, export: false },
-  teacher: { view: true, edit: true, delete: false },
-  tuition: { view: true, collect: true, delete: false, showDebt: false },
-  grade: { view: true, edit: true },
-  excel: { import: true, export: false },
-  report: { view: false, revenue: false },
-};
+export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = EMPTY_PERMISSIONS;
 
 export const OWNER_PERMISSIONS: StaffPermissions = {
   student: { view: true, add: true, edit: true, delete: true, export: true },
@@ -29,14 +23,7 @@ export const OWNER_PERMISSIONS: StaffPermissions = {
 };
 
 function mergePermissions(candidate: Partial<StaffPermissions> | null): StaffPermissions {
-  return {
-    student: { ...DEFAULT_STAFF_PERMISSIONS.student, ...candidate?.student },
-    teacher: { ...DEFAULT_STAFF_PERMISSIONS.teacher, ...candidate?.teacher },
-    tuition: { ...DEFAULT_STAFF_PERMISSIONS.tuition, ...candidate?.tuition },
-    grade: { ...DEFAULT_STAFF_PERMISSIONS.grade, ...candidate?.grade },
-    excel: { ...DEFAULT_STAFF_PERMISSIONS.excel, ...candidate?.excel },
-    report: { ...DEFAULT_STAFF_PERMISSIONS.report, ...candidate?.report },
-  };
+  return normalizePermissions(candidate);
 }
 
 export function profileToAccount(profile: ProfileRow, authUser: User): UserAccount {

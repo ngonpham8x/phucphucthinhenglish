@@ -42,6 +42,20 @@ export const debtBreakdown = (receipts: TuitionReceipt[]): TuitionDebtBreakdown 
   return { total: monthly + course, monthly, course };
 };
 
+export function tuitionOverpayments(receipts:TuitionReceipt[]) {
+  const groups=new Map<string,{key:string;studentId:string;classId:string;period:string;receiptId:string;fee:number;discount:number;paid:number}>();
+  for(const receipt of receipts) {
+    const period=(receipt.billingPeriod || receipt.paymentDate.slice(0,7)).trim().toLowerCase();
+    const key=JSON.stringify([receipt.studentId,receipt.classId,paymentKindOf(receipt),period]);
+    const group=groups.get(key) || {key,studentId:receipt.studentId,classId:receipt.classId,period,receiptId:receipt.id,fee:0,discount:0,paid:0};
+    group.fee=Math.max(group.fee,paymentKindOf(receipt)==='course' ? receipt.courseFee || 0 : receipt.monthlyFee || 0);
+    group.discount=Math.max(group.discount,receipt.discount || 0);
+    group.paid+=receipt.paidAmount;
+    groups.set(key,group);
+  }
+  return [...groups.values()].map(group=>({...group,due:Math.max(group.fee-group.discount,0),excess:Math.max(group.paid-Math.max(group.fee-group.discount,0),group.discount-group.fee,0)})).filter(group=>group.excess>0);
+}
+
 export const feeStatusForReceipts = (receipts: TuitionReceipt[]): FeeStatus => {
   const debt = debtBreakdown(receipts).total;
   const paid = receipts.reduce((sum, receipt) => sum + Math.max(receipt.paidAmount || 0, 0), 0);

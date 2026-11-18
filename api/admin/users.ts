@@ -41,28 +41,16 @@ function permissionSummary(permissions: Record<string, Record<string, boolean>>)
   return granted.length > 0 ? `Quyền: ${granted.join(', ')}.` : 'Không cấp quyền riêng.';
 }
 
-async function writeAccountAudit(
-  client: any,
-  entry: {
-    action: AccountAuditAction;
-    actorId: string;
-    actorName: string;
-    targetId: string;
-    targetName: string;
-    targetRole: 'owner' | 'staff';
-    details: string;
-  }
-) {
-  const { error } = await client.from('account_audit_logs').insert({
-    action: entry.action,
-    actor_id: entry.actorId,
-    actor_name: entry.actorName.slice(0, 120),
-    target_id: entry.targetId,
-    target_name: entry.targetName.slice(0, 120),
-    target_role: entry.targetRole,
-    details: entry.details.slice(0, 1000),
+// Profile mutation and its audit entry commit in one database transaction.
+async function updateAccount(client:any,res:any,actorId:string,targetId:string,name:string,role:'owner'|'staff',active:boolean,permissions:unknown,action:AccountAuditAction,details:string) {
+  const {error}=await client.rpc('admin_update_profile_secure',{
+    p_actor:actorId,p_target:targetId,p_name:name,p_role:role,p_active:active,
+    p_permissions:permissions,p_action:action,p_details:details,
   });
-  return !error;
+  if(!error) return true;
+  const guarded=['SELF_OWNER_CHANGE','LAST_ACTIVE_OWNER','CENTER_FORBIDDEN'].some(code=>error.message?.includes(code));
+  json(res,guarded ? 403 : 503,{error:guarded ? 'Không thể tự hạ quyền, tự khóa hoặc vô hiệu hóa Chủ trung tâm cuối cùng.' : 'Không thể lưu tài khoản và nhật ký. Hãy kiểm tra migration 007.'});
+  return false;
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -185,7 +173,7 @@ export default async function handler(req: any, res: any) {
 
   const authorized = await authorizeOwner(req, res);
   if (!authorized) return;
-  const { client, callerId, callerName } = authorized;
+  const { client, callerId } = authorized;
 
   if (req.method === 'GET') {
     const { data, error } = await client
@@ -213,6 +201,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const permissions = role === 'owner' ? OWNER_PERMISSIONS : normalizeStaffPermissions(body.permissions);
+    if(role==='staff' && (permissions.tuition.collect || permissions.tuition.delete) && (!permissions.tuition.view || !permissions.tuition.showDebt)) return json(res,400,{error:'Quyền thu/xóa học phí cần quyền xem học phí và xem công nợ.'});
     const { data: existing, error: existingError } = await client
       .from('profiles')
       .select('id, full_name, role, is_active, permissions')
@@ -222,32 +211,9 @@ export default async function handler(req: any, res: any) {
 
     // A known Google user can be promoted without an email invitation or password.
     if (existing) {
-      const { error: profileUpdateError } = await client.from('profiles').update({
-        full_name: fullName,
-        role,
-        is_active: true,
-        permissions,
-      }).eq('id', existing.id);
-      if (profileUpdateError) return json(res, 500, { error: 'Không thể cập nhật quyền cho tài khoản.' });
+      if(existing.id===callerId && role!=='owner') return json(res,400,{error:'Bạn không thể tự hạ quyền Chủ trung tâm của mình.'});
       const details = `Cập nhật cấp bậc: ${roleLabel(existing.role)} → ${roleLabel(role)}. ${role === 'owner' ? 'Cấp toàn quyền Chủ trung tâm.' : permissionSummary(permissions)}`;
-      const auditRecorded = await writeAccountAudit(client, {
-        action: 'ACCOUNT_UPDATED',
-        actorId: callerId,
-        actorName: callerName,
-        targetId: existing.id,
-        targetName: fullName || existing.full_name || 'Chưa đặt tên',
-        targetRole: role,
-        details,
-      });
-      if (!auditRecorded) {
-        await client.from('profiles').update({
-          full_name: existing.full_name,
-          role: existing.role,
-          is_active: existing.is_active,
-          permissions: existing.permissions,
-        }).eq('id', existing.id);
-        return json(res, 500, { error: 'Không thể ghi nhật ký tài khoản; thay đổi đã được hoàn tác.' });
-      }
+      if(!await updateAccount(client,res,callerId,existing.id,fullName,role,true,permissions,'ACCOUNT_UPDATED',details)) return;
       return json(res, 200, { user: { id: existing.id, role }, provisioned: false });
     }
 
@@ -260,33 +226,10 @@ export default async function handler(req: any, res: any) {
       return json(res, 400, { error: 'Không thể cấp quyền Google. Email có thể đã tồn tại hoặc chưa sẵn sàng.' });
     }
 
-    const { error: profileWriteError } = await client.from('profiles').upsert({
-      id: provisionedUser.user.id,
-      email,
-      full_name: fullName,
-      role,
-      is_active: true,
-      permissions,
-    });
-    if (profileWriteError) {
-      // Do not leave a partly provisioned Google account active.
-      await client.auth.admin.deleteUser(provisionedUser.user.id);
-      return json(res, 500, { error: 'Không thể hoàn tất việc cấp quyền cho tài khoản.' });
-    }
-
-    const auditRecorded = await writeAccountAudit(client, {
-      action: 'ACCOUNT_PROVISIONED',
-      actorId: callerId,
-      actorName: callerName,
-      targetId: provisionedUser.user.id,
-      targetName: fullName,
-      targetRole: role,
-      details: `Cấp quyền Google mới: ${roleLabel(role)}. ${role === 'owner' ? 'Cấp toàn quyền Chủ trung tâm.' : permissionSummary(permissions)}`,
-    });
-    if (!auditRecorded) {
-      await client.auth.admin.deleteUser(provisionedUser.user.id);
-      return json(res, 500, { error: 'Không thể ghi nhật ký tài khoản; tài khoản chưa được cấp quyền.' });
-    }
+    const details=`Cấp quyền Google mới: ${roleLabel(role)}. ${role==='owner' ? 'Cấp toàn quyền Chủ trung tâm.' : permissionSummary(permissions)}`;
+    // A failed transaction leaves the new Auth user inactive. Keep the record
+    // so the owner can safely retry without deleting a concurrent Google login.
+    if(!await updateAccount(client,res,callerId,provisionedUser.user.id,fullName,role,true,permissions,'ACCOUNT_PROVISIONED',details)) return;
 
     return json(res, 201, { user: { id: provisionedUser.user.id, role }, provisioned: true });
   }
@@ -300,36 +243,12 @@ export default async function handler(req: any, res: any) {
 
   const { data: target, error: targetError } = await client
     .from('profiles')
-    .select('id, full_name, role, is_active')
+    .select('id, full_name, role, is_active, permissions')
     .eq('id', userId)
     .maybeSingle();
   if (targetError || !target) return json(res, 404, { error: 'Không tìm thấy tài khoản.' });
 
-  if (!active && target.role === 'owner' && target.is_active) {
-    const { count, error: ownerCountError } = await client
-      .from('profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('role', 'owner')
-      .eq('is_active', true);
-    if (ownerCountError || (count ?? 0) <= 1) {
-      return json(res, 400, { error: 'Không thể khóa Chủ trung tâm cuối cùng.' });
-    }
-  }
-
-  const { error: updateError } = await client.from('profiles').update({ is_active: active }).eq('id', userId);
-  if (updateError) return json(res, 500, { error: 'Không thể cập nhật trạng thái tài khoản.' });
-  const auditRecorded = await writeAccountAudit(client, {
-    action: active ? 'ACCOUNT_UNLOCKED' : 'ACCOUNT_LOCKED',
-    actorId: callerId,
-    actorName: callerName,
-    targetId: target.id,
-    targetName: target.full_name || 'Chưa đặt tên',
-    targetRole: target.role,
-    details: active ? 'Mở khóa tài khoản; có thể đăng nhập Google.' : 'Khóa tài khoản; không thể truy cập hệ thống.',
-  });
-  if (!auditRecorded) {
-    await client.from('profiles').update({ is_active: target.is_active }).eq('id', userId);
-    return json(res, 500, { error: 'Không thể ghi nhật ký tài khoản; thay đổi đã được hoàn tác.' });
-  }
+  if(!await updateAccount(client,res,callerId,target.id,target.full_name,target.role,active,target.permissions,
+    active ? 'ACCOUNT_UNLOCKED' : 'ACCOUNT_LOCKED',active ? 'Mở khóa tài khoản; có thể đăng nhập Google.' : 'Khóa tài khoản; không thể truy cập hệ thống.')) return;
   return json(res, 200, { success: true });
 }

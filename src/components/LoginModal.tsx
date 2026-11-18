@@ -6,18 +6,20 @@ interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: UserAccount;
-  onLogout: () => Promise<void>;
+  onLogout: () => Promise<boolean>;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, currentUser, onLogout }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error,setError]=useState('');
 
   if (!isOpen) return null;
 
   const handleLogout = async () => {
     setIsSubmitting(true);
-    await onLogout();
-    setIsSubmitting(false);
+    try {
+      if(!await onLogout()) setError('Chưa đăng xuất được. Hãy đóng cửa sổ này và kiểm tra thông báo lưu dữ liệu.');
+    } finally {setIsSubmitting(false);}
   };
 
   return (
@@ -43,8 +45,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, current
         </div>
 
         <button onClick={handleLogout} disabled={isSubmitting} className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60 flex items-center justify-center gap-2">
-          <LogOut className="h-4 w-4" /> Đăng xuất
+          <LogOut className="h-4 w-4" /> {isSubmitting ? 'Đang lưu và đăng xuất…' : 'Đăng xuất'}
         </button>
+        {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
       </section>
     </div>
   );

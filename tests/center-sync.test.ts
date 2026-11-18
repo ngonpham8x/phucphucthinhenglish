@@ -1,30 +1,78 @@
-import assert from 'node:assert/strict';
-import { saveCenterPayload, CenterSyncConflict } from '../src/lib/centerSync';
-// Two browser clients use the same server snapshot. The second writer must not
-// overwrite the first writer's data, and updates must return the new version.
-let row: {payload: object; updated_at: string} | null = {payload: {}, updated_at: 'v1'};
-const client = {from() {
- const filters: Record<string,string> = {};
- let incoming: object; let insert = false;
- const request = {
-  eq(key: string,value: string) {filters[key]=value;return request;},
-  select() {return request;},
-  async maybeSingle() {
-   if (insert && row) return {data:null,error:{code:'23505',message:'Duplicate'}};
-   if (!insert && row?.updated_at !== filters.updated_at) return {data:null,error:null};
-   row = {payload: incoming,updated_at: row ? row.updated_at + '+' : 'v1'};
-   return {data:{updated_at: row.updated_at},error:null};
-  },
- };
- return {update(value: {payload:object}) {incoming=value.payload;return request;},
- insert(value: {payload:object}) {incoming=value.payload;insert=true;return request;}};
-}} as any;
-const version = await saveCenterPayload(client,{receipt:'first'},'v1');
-await assert.rejects(saveCenterPayload(client,{receipt:'stale'},'v1'),CenterSyncConflict);
-assert.deepEqual(row?.payload,{receipt:'first'});
-await assert.rejects(saveCenterPayload(client,{},null),CenterSyncConflict);
-await saveCenterPayload(client,{receipt:'next'},version);
-assert.deepEqual(row?.payload,{receipt:'next'});
-row = null;
-assert.equal(await saveCenterPayload(client,{receipt:'new'},null),'v1');
-console.log('Passed: concurrent stale writes blocked, insert conflicts, version advancement.');
+import assert from "node:assert/strict";
+import {
+  CenterSyncQueue,
+  CenterSyncConflict,
+  centerRequest,
+} from "../src/lib/centerSync";
+import { canonicalCenter } from "../server/centerPolicy";
+import { initialSettings } from "../src/mock/initialData";
+import type { CenterPayload } from "../src/lib/centerChanges";
+
+const payload = canonicalCenter({ settings: initialSettings } as CenterPayload);
+const edited = (name: string) => ({
+  ...payload,
+  settings: { ...initialSettings, name },
+});
+let release: () => void;
+const gate = new Promise<void>((resolve) => {
+  release = resolve;
+});
+const requests: any[] = [];
+const queue = new CenterSyncQueue({ payload, version: "v1" }, async (body) => {
+  requests.push(body);
+  if (requests.length === 1) await gate;
+  return { payload, version: `v${requests.length + 1}` };
+});
+queue.update(edited("First edit"));
+assert.equal(queue.dirty, true);
+const saving = queue.flush();
+queue.update(edited("Edit while saving"));
+assert.equal(queue.flush(), saving);
+release!();
+await saving;
+assert.equal(requests.length, 2);
+assert.equal(requests[1].version, "v2");
+assert.equal(requests[1].changes.settings.name, "Edit while saving");
+assert.equal(queue.dirty, false);
+
+let fail = true;
+const retryRequests: any[] = [];
+const retry = new CenterSyncQueue({ payload, version: "v1" }, async (body) => {
+  retryRequests.push(body);
+  if (fail) throw new Error("Network disconnected");
+  return { payload, version: "v2" };
+});
+retry.update(edited("Saved before logout"));
+await assert.rejects(retry.flush(), /Network/);
+assert.equal(retry.dirty, true);
+assert.equal(retry.saving, false);
+fail = false;
+await retry.flush();
+assert.deepEqual(retryRequests[1], retryRequests[0]);
+assert.equal(retry.dirty, false);
+
+const originalFetch = globalThis.fetch;
+try {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: "Concurrent update" }), {
+      status: 409,
+    });
+  await assert.rejects(
+    centerRequest("test-token", {
+      changes: {},
+      version: "v1",
+      requestId: crypto.randomUUID(),
+    }),
+    CenterSyncConflict,
+  );
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: "Permission revoked" }), {
+      status: 403,
+    });
+  await assert.rejects(centerRequest("test-token"), /Permission revoked/);
+} finally {
+  globalThis.fetch = originalFetch;
+}
+console.log(
+  "Passed: sync drains concurrent local edits, retries idempotently, retains failed changes, rejects stale/unauthorized API responses.",
+);

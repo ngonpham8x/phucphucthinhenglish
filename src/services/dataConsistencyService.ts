@@ -1,7 +1,8 @@
 import { Student, ClassRoom, TuitionReceipt, CourseProgram } from '../types';
+import {tuitionOverpayments} from '../lib/tuition';
 
 export interface ConsistencyIssue {
-  type: 'student_not_in_class' | 'class_not_enrolled' | 'student_missing_program' | 'multiple_class_single_program' | 'orphaned_receipt' | 'duplicate_receipt_code';
+  type: 'student_not_in_class' | 'class_not_enrolled' | 'student_missing_program' | 'multiple_class_single_program' | 'orphaned_receipt' | 'duplicate_receipt_code' | 'tuition_overpayment';
   severity: 'critical' | 'warning' | 'info';
   studentId: string;
   studentCode: string;
@@ -215,6 +216,12 @@ export function checkDataConsistency(
       affectedIds: { receiptId: receipt.id },
     });
   });
+  for(const group of tuitionOverpayments(receipts)) {
+    const student=studentMap.get(group.studentId);
+    issues.push({type:'tuition_overpayment',severity:'warning',studentId:group.studentId,studentCode:student?.code || '?',studentName:student?.name || 'Học viên',
+      details:`Kỳ ${group.period}, lớp ${classMap.get(group.classId)?.code || 'chưa xếp'}. Đã thu ${group.paid.toLocaleString('vi-VN')} đ, phải đóng theo mức phí đang ghi ${group.due.toLocaleString('vi-VN')} đ. Chênh lệch ${group.excess.toLocaleString('vi-VN')} đ cần Chủ trung tâm đối soát.`,
+      affectedIds:{classId:group.classId,receiptId:group.receiptId}});
+  }
   return issues;
 }
 
@@ -376,6 +383,7 @@ export function formatConsistencyReport(report: ConsistencyReport): string {
       'class_not_enrolled': '⚠️ ClassID không khớp',
       'student_missing_program': '🔍 Thiếu programId',
       'duplicate_receipt_code': '⚠️ Trùng mã phiếu thu',
+      'tuition_overpayment': 'Đối soát học phí đã thu',
       'multiple_class_single_program': 'ℹ️ Học nhiều lớp, 1 khoá',
       'orphaned_receipt': '💔 Record học phí mồ côi'
     };

@@ -2,7 +2,8 @@ import { localISODate } from '../lib/date';
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { debtBreakdown, paymentKindLabel, paymentPeriodLabel, getStudentCourseProgress, suggestNextCoursePeriod } from '../lib/tuition';
-import { isStudentInClass, getStudentClassIds } from '../lib/student';
+import { isStudentInClass, getStudentClassIds, nextStudentCode } from '../lib/student';
+import {canSeeDebt} from '../lib/access';
 import {
   Student,
   CourseProgram,
@@ -127,6 +128,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const canAdd = isOwner || permissions.student.add;
   const canEdit = isOwner || permissions.student.edit;
   const canDelete = isOwner || permissions.student.delete;
+  const showDebt = canSeeDebt(isOwner,permissions);
   // Báo cáo workbook có cả dữ liệu học phí, nên chỉ quyền Excel mới được mở.
   const canExport = isOwner || permissions.excel.import || permissions.excel.export;
   const debtForStudent = (studentId: string) => debtBreakdown(receipts.filter((receipt) => receipt.studentId === studentId));
@@ -150,8 +152,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
   // Empty new student form builder
   const handleOpenAddModal = () => {
-    const nextCodeNum = students.length + 1;
-    const autoCode = `HS${nextCodeNum.toString().padStart(3, '0')}`;
+    const autoCode = nextStudentCode(students);
     setEditingStudent({
       id: `HS_NEW_${Date.now()}`,
       code: autoCode,
@@ -465,7 +466,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} />
+                          {showDebt ? <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} /> : <span className="text-slate-400">Không có quyền xem</span>}
                         </td>
 
                         <td className="py-3 px-4">
@@ -608,7 +609,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
                       {/* Fee Badge */}
                       <div className="shrink-0 text-right">
-                        <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} />
+                        {showDebt ? <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} /> : <span className="text-slate-400">Không có quyền xem học phí</span>}
                       </div>
                     </div>
 
@@ -905,11 +906,11 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 <div>
                   <div className="text-slate-500 font-medium">Trạng thái đóng phí:</div>
                   <div className="mt-1">
-                    <FeeStatusBadge
+                    {showDebt ? <FeeStatusBadge
                       feeStatus={viewingStudent.feeStatus}
                       monthlyDebt={debtForStudent(viewingStudent.id).monthly}
                       courseDebt={debtForStudent(viewingStudent.id).course}
-                    />
+                    /> : <span className="text-slate-400">Không có quyền xem công nợ</span>}
                   </div>
                 </div>
                 <div className="text-right">
@@ -919,7 +920,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
               </div>
               {(() => {
                 const debtReceipts = receipts.filter((receipt) => receipt.studentId === viewingStudent.id && receipt.debtAmount > 0);
-                if (!debtReceipts.length) return null;
+                if (!showDebt || !debtReceipts.length) return null;
                 return (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-950">
                     <div className="font-extrabold">Các khoản còn thiếu cần thu</div>
@@ -937,6 +938,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
               {(() => {
                 const courseProgress = getStudentCourseProgress(viewingStudent.id, viewingStudent.classId, receipts, programs, classes);
+                if(!showDebt) return null;
                 if (!courseProgress.courseReceipts.length && !courseProgress.hasCompletedCourse) return null;
                 return (
                   <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-3.5 text-xs text-indigo-950 space-y-2">
@@ -1265,7 +1267,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                   </select>
                 </div>
 
-                <div>
+                <div hidden={!showDebt}>
                   <label className="block font-semibold text-slate-700 mb-1">Tình Trạng Học Phí</label>
                   <select
                     value={editingStudent.feeStatus}

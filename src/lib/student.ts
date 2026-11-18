@@ -1,5 +1,16 @@
 import { Student, ClassRoom } from '../types';
 
+export const nextStudentCode = (students: Pick<Student,'code'>[]): string => {
+  const used = new Set(students.map(student => student.code.trim().toUpperCase()));
+  let next = students.reduce((maximum,student) => {
+    const match = student.code.trim().match(/^HS(\d+)$/i);
+    const number=match ? Number(match[1]) : 0;
+    return Number.isSafeInteger(number) && number<Number.MAX_SAFE_INTEGER-1 ? Math.max(maximum,number) : maximum;
+  },0) + 1;
+  while (used.has(`HS${String(next).padStart(3,'0')}`)) next++;
+  return `HS${String(next).padStart(3,'0')}`;
+};
+
 /**
  * Checks if a student belongs to a given class (primary, extra classes, or enrolled in classroom.studentIds).
  */

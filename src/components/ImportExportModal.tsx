@@ -1,4 +1,5 @@
 import { localISODate } from '../lib/date';
+import {canExportCenter} from '../lib/access';
 import React, { useRef, useState } from 'react';
 import { CenterWorkbookData, generateMasterExcelWorkbook, parseCenterWorkbookFile, parseExcelStudentFile, ImportValidationResult, ImportedStudentRow } from '../services/excelService';
 import { Student, Teacher, ClassRoom, Room, TuitionReceipt, Grade, CenterSettings, StaffPermissions, CourseProgram } from '../types';
@@ -43,8 +44,8 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   onImportCenterData,
   onExportExcel
 }) => {
-  const canImport = isOwner || permissions.excel.import;
-  const canExport = isOwner || permissions.excel.export;
+  const canImport = isOwner || (permissions.excel.import && permissions.student.view && permissions.student.add);
+  const canExport = canExportCenter({role:isOwner ? 'owner' : 'staff',permissions});
   const [activeTab, setActiveTab] = useState<'export' | 'import'>(canExport ? 'export' : 'import');
   const [isExporting, setIsExporting] = useState(false);
   const [validationResult, setValidationResult] = useState<ImportValidationResult | null>(null);

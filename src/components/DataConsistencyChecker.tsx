@@ -103,6 +103,7 @@ export default function DataConsistencyChecker({
       'class_not_enrolled': '⚠️ ClassID không khớp với danh sách lớp',
       'student_missing_program': '🔍 Thiếu programId',
       'duplicate_receipt_code': '⚠️ Trùng mã phiếu thu',
+      'tuition_overpayment': 'Đối soát học phí đã thu',
       'multiple_class_single_program': 'ℹ️ Học nhiều lớp cùng chương trình',
       'orphaned_receipt': '💔 Record học phí không tìm thấy học viên'
     };

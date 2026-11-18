@@ -1,6 +1,7 @@
-import { saveCenterPayload } from './lib/centerSync';
+import {centerRequest,CenterSyncQueue} from './lib/centerSync';
+import {canSeeDebt} from './lib/access';
 import { isRemovedActivityLog } from './lib/activityLog';
-import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
   Student,
@@ -317,12 +318,14 @@ export default function App() {
   } | null>(null);
   const contentViewportRef = useRef<HTMLElement>(null);
   const lastHydratedUserIdRef = useRef<string | null>(null);
-  const lastSyncedPayloadRef = useRef<string>('');
-  const centerVersionRef = useRef<string | null>(null);
-  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const syncBlockedRef = useRef(false);
+  const syncQueueRef = useRef<CenterSyncQueue | null>(null);
   const syncGenerationRef = useRef(0);
+  const [,setSyncRevision] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const currentPayload:CenterDataPayload = {settings,programs,teachers,rooms,classes,students,timetableSlots,grades,receipts,backups,activityLogs};
+  useLayoutEffect(()=>{
+    if(isCenterDataHydrated) syncQueueRef.current?.update(currentPayload);
+  });
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -385,6 +388,7 @@ export default function App() {
   }, [classes]);
 
   useEffect(() => {
+    if(isSupabaseConfigured && (!currentUser || !canSeeDebt(currentUser.role==='owner',currentUser.permissions))) return;
     setStudents((previousStudents) => {
       let changed = false;
       const nextStudents = previousStudents.map((student) => {
@@ -395,7 +399,7 @@ export default function App() {
       });
       return changed ? nextStudents : previousStudents;
     });
-  }, [receipts]);
+  }, [receipts,currentUser]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -410,6 +414,7 @@ export default function App() {
       if (!nextSession) {
         resolutionVersion++;
         syncGenerationRef.current++;
+        syncQueueRef.current=null;
         pendingUserId = null;
         lastHydratedUserIdRef.current = null;
         setCurrentUser(null);
@@ -427,6 +432,10 @@ export default function App() {
       pendingUserId = nextSession.user.id;
       const thisResolution = ++resolutionVersion;
       syncGenerationRef.current++;
+      syncQueueRef.current=null;
+      setCanSyncCenterData(false);
+      setIsCenterDataHydrated(false);
+      setSyncError(null);
       setAuthStatus('loading');
       const { data, error } = await supabase
         .from('profiles')
@@ -447,28 +456,44 @@ export default function App() {
       setCurrentUser(account);
       setIsCenterDataHydrated(false);
       setHasCenterData(false);
-      const { data: centerData, error: centerDataError } = await supabase
-        .from('center_data')
-        .select('payload, updated_at')
-        .eq('id', 'primary')
-        .maybeSingle();
+      let centerData:Awaited<ReturnType<typeof centerRequest>>;
+      try {
+        centerData=await centerRequest(nextSession.access_token);
+      } catch(error) {
+        if(!isMounted || thisResolution!==resolutionVersion) return;
+        pendingUserId=null;
+        setSyncError(error instanceof Error ? error.message : 'Không thể tải dữ liệu trung tâm.');
+        setAuthStatus('ready');
+        return;
+      }
 
       if (!isMounted || thisResolution !== resolutionVersion) return;
       pendingUserId = null;
-      centerVersionRef.current = centerData?.updated_at || null;
-      syncBlockedRef.current = false;
       setSyncError(null);
-      if (!centerDataError) {
-        const payload = centerData?.payload as Partial<CenterDataPayload> | undefined;
+      {
+        const payload = centerData.payload;
         const hasPayload = Boolean(payload && typeof payload === 'object' && Object.keys(payload).length > 0);
         if (hasPayload && payload) {
-          lastSyncedPayloadRef.current = JSON.stringify(payload);
+          const generation=syncGenerationRef.current;
+          syncQueueRef.current=new CenterSyncQueue(centerData,async body=>{
+            const {data}=await supabase.auth.getSession();
+            if(!data.session || data.session.user.id!==nextSession.user.id) throw new Error('Phiên đăng nhập đã thay đổi.');
+            return centerRequest(data.session.access_token,body);
+          },()=>{
+            if(generation!==syncGenerationRef.current) return;
+            setSyncError(syncQueueRef.current?.error?.message || null);
+            setSyncRevision(value=>value+1);
+          },(result,sent)=>{
+            if(generation!==syncGenerationRef.current) return;
+            const sentIds=new Set(sent.activityLogs.map(log=>log.id));
+            setActivityLogs(previous=>mergeActivityLogs(previous.filter(log=>log.id.startsWith('LOG_') && !sentIds.has(log.id)),result.payload.activityLogs));
+          });
           if (payload.settings) setSettings(payload.settings);
           if (Array.isArray(payload.programs)) setPrograms(payload.programs);
           if (Array.isArray(payload.rooms)) setRooms(payload.rooms);
-          const normalizedReceipts = Array.isArray(payload.receipts) ? normaliseReceipts(payload.receipts) : [];
+          const normalizedReceipts = payload.receipts;
           const hydratedStudents = Array.isArray(payload.students)
-            ? reconcileStudentExtraClasses(payload.students, payload.classes || []).map((student) => ({ ...student, feeStatus: feeStatusFromReceipts(student.id, normalizedReceipts) }))
+            ? payload.students
             : [];
           const hydratedClasses = Array.isArray(payload.classes)
             ? reconcileClassStudentIds(payload.classes, hydratedStudents)
@@ -481,17 +506,11 @@ export default function App() {
           if (Array.isArray(payload.receipts)) setReceipts(normalizedReceipts);
           if (Array.isArray(payload.backups)) setBackups(payload.backups);
           if (Array.isArray(payload.activityLogs)) {
-            // Do not discard local history if an older cloud payload has no
-            // logs yet; merge by log id and let the next sync persist it.
-            setActivityLogs((previous) => mergeActivityLogs(payload.activityLogs, previous));
+            setActivityLogs(mergeActivityLogs(payload.activityLogs));
           }
         }
         setCanSyncCenterData(true);
         setHasCenterData(hasPayload);
-      } else {
-        console.warn('Không thể tải dữ liệu trung tâm từ Supabase:', centerDataError.message);
-        setCanSyncCenterData(false);
-        setHasCenterData(false);
       }
       try {
         const loginLogKey = `PHUC_PHUC_THINH_LOGIN_LOGGED_${nextSession.user.id}`;
@@ -529,29 +548,24 @@ export default function App() {
 
   useEffect(() => {
     if (!supabase || !currentUser || !isCenterDataHydrated || !canSyncCenterData || !hasCenterData) return;
-    const payload: CenterDataPayload = { settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs };
     const timer = window.setTimeout(() => {
-      const serialized = JSON.stringify(payload);
-      if (serialized === lastSyncedPayloadRef.current) return;
-      const userId = currentUser.id;
-      const generation = syncGenerationRef.current;
-      syncQueueRef.current = syncQueueRef.current.then(async () => {
-        if (!supabase || syncBlockedRef.current || generation !== syncGenerationRef.current || lastHydratedUserIdRef.current !== userId || serialized === lastSyncedPayloadRef.current) return;
-        try {
-          const version = await saveCenterPayload(supabase, payload, centerVersionRef.current);
-          if (generation !== syncGenerationRef.current || lastHydratedUserIdRef.current !== userId) return;
-          centerVersionRef.current = version;
-          lastSyncedPayloadRef.current = serialized;
-        } catch (error) {
-          if (generation !== syncGenerationRef.current || lastHydratedUserIdRef.current !== userId) return;
-          syncBlockedRef.current = true;
-          setCanSyncCenterData(false);
-          setSyncError(error instanceof Error ? error.message : 'Không thể lưu dữ liệu lên máy chủ. Hãy xuất backup trước khi tải lại trang.');
-        }
-      });
+      void syncQueueRef.current?.flush().catch(()=>{});
     }, 750);
     return () => window.clearTimeout(timer);
   }, [settings, programs, teachers, rooms, classes, students, timetableSlots, grades, receipts, backups, activityLogs, currentUser, isCenterDataHydrated, canSyncCenterData, hasCenterData]);
+
+  useEffect(()=>{
+    const preventLoss=(event:BeforeUnloadEvent)=>{
+      if(!syncQueueRef.current?.dirty) return;
+      event.preventDefault();event.returnValue='';
+    };
+    const saveWhenHidden=()=>{
+      if(document.visibilityState==='hidden') void syncQueueRef.current?.flush().catch(()=>{});
+    };
+    window.addEventListener('beforeunload',preventLoss);
+    document.addEventListener('visibilitychange',saveWhenHidden);
+    return ()=>{window.removeEventListener('beforeunload',preventLoss);document.removeEventListener('visibilitychange',saveWhenHidden);};
+  },[]);
 
   // Activity Logger
   const addLog = (
@@ -615,7 +629,7 @@ export default function App() {
     const nextStudents = students.map(s => s.id === updatedStudent.id ? normalizedStudent : s);
     setStudents(nextStudents);
     setClasses(prevClasses => reconcileClassStudentIds(prevClasses, nextStudents));
-    if (previousStudent && previousStudent.classId !== updatedStudent.classId) {
+    if (previousStudent && previousStudent.classId !== updatedStudent.classId && (currentUser?.role==='owner' || currentUser?.permissions.grade.edit)) {
       setGrades((previousGrades) => previousGrades.map((grade) => (
         grade.studentId === updatedStudent.id && !grade.classId
           ? { ...grade, classId: previousStudent.classId }
@@ -919,11 +933,16 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (supabase) await supabase.auth.signOut();
+    try {await syncQueueRef.current?.flush();} catch {return false;}
+    if (supabase) {
+      const {error}=await supabase.auth.signOut();
+      if(error) {setSyncError('Chưa đăng xuất được. Hãy thử lại.');return false;}
+    }
     setCurrentUser(null);
     setSession(null);
     setAuthStatus('signed-out');
     setIsLoginOpen(false);
+    return true;
   };
 
   if (authStatus === 'loading') {
@@ -948,13 +967,16 @@ export default function App() {
 
   if (!currentUser || !session) return <AuthScreen />;
 
+  if(!isCenterDataHydrated && syncError) return <main className="grid min-h-screen place-items-center bg-slate-100 p-6"><section className="max-w-lg rounded-2xl bg-white p-6 text-center"><p role="alert">{syncError}</p><button className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-white" onClick={()=>window.location.reload()}>Tải lại</button><button className="ml-3" onClick={()=>void handleLogout()}>Đăng xuất</button></section></main>;
+
   const navigateTo = (tab: string) => {
     if (canAccessTab(tab, currentUser)) setActiveTab(tab);
   };
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans antialiased text-slate-900">
-      {syncError && <div role="alert" className="border-b border-red-300 bg-red-50 px-5 py-3 text-sm font-semibold text-red-900">Chưa lưu được thay đổi lên Supabase: {syncError} <button type="button" onClick={() => setIsBackupModalOpen(true)} className="ml-2 underline">Xuất backup</button></div>}
+      {syncError && <div role="alert" className="border-b border-red-300 bg-red-50 px-5 py-3 text-sm font-semibold text-red-900">Chưa lưu được thay đổi lên Supabase. {syncError} <button type="button" onClick={()=>void syncQueueRef.current?.flush().catch(()=>{})} className="ml-2 underline">Thử lưu lại</button>{currentUser.role==='owner' && <button type="button" onClick={() => setIsBackupModalOpen(true)} className="ml-2 underline">Xuất backup</button>}</div>}
+      {canSyncCenterData && <div role="status" className="px-5 py-1 text-right text-xs text-slate-600">{syncQueueRef.current?.saving ? 'Đang lưu…' : syncQueueRef.current?.hasChanges(currentPayload) ? 'Có thay đổi chưa lưu' : 'Đã lưu lên máy chủ'}</div>}
       {/* Top Header Navigation */}
       <Header
         currentUser={currentUser}

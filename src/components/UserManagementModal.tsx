@@ -97,13 +97,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({ isOpen
   if (!isOpen) return null;
 
   const togglePermission = (module: keyof StaffPermissions, action: string) => {
-    setStaffPermissions((current) => ({
-      ...current,
-      [module]: {
-        ...(current[module] as Record<string, boolean>),
-        [action]: !(current[module] as Record<string, boolean>)[action],
-      },
-    } as StaffPermissions));
+    setStaffPermissions(current=>{
+      const next=structuredClone(current);
+      (next[module] as Record<string,boolean>)[action]=!(current[module] as Record<string,boolean>)[action];
+      if(module==='tuition' && (next.tuition.collect || next.tuition.delete)) {
+        if((action==='view' && !next.tuition.view) || (action==='showDebt' && !next.tuition.showDebt)) {
+          next.tuition.collect=false;next.tuition.delete=false;
+        } else {next.tuition.view=true;next.tuition.showDebt=true;}
+      }
+      return next;
+    });
   };
 
   const grantGoogleAccess = async (event: FormEvent<HTMLFormElement>) => {
