@@ -8,6 +8,7 @@ import {
   getStudentCourseProgress
 } from '../src/lib/tuition';
 import { getEnrolledStudentsForClass, getStudentClassIds } from '../src/lib/student';
+import { isSystemOwnerEmail, profileToAccount } from '../src/lib/auth';
 import type { TuitionReceipt, Student, ClassRoom } from '../src/types';
 
 const receipt = (values: Partial<TuitionReceipt>): TuitionReceipt => ({
@@ -113,4 +114,39 @@ const progressAfterLevel2 = getStudentCourseProgress('HS_IELTS_01', 'LOP_IELTS',
 assert.equal(progressAfterLevel2.hasCompletedCourse, true);
 assert.equal(progressAfterLevel2.nextSuggestedPeriod, 'Mức độ 3');
 
-console.log('Passed: course period suggestions, multi-level/next course tuition collection, and course progress tracking.');
+// Test system owner email recognition & full permissions grant
+assert.equal(isSystemOwnerEmail('phucphucthinhenglish@gmail.com'), true);
+assert.equal(isSystemOwnerEmail('PHUCPHUCTHINHENGLISH@GMAIL.COM'), true);
+assert.equal(isSystemOwnerEmail('staff@example.com'), false);
+
+const mockAuthUser = {
+  id: 'usr_owner_123',
+  email: 'phucphucthinhenglish@gmail.com',
+  user_metadata: { full_name: 'Phúc Phúc Thịnh' },
+  app_metadata: {},
+  aud: 'authenticated',
+  created_at: '2026-01-01',
+} as any;
+
+// Even if profile in database had role 'staff', inactive or empty permissions:
+const downgradedProfile = {
+  id: 'usr_owner_123',
+  full_name: 'Phúc Phúc Thịnh',
+  avatar_url: null,
+  role: 'staff' as const,
+  is_active: false,
+  permissions: null,
+};
+
+const resolvedAccount = profileToAccount(downgradedProfile, mockAuthUser);
+assert.equal(resolvedAccount.role, 'owner');
+assert.equal(resolvedAccount.active, true);
+assert.equal(resolvedAccount.email, 'phucphucthinhenglish@gmail.com');
+assert.equal(resolvedAccount.permissions.tuition.collect, true);
+assert.equal(resolvedAccount.permissions.tuition.showDebt, true);
+assert.equal(resolvedAccount.permissions.tuition.view, true);
+assert.equal(resolvedAccount.permissions.tuition.delete, true);
+assert.equal(resolvedAccount.permissions.student.add, true);
+assert.equal(resolvedAccount.permissions.report.revenue, true);
+
+console.log('Passed: course period suggestions, multi-level/next course tuition collection, course progress tracking, and system owner full permissions.');

@@ -121,7 +121,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   ), [collectingStudentId, collectClassId, receipts, programs, classes]);
 
   useEffect(() => {
-    if (!collectRequest || (!isOwner && !(permissions.tuition.view && permissions.tuition.showDebt && permissions.tuition.collect))) return;
+    if (!collectRequest || (!isOwner && !(permissions.tuition.view && permissions.tuition.collect))) return;
     setEditingReceipt(null);
     setInstallmentParentReceipt(null);
     const student = students.find(s => s.id === collectRequest.studentId);
@@ -154,7 +154,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
   }, [collectRequest, classes, onCollectRequestHandled, programs, receipts, students,isOwner,permissions]);
 
   const showDebt=canSeeDebt(isOwner,permissions);
-  const canCollect = isOwner || (showDebt && permissions.tuition.collect);
+  const canCollect = isOwner || permissions.tuition.collect;
   const canDelete = isOwner || (showDebt && permissions.tuition.delete);
 
   const totalCollected = receipts.reduce((sum, r) => sum + r.paidAmount, 0);

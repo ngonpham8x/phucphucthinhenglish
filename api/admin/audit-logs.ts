@@ -49,12 +49,15 @@ export default async function handler(req: any, res: any) {
   const { data: userData, error: userError } = await client.auth.getUser(token);
   if (userError || !userData.user) return json(res, 401, { error: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.' });
 
+  const userEmail = userData.user.email?.trim().toLowerCase();
+  const isSysOwner = Boolean(userEmail && ['phucphucthinhenglish@gmail.com'].includes(userEmail));
+
   const { data: profile, error: profileError } = await client
     .from('profiles')
     .select('role, is_active')
     .eq('id', userData.user.id)
     .maybeSingle();
-  if (profileError || !profile || !profile.is_active || profile.role !== 'owner') {
+  if (!isSysOwner && (profileError || !profile || !profile.is_active || profile.role !== 'owner')) {
     return json(res, 403, { error: 'Chỉ Chủ trung tâm được xem nhật ký tài khoản.' });
   }
 

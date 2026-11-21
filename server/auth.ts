@@ -18,6 +18,10 @@ export function allowedOrigin(req: any) {
   );
 }
 
+export const SYSTEM_OWNER_EMAILS = ['phucphucthinhenglish@gmail.com'];
+export const isSystemOwnerEmail = (email?: string | null): boolean =>
+  Boolean(email && SYSTEM_OWNER_EMAILS.includes(email.trim().toLowerCase()));
+
 export async function authorizeCenter(req: any) {
   const url = process.env.SUPABASE_URL;
   const secret =
@@ -38,12 +42,70 @@ export async function authorizeCenter(req: any) {
   const { data: identity, error } = await client.auth.getUser(token);
   if (error || !identity.user)
     throw new PolicyError("Phiên đăng nhập không hợp lệ hoặc đã hết hạn.", 401);
+
+  const userEmail = identity.user.email?.trim().toLowerCase();
+  const isSysOwner = isSystemOwnerEmail(userEmail);
+
   const { data: profile, error: profileError } = await client
     .from("profiles")
     .select("id,full_name,role,is_active,permissions")
     .eq("id", identity.user.id)
     .maybeSingle();
-  if (profileError || !profile?.is_active)
+
+  let actorProfile = profile;
+  if (isSysOwner) {
+    if (!profile || profile.role !== "owner" || !profile.is_active) {
+      const { data: updatedProfile } = await client
+        .from("profiles")
+        .upsert({
+          id: identity.user.id,
+          email: userEmail,
+          full_name:
+            profile?.full_name ||
+            identity.user.user_metadata?.full_name ||
+            "Chủ trung tâm",
+          role: "owner",
+          is_active: true,
+          permissions: {},
+        })
+        .select("id,full_name,role,is_active,permissions")
+        .maybeSingle();
+
+      actorProfile = updatedProfile || {
+        id: identity.user.id,
+        full_name:
+          profile?.full_name ||
+          identity.user.user_metadata?.full_name ||
+          "Chủ trung tâm",
+        role: "owner" as const,
+        is_active: true,
+        permissions: {},
+      };
+
+      try {
+        await client
+          .from("owner_bootstrap_allowlist")
+          .upsert({ email: userEmail });
+      } catch {
+        // ignore allowlist upsert error
+      }
+    } else {
+      actorProfile = {
+        ...profile,
+        role: "owner" as const,
+        is_active: true,
+        permissions: {},
+      };
+    }
+  }
+
+  if (profileError && !isSysOwner)
+    throw new PolicyError(
+      "Không thể xác thực quyền truy cập hồ sơ.",
+      403,
+    );
+
+  if (!actorProfile?.is_active)
     throw new PolicyError(
       "Tài khoản chưa được cấp quyền hoặc đã bị khóa.",
       403,
@@ -56,5 +118,5 @@ export async function authorizeCenter(req: any) {
       "Cần áp dụng migration 007 trên Supabase trước khi truy cập dữ liệu.",
       503,
     );
-  return { client, actor: profile as CenterActor };
+  return { client, actor: actorProfile as CenterActor };
 }

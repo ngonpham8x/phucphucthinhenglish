@@ -52,7 +52,7 @@ import { LoginModal } from './components/LoginModal';
 import { PwaInstallModal } from './components/PwaInstallModal';
 import { AuthScreen } from './components/AuthScreen';
 import { UserManagementModal } from './components/UserManagementModal';
-import { profileToAccount, ProfileRow } from './lib/auth';
+import { profileToAccount, isSystemOwnerEmail, OWNER_PERMISSIONS, ProfileRow } from './lib/auth';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { feeStatusForReceipts, reconcileReceiptBalances } from './lib/tuition';
 import { isStudentInClass } from './lib/student';
@@ -437,6 +437,9 @@ export default function App() {
       setIsCenterDataHydrated(false);
       setSyncError(null);
       setAuthStatus('loading');
+      const userEmail = nextSession.user.email?.trim().toLowerCase();
+      const isSysOwner = isSystemOwnerEmail(userEmail);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, role, is_active, permissions')
@@ -444,7 +447,7 @@ export default function App() {
         .maybeSingle();
 
       if (!isMounted || thisResolution !== resolutionVersion) return;
-      if (error || !data || !data.is_active) {
+      if ((error || !data || !data.is_active) && !isSysOwner) {
         pendingUserId = null;
         lastHydratedUserIdRef.current = null;
         setCurrentUser(null);
@@ -452,7 +455,17 @@ export default function App() {
         return;
       }
 
-      const account = profileToAccount(data as ProfileRow, nextSession.user);
+      const profileRow: ProfileRow = (data && (data.is_active || !isSysOwner)) ? (data as ProfileRow) : {
+        id: nextSession.user.id,
+        email: userEmail,
+        full_name: data?.full_name || nextSession.user.user_metadata?.full_name || 'Chủ trung tâm',
+        avatar_url: data?.avatar_url || nextSession.user.user_metadata?.avatar_url || null,
+        role: 'owner',
+        is_active: true,
+        permissions: OWNER_PERMISSIONS,
+      };
+
+      const account = profileToAccount(profileRow, nextSession.user);
       setCurrentUser(account);
       setIsCenterDataHydrated(false);
       setHasCenterData(false);

@@ -4,6 +4,7 @@ import {EMPTY_PERMISSIONS,normalizePermissions} from './access';
 
 export interface ProfileRow {
   id: string;
+  email?: string | null;
   full_name: string;
   avatar_url: string | null;
   role: UserRole;
@@ -22,22 +23,32 @@ export const OWNER_PERMISSIONS: StaffPermissions = {
   report: { view: true, revenue: true },
 };
 
+export const SYSTEM_OWNER_EMAILS: readonly string[] = [
+  'phucphucthinhenglish@gmail.com',
+];
+
+export function isSystemOwnerEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return SYSTEM_OWNER_EMAILS.includes(email.trim().toLowerCase());
+}
+
 function mergePermissions(candidate: Partial<StaffPermissions> | null): StaffPermissions {
   return normalizePermissions(candidate);
 }
 
 export function profileToAccount(profile: ProfileRow, authUser: User): UserAccount {
-  const fallbackName = authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Người dùng';
+  const email = (authUser.email || profile.email || '').trim().toLowerCase();
+  const isSysOwner = isSystemOwnerEmail(email) || profile.role === 'owner';
+  const fallbackName = authUser.user_metadata?.full_name || (email ? email.split('@')[0] : 'Chủ trung tâm');
   const fallbackAvatar = authUser.user_metadata?.avatar_url || '';
 
   return {
     id: profile.id,
     name: profile.full_name || fallbackName,
-    // Email addresses stay in Supabase Auth and are never rendered by the app.
-    email: '',
+    email: email,
     avatar: profile.avatar_url || fallbackAvatar,
-    role: profile.role,
-    active: profile.is_active,
-    permissions: profile.role === 'owner' ? OWNER_PERMISSIONS : mergePermissions(profile.permissions),
+    role: isSysOwner ? 'owner' : profile.role,
+    active: isSysOwner ? true : profile.is_active,
+    permissions: isSysOwner ? OWNER_PERMISSIONS : mergePermissions(profile.permissions),
   };
 }
