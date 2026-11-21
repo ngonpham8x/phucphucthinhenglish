@@ -1,6 +1,6 @@
 import {centerRequest,CenterSyncQueue} from './lib/centerSync';
 import {canSeeDebt} from './lib/access';
-import { isRemovedActivityLog } from './lib/activityLog';
+import { isRemovedActivityLog, normalizeActivityLog } from './lib/activityLog';
 import React, { lazy, Suspense, useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -99,10 +99,11 @@ const mergeActivityLogs = (...lists: ActivityLog[][]) => {
   const seen = new Set<string>();
   const merged: ActivityLog[] = [];
   for (const list of lists) {
+    if (!Array.isArray(list)) continue;
     for (const log of list) {
       if (!log?.id || seen.has(log.id) || isRemovedActivityLog(log)) continue;
       seen.add(log.id);
-      merged.push(log);
+      merged.push(normalizeActivityLog(log));
       if (merged.length >= MAX_ACTIVITY_LOGS) return merged;
     }
   }

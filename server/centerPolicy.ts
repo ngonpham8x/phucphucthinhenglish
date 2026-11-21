@@ -19,6 +19,7 @@ import {
   newReceiptCodeConflicts,
   newTuitionOverpayments,
 } from "../src/lib/receiptPolicy.js";
+import { MODULE_LABELS, FIELD_LABELS } from "../src/lib/activityLog.js";
 import type { StaffPermissions, ActivityLog } from "../src/types.js";
 
 export interface CenterActor {
@@ -568,7 +569,8 @@ export function applyCenterChanges(
       const removed = rows.get(id);
       rows.delete(id);
       touched.add(name);
-      log("XÓA", name, `Xóa ${removed.code || removed.name || id}.`);
+      const moduleLabel = MODULE_LABELS[name] || name;
+      log("XÓA", moduleLabel, `Xóa ${moduleLabel.toLowerCase()} ${removed.code || removed.name || id}.`);
     }
     for (const record of patch.upsert) {
       if (
@@ -621,10 +623,47 @@ export function applyCenterChanges(
       const changed = Object.keys(record).filter(
         (field) => field !== "id" && !equal(original?.[field], record[field]),
       );
+      const moduleLabel = MODULE_LABELS[name] || name;
+      let logDetail = "";
+      if (!original) {
+        if (name === "receipts") {
+          const amountStr = value.paidAmount ? ` - Số tiền: ${Number(value.paidAmount).toLocaleString("vi-VN")} đ` : "";
+          logDetail = `Lập phiếu thu mới ${value.code || record.id}${amountStr}`;
+        } else if (name === "students") {
+          logDetail = `Thêm mới học sinh ${value.name ? `${value.name} ` : ""}(${value.code || record.id})`;
+        } else if (name === "classes") {
+          logDetail = `Tạo lớp học mới ${value.name ? `${value.name} ` : ""}(${value.code || record.id})`;
+        } else if (name === "teachers") {
+          logDetail = `Thêm giáo viên mới ${value.name || record.id}`;
+        } else if (name === "rooms") {
+          logDetail = `Thêm phòng học mới ${value.name || record.id}`;
+        } else if (name === "programs") {
+          logDetail = `Tạo chương trình học mới ${value.name || value.code || record.id}`;
+        } else if (name === "timetableSlots") {
+          logDetail = `Thêm ca học mới vào thời khóa biểu`;
+        } else if (name === "grades") {
+          logDetail = `Cập nhật điểm học sinh`;
+        } else {
+          logDetail = `Thêm mới ${moduleLabel.toLowerCase()} ${value.name || value.code || record.id}`;
+        }
+      } else {
+        const changedLabels = changed.map((f) => FIELD_LABELS[f] || f);
+        const changeStr = changedLabels.length > 0 ? ` (thay đổi: ${changedLabels.join(", ")})` : "";
+        if (name === "receipts") {
+          logDetail = `Cập nhật phiếu thu ${value.code || record.id}${changeStr}`;
+        } else if (name === "students") {
+          logDetail = `Cập nhật thông tin học sinh ${value.name ? `${value.name} ` : ""}(${value.code || record.id})${changeStr}`;
+        } else if (name === "classes") {
+          logDetail = `Cập nhật thông tin lớp học ${value.name || value.code || record.id}${changeStr}`;
+        } else {
+          logDetail = `Cập nhật ${moduleLabel.toLowerCase()} ${value.name || value.code || record.id}${changeStr}`;
+        }
+      }
+
       log(
         original ? "SỬA" : "THÊM",
-        name,
-        `${original ? "Cập nhật" : "Thêm"} ${value.code || value.name || record.id}. Trường: ${changed.join(", ")}.`,
+        moduleLabel,
+        logDetail,
       );
     }
     (data as any)[name] = [...rows.values()];

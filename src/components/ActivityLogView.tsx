@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AccountAuditLog, ActivityLog } from '../types';
 import { History, Search, Filter, ShieldCheck, RefreshCw } from 'lucide-react';
 import { maskEmail } from '../lib/privacy';
-import { isRemovedActivityLog } from '../lib/activityLog';
+import { isRemovedActivityLog, formatLogDetails, formatLogModule } from '../lib/activityLog';
 
 interface ActivityLogViewProps {
   logs: ActivityLog[];
@@ -46,11 +46,15 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
 
 
   const filteredLogs = visibleLogs.filter(log => {
+    const formattedDetails = formatLogDetails(log);
+    const formattedModule = formatLogModule(log.module);
     const matchesSearch =
       log.userName.toLowerCase().includes(search.toLowerCase()) ||
       log.userEmail.toLowerCase().includes(search.toLowerCase()) ||
       log.details.toLowerCase().includes(search.toLowerCase()) ||
-      log.module.toLowerCase().includes(search.toLowerCase());
+      formattedDetails.toLowerCase().includes(search.toLowerCase()) ||
+      log.module.toLowerCase().includes(search.toLowerCase()) ||
+      formattedModule.toLowerCase().includes(search.toLowerCase());
 
     const matchesAction = actionFilter === 'all' || log.action === actionFilter;
 
@@ -210,8 +214,8 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                       {log.action}
                     </span>
                   </td>
-                  <td className="py-3 px-4 font-semibold text-slate-800">{log.module}</td>
-                  <td className="py-3 px-4 text-slate-700">{log.details}</td>
+                  <td className="py-3 px-4 font-semibold text-slate-800">{formatLogModule(log.module)}</td>
+                  <td className="py-3 px-4 text-slate-700 leading-relaxed">{formatLogDetails(log)}</td>
                 </tr>
               ))}
             </tbody>
