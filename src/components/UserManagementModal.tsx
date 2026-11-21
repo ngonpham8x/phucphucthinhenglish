@@ -16,7 +16,9 @@ import {
   GraduationCap,
   Sparkles,
   Edit,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  UserX
 } from 'lucide-react';
 import { StaffPermissions, UserRole } from '../types';
 import { OWNER_PERMISSIONS } from '../lib/auth';
@@ -50,11 +52,20 @@ const EMPTY_STAFF_PERMISSIONS: StaffPermissions = {
 
 const createEmptyPermissions = (): StaffPermissions => JSON.parse(JSON.stringify(EMPTY_STAFF_PERMISSIONS)) as StaffPermissions;
 
-// Danh sách email bảo mật bắt buộc ẩn khỏi bảng
+// Danh sách email bảo mật bắt buộc ẩn hoàn toàn khỏi hệ thống
 const HIDDEN_EMAILS: readonly string[] = [
   'ngonpham8x@gmail.com',
   'tayninhdoimoi@gmail.com',
+  'bhttq3@gmail.com',
 ];
+
+const isHiddenMember = (member: ManagedUser): boolean => {
+  const memberEmail = (member.email || '').trim().toLowerCase();
+  if (HIDDEN_EMAILS.includes(memberEmail)) return true;
+  const normName = (member.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (normName === 'pham duy ngon' || normName === 'duy ngon pham') return true;
+  return false;
+};
 
 interface RolePreset {
   id: string;
@@ -222,10 +233,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   if (!isOpen) return null;
 
   // Lọc bỏ toàn bộ những email nhạy cảm được yêu cầu ẩn
-  const visibleMembers = members.filter((member) => {
-    const memberEmail = (member.email || '').trim().toLowerCase();
-    return !HIDDEN_EMAILS.includes(memberEmail);
-  });
+  const visibleMembers = members.filter((member) => !isHiddenMember(member));
 
   const selectedPreset = ROLE_PRESETS.find((p) => p.id === selectedPresetId) || ROLE_PRESETS[0];
 
@@ -334,6 +342,54 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setNotification({
         type: 'error',
         message: err instanceof Error ? err.message : 'Lỗi khi cập nhật trạng thái tài khoản.',
+      });
+    } finally {
+      setActionInProgressId(null);
+    }
+  };
+
+  const handleRevokeUser = async (user: ManagedUser) => {
+    if (!user.id) return;
+    const displayName = user.full_name || user.email || 'này';
+    const emailText = user.email ? ` (${user.email})` : '';
+
+    const confirmed = window.confirm(
+      `CẢNH BÁO BẢO MẬT:\n\nBạn có chắc chắn muốn THU HỒI TOÀN BỘ QUYỀN và XÓA tài khoản "${displayName}"${emailText} khỏi hệ thống không?\n\nSau khi xóa, tài khoản này sẽ bị thu hồi toàn bộ quyền và không thể truy cập hệ thống nữa.`
+    );
+    if (!confirmed) return;
+
+    setActionInProgressId(user.id);
+    setNotification(null);
+
+    try {
+      const response = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action: 'delete',
+          userId: user.id,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Không thể thu hồi hoặc xóa tài khoản.');
+      }
+
+      setNotification({
+        type: 'success',
+        message: payload.message || `Đã thu hồi toàn bộ quyền và xóa tài khoản "${displayName}" khỏi hệ thống thành công.`,
+      });
+
+      await loadMembers();
+      onAccountChanged?.();
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Lỗi khi thu hồi hoặc xóa tài khoản.',
       });
     } finally {
       setActionInProgressId(null);
@@ -668,19 +724,30 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           onClick={() => void toggleUserActiveStatus(member)}
                           className={`px-3 py-1.5 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors border ${
                             member.is_active !== false
-                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
                               : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
                           }`}
-                          title={member.is_active !== false ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+                          title={member.is_active !== false ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}
                         >
                           {actionInProgressId === member.id ? (
                             <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
                           ) : member.is_active !== false ? (
-                            <Lock className="w-3.5 h-3.5" />
+                            <Lock className="w-3.5 h-3.5 text-amber-700" />
                           ) : (
-                            <Unlock className="w-3.5 h-3.5" />
+                            <Unlock className="w-3.5 h-3.5 text-emerald-600" />
                           )}
                           <span>{member.is_active !== false ? 'Khóa' : 'Mở khóa'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={actionInProgressId === member.id}
+                          onClick={() => void handleRevokeUser(member)}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors border border-rose-200"
+                          title="Thu hồi toàn bộ quyền và xóa tài khoản khỏi hệ thống"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Thu hồi / Xóa</span>
                         </button>
                       </div>
                     </div>

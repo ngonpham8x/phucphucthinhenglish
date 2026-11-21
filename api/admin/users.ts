@@ -194,8 +194,8 @@ export default async function handler(req: any, res: any) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
 
-  if (!['GET', 'POST', 'PATCH'].includes(req.method || '')) {
-    res.setHeader('Allow', 'GET, POST, PATCH');
+  if (!['GET', 'POST', 'PATCH', 'DELETE'].includes(req.method || '')) {
+    res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
     return json(res, 405, { error: 'Phương thức không được hỗ trợ.' });
   }
   if (!requestIsAllowed(req)) return json(res, 403, { error: 'Nguồn yêu cầu không được phép.' });
@@ -203,7 +203,7 @@ export default async function handler(req: any, res: any) {
 
   const authorized = await authorizeOwner(req, res);
   if (!authorized) return;
-  const { client, callerId } = authorized;
+  const { client, callerId, callerName } = authorized;
 
   if (req.method === 'GET') {
     let result: { data: any; error: any };
@@ -222,11 +222,14 @@ export default async function handler(req: any, res: any) {
 
     if (result.error) return json(res, 500, { error: 'Không thể tải danh sách tài khoản.' });
 
-    const hiddenEmails = ['ngonpham8x@gmail.com', 'tayninhdoimoi@gmail.com'];
+    const hiddenEmails = ['ngonpham8x@gmail.com', 'tayninhdoimoi@gmail.com', 'bhttq3@gmail.com'];
     const rawList = Array.isArray(result.data) ? result.data : (result.data ? [result.data] : []);
     const filteredUsers = rawList.filter((u: any) => {
       const email = (u?.email || '').toLowerCase().trim();
-      return !hiddenEmails.includes(email);
+      const normName = (u?.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      if (hiddenEmails.includes(email)) return false;
+      if (normName === 'pham duy ngon' || normName === 'duy ngon pham') return false;
+      return true;
     });
 
     return json(res, 200, { users: filteredUsers });
@@ -234,6 +237,81 @@ export default async function handler(req: any, res: any) {
 
   const body = getBody(req);
   if (!body) return json(res, 400, { error: 'Nội dung yêu cầu không hợp lệ.' });
+
+  if (req.method === 'DELETE' || body.action === 'revoke' || body.action === 'delete') {
+    const userId = typeof body.userId === 'string'
+      ? body.userId
+      : (typeof req.query?.userId === 'string' ? req.query.userId : '');
+
+    if (!/^[0-9a-f-]{36}$/i.test(userId)) {
+      return json(res, 400, { error: 'ID tài khoản không hợp lệ.' });
+    }
+    if (userId === callerId) {
+      return json(res, 400, { error: 'Bạn không thể tự thu hồi hoặc xóa tài khoản của chính mình.' });
+    }
+
+    const { data: target, error: targetError } = await client
+      .from('profiles')
+      .select('id, email, full_name, role, is_active, permissions')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (targetError || !target) {
+      return json(res, 404, { error: 'Không tìm thấy tài khoản cần thu hồi.' });
+    }
+
+    if (target.role === 'owner') {
+      const { data: otherOwners } = await client
+        .from('profiles')
+        .select('id')
+        .eq('role', 'owner')
+        .eq('is_active', true)
+        .neq('id', userId);
+      if (!otherOwners || otherOwners.length === 0) {
+        return json(res, 400, { error: 'Không thể xóa hoặc thu hồi Chủ trung tâm cuối cùng của hệ thống.' });
+      }
+    }
+
+    const targetEmail = (target.email || '').toLowerCase().trim();
+    if (['phucphucthinhenglish@gmail.com'].includes(targetEmail)) {
+      return json(res, 400, { error: 'Không thể xóa tài khoản Chủ trung tâm mặc định của hệ thống.' });
+    }
+
+    try {
+      await client.auth.admin.deleteUser(userId);
+    } catch {
+      // ignore
+    }
+
+    await client.from('profiles').delete().eq('id', userId);
+
+    if (targetEmail) {
+      try {
+        await client.from('owner_bootstrap_allowlist').delete().eq('email', targetEmail);
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      await client.from('account_audit_logs').insert({
+        action: 'ACCOUNT_LOCKED',
+        actor_id: callerId,
+        actor_name: callerName,
+        target_id: userId,
+        target_name: target.full_name || target.email || 'Nhân viên',
+        target_role: target.role,
+        details: `Đã thu hồi toàn bộ quyền và xóa tài khoản ${target.full_name || target.email} khỏi hệ thống.`
+      });
+    } catch {
+      // ignore
+    }
+
+    return json(res, 200, {
+      success: true,
+      message: `Đã thu hồi toàn bộ quyền và xóa tài khoản ${target.full_name || target.email} thành công.`
+    });
+  }
 
   if (req.method === 'POST') {
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
