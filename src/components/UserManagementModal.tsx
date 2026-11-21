@@ -68,15 +68,24 @@ interface RolePreset {
 
 const ROLE_PRESETS: RolePreset[] = [
   {
-    id: 'academic',
-    name: 'Giáo vụ / Lễ tân',
+    id: 'owner',
+    name: 'Chủ Trung Tâm',
+    role: 'owner',
+    badgeClass: 'bg-red-100 text-red-800 border-red-300',
+    summary: 'Toàn quyền điều hành cơ sở, quản trị tài chính & phân quyền',
+    responsibilities: 'Toàn quyền sử dụng 100% tính năng hệ thống: quản lý học viên, giáo viên, lớp học, thời khóa biểu, điểm số, học phí, xóa phiếu thu, xem báo cáo doanh thu & công nợ, phân quyền tài khoản, nhập xuất Excel và sao lưu dữ liệu.',
+    defaultPermissions: OWNER_PERMISSIONS,
+  },
+  {
+    id: 'admin_office',
+    name: 'Hành Chính',
     role: 'staff',
-    badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
-    summary: 'Quản lý học viên, lớp học, điểm danh và thời khóa biểu',
-    responsibilities: 'Tiếp nhận học viên mới, tạo/cập nhật hồ sơ học sinh, xếp lớp, quản lý thời khóa biểu và xuất danh sách học viên. Không được xem hay thao tác tài chính, học phí và doanh thu.',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
+    summary: 'Quản lý hồ sơ học viên, xếp lớp, giáo viên và thời khóa biểu',
+    responsibilities: 'Tiếp nhận học viên mới, tạo và chỉnh sửa hồ sơ học sinh, xếp lớp, quản lý danh sách giáo viên, sắp xếp thời khóa biểu và phòng học, xuất danh sách học viên và bảng điểm. Không phụ trách thu tiền hay xem doanh thu tài chính.',
     defaultPermissions: {
       student: { view: true, add: true, edit: true, delete: false, export: true },
-      teacher: { view: true, edit: false, delete: false },
+      teacher: { view: true, edit: true, delete: false },
       tuition: { view: false, collect: false, delete: false, showDebt: false },
       grade: { view: true, edit: false },
       excel: { import: false, export: true },
@@ -84,28 +93,12 @@ const ROLE_PRESETS: RolePreset[] = [
     },
   },
   {
-    id: 'cashier',
-    name: 'Kế toán / Thu ngân',
-    role: 'staff',
-    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    summary: 'Thu học phí, cấp phiếu thu, theo dõi công nợ & doanh thu',
-    responsibilities: 'Lập phiếu thu học phí mới, thu tiếp các đợt/khóa kế tiếp, tra cứu công nợ học sinh, in phiếu thu tiền, theo dõi báo cáo doanh thu và xuất Excel đối soát tài chính.',
-    defaultPermissions: {
-      student: { view: true, add: false, edit: false, delete: false, export: true },
-      teacher: { view: false, edit: false, delete: false },
-      tuition: { view: true, collect: true, delete: false, showDebt: true },
-      grade: { view: false, edit: false },
-      excel: { import: false, export: true },
-      report: { view: true, revenue: true },
-    },
-  },
-  {
     id: 'teacher',
-    name: 'Giáo viên giảng dạy',
+    name: 'Giáo Viên',
     role: 'staff',
-    badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
-    summary: 'Theo dõi học sinh trong lớp và cập nhật bảng điểm',
-    responsibilities: 'Xem danh sách học sinh theo lớp giảng dạy, nhập điểm kiểm tra định kỳ, chỉnh sửa điểm số và theo dõi tiến độ học tập. Không được xem học phí hay doanh thu.',
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
+    summary: 'Theo dõi học sinh các lớp phụ trách và cập nhật kết quả điểm số',
+    responsibilities: 'Xem danh sách học sinh theo lớp giảng dạy, xem lịch dạy và phòng học, nhập điểm kiểm tra định kỳ, chỉnh sửa và cập nhật bảng điểm rèn luyện của học viên. Không được truy cập học phí, công nợ hay báo cáo doanh thu.',
     defaultPermissions: {
       student: { view: true, add: false, edit: false, delete: false, export: false },
       teacher: { view: true, edit: false, delete: false },
@@ -116,21 +109,28 @@ const ROLE_PRESETS: RolePreset[] = [
     },
   },
   {
-    id: 'owner',
-    name: 'Chủ trung tâm / Quản lý',
-    role: 'owner',
-    badgeClass: 'bg-red-100 text-red-800 border-red-200',
-    summary: 'Toàn quyền quản trị cơ sở và điều hành hệ thống',
-    responsibilities: 'Toàn quyền sử dụng mọi tính năng: quản lý học sinh, giáo viên, lớp học, học phí, xóa phiếu thu, xem báo cáo doanh thu & công nợ, phân quyền tài khoản và sao lưu dữ liệu.',
-    defaultPermissions: OWNER_PERMISSIONS,
+    id: 'staff',
+    name: 'Nhân Viên',
+    role: 'staff',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    summary: 'Hỗ trợ vận hành cơ sở, trực quầy lễ tân, thu học phí và tra cứu',
+    responsibilities: 'Xem thông tin học viên, hỗ trợ phụ huynh tra cứu lịch học, thu học phí và in phiếu thu cho học viên, theo dõi tình trạng đóng phí và công nợ. Có thể được Chủ trung tâm bổ sung thêm các quyền hạn khác bên dưới.',
+    defaultPermissions: {
+      student: { view: true, add: true, edit: false, delete: false, export: false },
+      teacher: { view: true, edit: false, delete: false },
+      tuition: { view: true, collect: true, delete: false, showDebt: true },
+      grade: { view: true, edit: false },
+      excel: { import: false, export: false },
+      report: { view: false, revenue: false },
+    },
   },
   {
     id: 'custom',
-    name: 'Tùy chỉnh linh hoạt',
+    name: 'Tùy Chỉnh Khác',
     role: 'staff',
-    badgeClass: 'bg-slate-100 text-slate-800 border-slate-200',
-    summary: 'Tự do tick chọn từng quyền hạn cụ thể',
-    responsibilities: 'Do Quản trị viên tự tay chọn từng quyền bên dưới tùy theo nhu cầu phân công công việc thực tế.',
+    badgeClass: 'bg-slate-100 text-slate-800 border-slate-300',
+    summary: 'Tự do tick chọn từng quyền hạn cụ thể theo nhu cầu',
+    responsibilities: 'Do Quản trị viên tự tay đánh dấu các quyền hạn cần thiết bên dưới tùy theo nhu cầu phân công công việc thực tế.',
     defaultPermissions: createEmptyPermissions(),
   },
 ];
@@ -178,12 +178,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'grant'>('list');
   const [members, setMembers] = useState<ManagedUser[]>([]);
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('academic');
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('admin_office');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('staff');
   const [staffPermissions, setStaffPermissions] = useState<StaffPermissions>(() =>
-    structuredClone(ROLE_PRESETS[0].defaultPermissions)
+    structuredClone(ROLE_PRESETS[1].defaultPermissions)
   );
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -287,7 +287,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
       setEmail('');
       setFullName('');
-      handleSelectPreset('academic');
+      handleSelectPreset('admin_office');
       await loadMembers();
       onAccountChanged?.();
       setActiveTab('list');
@@ -349,10 +349,51 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       setSelectedPresetId('owner');
       setStaffPermissions(structuredClone(OWNER_PERMISSIONS));
     } else if (user.permissions) {
-      setSelectedPresetId('custom');
+      const p = user.permissions;
+      if (p.grade?.edit && !p.tuition?.collect && !p.student?.add) {
+        setSelectedPresetId('teacher');
+      } else if (p.student?.add && p.teacher?.edit && !p.tuition?.collect) {
+        setSelectedPresetId('admin_office');
+      } else if (p.tuition?.collect) {
+        setSelectedPresetId('staff');
+      } else {
+        setSelectedPresetId('custom');
+      }
       setStaffPermissions(structuredClone(user.permissions));
     }
     setActiveTab('grant');
+  };
+
+  const getMemberRoleBadge = (member: ManagedUser) => {
+    if (member.role === 'owner') {
+      return {
+        title: 'Chủ Trung Tâm',
+        className: 'bg-red-100 text-red-800 border-red-300',
+      };
+    }
+    const perms = member.permissions;
+    if (!perms) {
+      return {
+        title: 'Nhân Viên',
+        className: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      };
+    }
+    if (perms.grade?.edit && !perms.tuition?.collect && !perms.student?.add) {
+      return {
+        title: 'Giáo Viên',
+        className: 'bg-purple-100 text-purple-800 border-purple-300',
+      };
+    }
+    if (perms.student?.add && perms.teacher?.edit && !perms.tuition?.collect) {
+      return {
+        title: 'Hành Chính',
+        className: 'bg-blue-100 text-blue-800 border-blue-300',
+      };
+    }
+    return {
+      title: 'Nhân Viên',
+      className: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    };
   };
 
   const renderPermissionBadges = (role?: UserRole, permissions?: StaffPermissions | null) => {
@@ -360,7 +401,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-red-100 text-red-900 border border-red-300">
           <ShieldCheck className="w-3.5 h-3.5 text-red-700" />
-          Toàn quyền Chủ trung tâm
+          Toàn quyền Chủ Trung Tâm
         </span>
       );
     }
@@ -574,15 +615,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-bold text-slate-900 text-sm">{member.full_name || 'Chưa đặt tên'}</span>
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
-                                member.role === 'owner'
-                                  ? 'bg-red-100 text-red-800 border-red-300'
-                                  : 'bg-blue-100 text-blue-800 border-blue-300'
-                              }`}
-                            >
-                              {member.role === 'owner' ? 'Chủ cơ sở' : 'Nhân viên'}
-                            </span>
+                            {(() => {
+                              const roleBadge = getMemberRoleBadge(member);
+                              return (
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${roleBadge.className}`}>
+                                  {roleBadge.title}
+                                </span>
+                              );
+                            })()}
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 member.is_active !== false
@@ -651,38 +691,53 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           ) : (
             /* TAB 2: GRANT NEW PERMISSION / ROLES */
             <form className="space-y-6" onSubmit={grantGoogleAccess}>
-              {/* Preset Role Selector */}
+              {/* Preset Role Selector: 4 Main Roles (Chủ Trung Tâm, Hành Chính, Giáo Viên, Nhân Viên) */}
               <div>
                 <label className="block text-xs font-black uppercase text-slate-700 mb-2 tracking-wide flex items-center gap-1.5">
                   <Briefcase className="w-4 h-4 text-red-800" />
-                  Bước 1: Chọn Vai trò & Chức năng nhiệm vụ (Mẫu phân quyền)
+                  Bước 1: Chọn Vai trò (Hệ thống tự động kích hoạt quyền tương ứng)
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                  {ROLE_PRESETS.map((preset) => {
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  {ROLE_PRESETS.slice(0, 4).map((preset) => {
                     const isSelected = selectedPresetId === preset.id;
                     return (
                       <button
                         key={preset.id}
                         type="button"
                         onClick={() => handleSelectPreset(preset.id)}
-                        className={`text-left p-3 rounded-2xl border transition-all ${
+                        className={`text-left p-3.5 rounded-2xl border transition-all ${
                           isSelected
-                            ? 'border-red-700 bg-red-50/80 ring-2 ring-red-700/30 shadow-xs'
+                            ? 'border-red-700 bg-red-50/90 ring-2 ring-red-700/30 shadow-xs'
                             : 'border-slate-200 bg-white hover:bg-slate-50'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-1.5 mb-1">
-                          <span className="font-extrabold text-xs text-slate-900">{preset.name}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${preset.badgeClass}`}>
-                            {preset.role === 'owner' ? 'Chủ cơ sở' : 'Nhân viên'}
+                        <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                          <span className="font-black text-xs text-slate-900">{preset.name}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${preset.badgeClass}`}>
+                            {preset.name}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                        <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed font-medium">
                           {preset.summary}
                         </p>
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Chọn 1 trong 4 vai trò để hệ thống tự động tick sẵn các quyền tiêu chuẩn.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPreset('custom')}
+                    className={`text-xs font-bold underline transition-colors ${
+                      selectedPresetId === 'custom' ? 'text-red-700 font-black' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {selectedPresetId === 'custom' ? '● Đang mở chế độ Tùy chỉnh quyền tự do' : '⚙️ Tự do tick chọn quyền tùy chỉnh'}
+                  </button>
                 </div>
               </div>
 
