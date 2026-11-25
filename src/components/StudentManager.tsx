@@ -60,12 +60,13 @@ const FeeStatusBadge: React.FC<{ feeStatus: FeeStatus; monthlyDebt?: number; cou
   const Icon = isPaid ? CheckCircle : isUnpaid ? XCircle : AlertCircle;
 
   return (
-    <div className="space-y-1">
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${className}`}>
-        <Icon className="w-3 h-3 mr-1" /> {label}
+    <div className="inline-flex flex-col items-center gap-1">
+      <span className={`inline-flex items-center whitespace-nowrap shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${className}`}>
+        <Icon className="w-3 h-3 mr-1 shrink-0" />
+        <span>{label}</span>
       </span>
-      {monthlyDebt > 0 && <div className="text-[10px] font-bold text-rose-700">Nợ tháng: {monthlyDebt.toLocaleString('vi-VN')} đ</div>}
-      {courseDebt > 0 && <div className="text-[10px] font-bold text-rose-700">Nợ khóa: {courseDebt.toLocaleString('vi-VN')} đ</div>}
+      {monthlyDebt > 0 && <div className="whitespace-nowrap text-[10px] font-bold text-rose-700">Nợ tháng: {monthlyDebt.toLocaleString('vi-VN')} đ</div>}
+      {courseDebt > 0 && <div className="whitespace-nowrap text-[10px] font-bold text-rose-700">Nợ khóa: {courseDebt.toLocaleString('vi-VN')} đ</div>}
     </div>
   );
 };
@@ -376,17 +377,17 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
         /* Student Table View */
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+            <table className="w-full min-w-[1080px] text-left text-xs text-slate-600">
               <thead className="bg-slate-800 text-slate-200 uppercase text-[11px] font-bold tracking-wider">
                 <tr>
-                  <th className="py-3.5 px-4">{t('student.table_code')}</th>
-                  <th className="py-3.5 px-4">{t('student.table_name')}</th>
-                  <th className="py-3.5 px-4">{t('student.table_grade_school')}</th>
-                  <th className="py-3.5 px-4">{t('student.table_program_class')}</th>
-                  <th className="py-3.5 px-4">{t('student.table_phone')}</th>
-                  <th className="py-3.5 px-4">{t('student.table_fee')}</th>
-                  <th className="py-3.5 px-4">{t('student.table_status')}</th>
-                  <th className="py-3.5 px-4 text-right">{t('student.table_actions')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap">{t('student.table_code')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap min-w-[200px]">{t('student.table_name')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap min-w-[125px]">{t('student.table_grade_school')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap min-w-[175px]">{t('student.table_program_class')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap min-w-[205px]">{t('student.table_phone')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-center min-w-[130px]">{t('student.table_fee')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-center min-w-[110px]">{t('student.table_status')}</th>
+                  <th className="py-3.5 px-3 xl:px-4 whitespace-nowrap text-right min-w-[120px]">{t('student.table_actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
@@ -403,46 +404,46 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
 
                     return (
                       <tr key={st.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4 font-bold text-red-800">
+                        <td className="py-3 px-3 xl:px-4 font-bold text-red-800 whitespace-nowrap">
                           {st.code}
                         </td>
 
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3 xl:px-4">
                           <div className="flex items-center gap-3">
                             <img
                               src={st.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"}
                               alt={st.name}
-                              className="w-9 h-9 rounded-full object-cover border border-slate-200 shadow-2xs"
+                              className="w-9 h-9 rounded-full object-cover border border-slate-200 shadow-2xs shrink-0"
                             />
-                            <div>
-                              <div className="font-bold text-slate-900 text-sm">{st.name}</div>
-                              <div className="text-[10px] text-slate-500">{st.gender === 'Nam' ? (language === 'vi' ? 'Nam' : 'Male') : (st.gender === 'Nữ' ? (language === 'vi' ? 'Nữ' : 'Female') : (language === 'vi' ? 'Chưa xác định' : 'Unspecified'))} • {language === 'vi' ? 'NS' : 'DOB'}: {st.dob || '—'}</div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-900 text-sm whitespace-nowrap">{st.name}</div>
+                              <div className="text-[10px] text-slate-500 whitespace-nowrap">{st.gender === 'Nam' ? (language === 'vi' ? 'Nam' : 'Male') : (st.gender === 'Nữ' ? (language === 'vi' ? 'Nữ' : 'Female') : (language === 'vi' ? 'Chưa xác định' : 'Unspecified'))} • {language === 'vi' ? 'NS' : 'DOB'}: {st.dob || '—'}</div>
                             </div>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="text-slate-800 font-medium">{st.gradeLevel}</div>
-                          <div className="text-[11px] text-slate-500">{st.school}</div>
+                        <td className="py-3 px-3 xl:px-4">
+                          <div className="text-slate-800 font-semibold whitespace-nowrap">{st.gradeLevel || '—'}</div>
+                          <div className="text-[11px] text-slate-500 leading-snug">{st.school}</div>
                         </td>
 
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3 xl:px-4">
                           {(() => {
                             const enrolledIds = getStudentClassIds(st, classes);
                             const enrolledClasses = classes.filter(c => enrolledIds.includes(c.id));
                             if (!enrolledClasses.length) {
                               const fallbackText = st.classId || 'Chưa xếp lớp';
-                              return <div className="font-semibold text-slate-800">{fallbackText}</div>;
+                              return <div className="font-semibold text-slate-800 whitespace-nowrap">{fallbackText}</div>;
                             }
                             return (
                               <div className="space-y-1">
                                 {enrolledClasses.map(c => {
                                   const isPrimary = st.classId === c.id;
                                   return (
-                                    <div key={c.id} className="flex items-center gap-1.5">
-                                      <span className="font-semibold text-slate-800">{c.name}</span>
+                                    <div key={c.id} className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-semibold text-slate-800 whitespace-nowrap">{c.name}</span>
                                       {!isPrimary && (
-                                        <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-100 text-amber-800">
+                                        <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-100 text-amber-800 whitespace-nowrap shrink-0">
                                           Lớp thêm
                                         </span>
                                       )}
@@ -452,43 +453,43 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                               </div>
                             );
                           })()}
-                          <div className="text-[11px] text-amber-700 font-medium">{program?.name || 'Chưa chọn chương trình'}</div>
+                          <div className="text-[11px] text-amber-700 font-medium whitespace-nowrap">{program?.name || 'Chưa chọn chương trình'}</div>
                         </td>
 
-                        <td className="py-3 px-4">
-                          <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                        <td className="py-3 px-3 xl:px-4">
+                          <div className="font-semibold text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
                             <Phone className="w-3 h-3 text-red-700 flex-shrink-0" />
                             <span>{t('student.student_phone')} <span className="font-bold text-red-800">{st.phone || (language === 'vi' ? 'Chưa cập nhật' : 'N/A')}</span></span>
                           </div>
-                          <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5">
+                          <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5 whitespace-nowrap">
                             <Phone className="w-3 h-3 text-emerald-600 flex-shrink-0" />
                             <span>PH ({st.parentName}): <a href={`tel:${st.parentPhone}`} className="font-medium text-slate-800 hover:text-red-700">{st.parentPhone}</a></span>
                           </div>
                         </td>
 
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3 xl:px-4 text-center whitespace-nowrap">
                           {showDebt ? <FeeStatusBadge feeStatus={st.feeStatus} monthlyDebt={debt.monthly} courseDebt={debt.course} /> : <span className="text-slate-400">Không có quyền xem</span>}
                         </td>
 
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3 xl:px-4 text-center whitespace-nowrap">
                           {st.status === 'active' && (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               {t('actions.active')}
                             </span>
                           )}
                           {st.status === 'reserved' && (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                               {t('actions.reserved')}
                             </span>
                           )}
                           {st.status === 'dropped' && (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-300">
+                            <span className="inline-flex items-center whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-300">
                               {t('actions.dropped')}
                             </span>
                           )}
                         </td>
 
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-3 xl:px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => setViewingStudent(st)}

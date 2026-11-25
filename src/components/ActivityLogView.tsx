@@ -192,14 +192,14 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
       {/* Logs Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full min-w-[780px] text-left text-xs text-slate-700">
             <thead className="bg-slate-800 text-slate-200 uppercase text-[11px] font-bold">
               <tr>
-                <th className="py-3 px-4">Thời Gian</th>
-                <th className="py-3 px-4">Người Thực Hiện</th>
-                <th className="py-3 px-4">Hành Động</th>
-                <th className="py-3 px-4">Phân Hệ</th>
-                <th className="py-3 px-4">Chi Tiết Thao Tác</th>
+                <th className="py-3 px-4 whitespace-nowrap">Thời Gian</th>
+                <th className="py-3 px-4 whitespace-nowrap">Người Thực Hiện</th>
+                <th className="py-3 px-4 whitespace-nowrap">Hành Động</th>
+                <th className="py-3 px-4 whitespace-nowrap">Phân Hệ</th>
+                <th className="py-3 px-4 whitespace-nowrap">Chi Tiết Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -214,8 +214,8 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                       {isHiddenLogPerformer(log.userName, log.userEmail) ? 'Nội bộ' : maskEmail(log.userEmail)}
                     </div>
                   </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                  <td className="py-3 px-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-md text-[10px] font-bold ${
                       log.action === 'THÊM' ? 'bg-emerald-100 text-emerald-800' :
                       (log.action === 'XÓA' ? 'bg-rose-100 text-rose-800' :
                       (log.action === 'SỬA' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800'))

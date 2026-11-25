@@ -639,20 +639,20 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full min-w-[1080px] text-left text-xs text-slate-700">
             <thead className="bg-slate-100 text-slate-600 uppercase text-[11px] font-bold border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4">Mã Phiếu Thu</th>
-                <th className="py-3 px-4">Học Sinh</th>
-                <th className="py-3 px-4">Học Phí Khóa</th>
-                <th className="py-3 px-4">Học Phí Tháng</th>
-                <th className="py-3 px-4">Khoản Thu</th>
-                <th className="py-3 px-4">Đã Đóng (VNĐ)</th>
-                {showDebt && <th className="py-3 px-4">Còn Thiếu (VNĐ)</th>}
-                {showDebt && <th className="py-3 px-4">Tình Trạng</th>}
-                <th className="py-3 px-4">Ngày Thu</th>
-                <th className="py-3 px-4">Hình Thức</th>
-                <th className="py-3 px-4 text-right">Thao Tác</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Mã Phiếu Thu</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Học Sinh</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Học Phí Khóa</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Học Phí Tháng</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Khoản Thu</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Đã Đóng (VNĐ)</th>
+                {showDebt && <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Còn Thiếu (VNĐ)</th>}
+                {showDebt && <th className="py-3 px-3 xl:px-4 whitespace-nowrap text-center">Tình Trạng</th>}
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Ngày Thu</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap">Hình Thức</th>
+                <th className="py-3 px-3 xl:px-4 whitespace-nowrap text-right">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -662,19 +662,19 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
 
                 return (
                   <tr key={rc.id} onClick={() => setSelectedReceipt(rc)} className="cursor-pointer hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-4 font-bold text-red-800">{rc.code}</td>
-                    <td className="py-3 px-4 font-bold text-slate-900">{student?.name} ({student?.code})</td>
-                    <td className="py-3 px-4">{rc.courseFee > 0 ? `${rc.courseFee.toLocaleString('vi-VN')} đ` : '—'}</td>
-                    <td className="py-3 px-4">{(rc.monthlyFee || 0) > 0 ? `${(rc.monthlyFee || 0).toLocaleString('vi-VN')} đ` : '—'}</td>
-                    <td className="py-3 px-4"><span className="font-semibold text-slate-700">{paymentKindLabel(rc)} · {paymentPeriodLabel(rc)}</span></td>
-                    <td className="py-3 px-4 font-bold text-emerald-700">{rc.paidAmount.toLocaleString('vi-VN')} đ</td>
-                    {showDebt && <td className="py-3 px-4 font-bold text-rose-700">
+                    <td className="py-3 px-3 xl:px-4 font-bold text-red-800 whitespace-nowrap">{rc.code}</td>
+                    <td className="py-3 px-3 xl:px-4 font-bold text-slate-900 whitespace-nowrap">{student?.name} ({student?.code})</td>
+                    <td className="py-3 px-3 xl:px-4 whitespace-nowrap">{rc.courseFee > 0 ? `${rc.courseFee.toLocaleString('vi-VN')} đ` : '—'}</td>
+                    <td className="py-3 px-3 xl:px-4 whitespace-nowrap">{(rc.monthlyFee || 0) > 0 ? `${(rc.monthlyFee || 0).toLocaleString('vi-VN')} đ` : '—'}</td>
+                    <td className="py-3 px-3 xl:px-4 whitespace-nowrap"><span className="font-semibold text-slate-700">{paymentKindLabel(rc)} · {paymentPeriodLabel(rc)}</span></td>
+                    <td className="py-3 px-3 xl:px-4 font-bold text-emerald-700 whitespace-nowrap">{rc.paidAmount.toLocaleString('vi-VN')} đ</td>
+                    {showDebt && <td className="py-3 px-3 xl:px-4 font-bold text-rose-700 whitespace-nowrap">
                       {rc.debtAmount > 0 ? `${rc.debtAmount.toLocaleString('vi-VN')} đ` : '—'}
                     </td>}
-                    {showDebt && <td className="py-3 px-4"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>}
-                    <td className="py-3 px-4">{rc.paymentDate}</td>
-                    <td className="py-3 px-4">{paymentMethodLabel(rc.paymentMethod)}</td>
-                    <td className="py-3 px-4 text-right">
+                    {showDebt && <td className="py-3 px-3 xl:px-4 text-center whitespace-nowrap"><span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold ${receiptStatusClass[status]}`}>{receiptStatusLabel[status]}</span></td>}
+                    <td className="py-3 px-3 xl:px-4 whitespace-nowrap">{rc.paymentDate}</td>
+                    <td className="py-3 px-3 xl:px-4 whitespace-nowrap">{paymentMethodLabel(rc.paymentMethod)}</td>
+                    <td className="py-3 px-3 xl:px-4 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-1.5 flex-wrap">
                       {canCollect && rc.debtAmount > 0 && (
                         <button
