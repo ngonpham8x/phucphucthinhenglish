@@ -1,6 +1,7 @@
 import { localISODate } from '../lib/date';
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 import { debtBreakdown, paymentKindLabel, paymentPeriodLabel, getStudentCourseProgress, suggestNextCoursePeriod } from '../lib/tuition';
 import { isStudentInClass, getStudentClassIds, nextStudentCode } from '../lib/student';
 import {canSeeDebt} from '../lib/access';
@@ -375,8 +376,8 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
       {/* STUDENT LIST: TABLE OR MOBILE CARDS */}
       {viewMode === 'table' ? (
         /* Student Table View */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-clip">
+          <HorizontalScrollArea>
             <table className="w-full min-w-[1080px] text-left text-xs text-slate-600">
               <thead className="bg-slate-800 text-slate-200 uppercase text-[11px] font-bold tracking-wider">
                 <tr>
@@ -558,7 +559,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                 )}
               </tbody>
             </table>
-          </div>
+          </HorizontalScrollArea>
         </div>
       ) : (
         /* Mobile Card Grid View */

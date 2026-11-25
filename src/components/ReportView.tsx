@@ -4,6 +4,7 @@ import { Student, Teacher, ClassRoom, TuitionReceipt, CenterSettings } from '../
 import { BarChart3, Calendar, Download, Printer, DollarSign, Users, BookOpen, X } from 'lucide-react';
 import { debtBreakdown } from '../lib/tuition';
 import { isStudentInClass } from '../lib/student';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 
 interface ReportViewProps {
   students: Student[];
@@ -146,17 +147,17 @@ export const ReportView: React.FC<ReportViewProps> = ({
         {/* Classes Table */}
         <div>
           <h3 className="font-bold text-slate-900 text-sm mb-3">Chi Tiết Tình Hình Lớp Học & Học Phí:</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border border-slate-200">
+          <HorizontalScrollArea>
+            <table className="w-full min-w-[780px] text-left text-xs border border-slate-200">
               <thead className="bg-slate-800 text-slate-200 uppercase text-[10px] font-bold">
                 <tr>
-                  <th className="p-2.5">STT</th>
-                  <th className="p-2.5">Mã Lớp</th>
-                  <th className="p-2.5">Tên Lớp Học</th>
-                  <th className="p-2.5">Sĩ Số</th>
-                  <th className="p-2.5">Doanh Thu Thu</th>
-                  <th className="p-2.5">Nợ Tháng</th>
-                  <th className="p-2.5">Nợ Khóa</th>
+                  <th className="p-2.5 whitespace-nowrap">STT</th>
+                  <th className="p-2.5 whitespace-nowrap">Mã Lớp</th>
+                  <th className="p-2.5 whitespace-nowrap">Tên Lớp Học</th>
+                  <th className="p-2.5 whitespace-nowrap">Sĩ Số</th>
+                  <th className="p-2.5 whitespace-nowrap">Doanh Thu Thu</th>
+                  <th className="p-2.5 whitespace-nowrap">Nợ Tháng</th>
+                  <th className="p-2.5 whitespace-nowrap">Nợ Khóa</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
@@ -185,7 +186,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 })}
               </tbody>
             </table>
-          </div>
+          </HorizontalScrollArea>
         </div>
       </div>
 
@@ -213,9 +214,10 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <div className="rounded-xl bg-violet-50 p-3"><p className="text-violet-700">Nợ khóa</p><b className="mt-1 block text-violet-800">{selectedClassDebt.course.toLocaleString('vi-VN')} đ</b></div>
             </div>
 
-            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-800 text-[10px] uppercase text-slate-100"><tr><th className="px-3 py-2.5">Mã HS</th><th className="px-3 py-2.5">Học viên</th><th className="px-3 py-2.5 text-right">Đã thu</th><th className="px-3 py-2.5 text-right">Nợ tháng</th><th className="px-3 py-2.5 text-right">Nợ khóa</th></tr></thead>
+            <div className="mt-5 rounded-xl border border-slate-200 overflow-x-clip">
+              <HorizontalScrollArea stickyTop={false}>
+                <table className="w-full min-w-[620px] text-left text-xs">
+                  <thead className="bg-slate-800 text-[10px] uppercase text-slate-100"><tr><th className="px-3 py-2.5 whitespace-nowrap">Mã HS</th><th className="px-3 py-2.5 whitespace-nowrap">Học viên</th><th className="px-3 py-2.5 text-right whitespace-nowrap">Đã thu</th><th className="px-3 py-2.5 text-right whitespace-nowrap">Nợ tháng</th><th className="px-3 py-2.5 text-right whitespace-nowrap">Nợ khóa</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {selectedClassStudents.length === 0 ? <tr><td colSpan={5} className="px-3 py-7 text-center text-slate-500">Chưa có học viên trong lớp.</td></tr> : selectedClassStudents.map((student) => {
                     const studentReceipts = selectedClassReceipts.filter((receipt) => receipt.studentId === student.id);
@@ -225,6 +227,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   })}
                 </tbody>
               </table>
+              </HorizontalScrollArea>
             </div>
           </div>
         </div>

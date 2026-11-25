@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Grade, Student, ClassRoom, StaffPermissions } from '../types';
 import { Award, Search, Save, Edit, BookOpen, CheckCircle, AlertCircle } from 'lucide-react';
 import { isStudentInClass } from '../lib/student';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 
 interface GradeManagerProps {
   grades: Grade[];
@@ -91,21 +92,21 @@ export const GradeManager: React.FC<GradeManagerProps> = ({
       </div>
 
       {/* Gradebook Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-clip">
+        <HorizontalScrollArea>
+          <table className="w-full min-w-[960px] text-left text-xs text-slate-700">
             <thead className="bg-slate-800 text-slate-200 uppercase text-[11px] font-bold">
               <tr>
-                <th className="py-3 px-4">Mã HS</th>
-                <th className="py-3 px-4">Họ Và Tên</th>
-                <th className="py-3 px-3 text-center bg-slate-900/40">Nghe (Listening)</th>
-                <th className="py-3 px-3 text-center bg-slate-900/40">Nói (Speaking)</th>
-                <th className="py-3 px-3 text-center bg-slate-900/40">Đọc (Reading)</th>
-                <th className="py-3 px-3 text-center bg-slate-900/40">Viết (Writing)</th>
-                <th className="py-3 px-3 text-center">Giữa Kỳ</th>
-                <th className="py-3 px-3 text-center">Cuối Kỳ</th>
-                <th className="py-3 px-3 text-center">Chuyên Cần</th>
-                <th className="py-3 px-4 text-center bg-amber-600 text-slate-950 font-extrabold">ĐTB</th>
+                <th className="py-3 px-4 whitespace-nowrap">Mã HS</th>
+                <th className="py-3 px-4 whitespace-nowrap min-w-[170px]">Họ Và Tên</th>
+                <th className="py-3 px-3 text-center bg-slate-900/40 whitespace-nowrap">Nghe (Listening)</th>
+                <th className="py-3 px-3 text-center bg-slate-900/40 whitespace-nowrap">Nói (Speaking)</th>
+                <th className="py-3 px-3 text-center bg-slate-900/40 whitespace-nowrap">Đọc (Reading)</th>
+                <th className="py-3 px-3 text-center bg-slate-900/40 whitespace-nowrap">Viết (Writing)</th>
+                <th className="py-3 px-3 text-center whitespace-nowrap">Giữa Kỳ</th>
+                <th className="py-3 px-3 text-center whitespace-nowrap">Cuối Kỳ</th>
+                <th className="py-3 px-3 text-center whitespace-nowrap">Chuyên Cần</th>
+                <th className="py-3 px-4 text-center bg-amber-600 text-slate-950 font-extrabold whitespace-nowrap">ĐTB</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 font-medium">
@@ -127,8 +128,8 @@ export const GradeManager: React.FC<GradeManagerProps> = ({
 
                 return (
                   <tr key={`${st.id}-${targetClassId}`} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-4 font-bold text-red-800">{st.code}</td>
-                    <td className="py-3 px-4 font-bold text-slate-900">{st.name}</td>
+                    <td className="py-3 px-4 font-bold text-red-800 whitespace-nowrap">{st.code}</td>
+                    <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">{st.name}</td>
 
                     {/* Listening */}
                     <td className="p-2 text-center bg-slate-50/50">
@@ -237,7 +238,7 @@ export const GradeManager: React.FC<GradeManagerProps> = ({
               })}
             </tbody>
           </table>
-        </div>
+        </HorizontalScrollArea>
       </div>
     </div>
   );

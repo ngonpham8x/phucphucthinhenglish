@@ -1,5 +1,6 @@
 import { localISODate } from '../lib/date';
 import React, { useRef, useState } from 'react';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 import {
   SystemBackup,
   CenterSettings,
@@ -395,22 +396,22 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
       </div>
 
       {/* Backup History Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-clip">
         <div className="p-4 bg-slate-800 text-slate-200 font-bold text-xs uppercase flex items-center justify-between">
           <span>Lịch Sử 30 Bản Sao Lưu Gần Nhất ({backups.length})</span>
           <span className="text-[10px] text-amber-400 font-medium">Chỉ hiển thị bản xuất đã ghi nhận</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+        <HorizontalScrollArea>
+          <table className="w-full min-w-[820px] text-left text-xs text-slate-700">
             <thead className="bg-slate-100 text-slate-600 uppercase text-[11px] font-bold border-b border-slate-200">
               <tr>
-                <th className="py-3 px-4">Mã / Tên File Backup</th>
-                <th className="py-3 px-4">Thời Gian Tạo</th>
-                <th className="py-3 px-4">Dung Lượng</th>
-                <th className="py-3 px-4">Loại Sao Lưu</th>
-                <th className="py-3 px-4">Trạng Thái</th>
-                <th className="py-3 px-4 text-right">Thao Tác</th>
+                <th className="py-3 px-4 whitespace-nowrap">Mã / Tên File Backup</th>
+                <th className="py-3 px-4 whitespace-nowrap">Thời Gian Tạo</th>
+                <th className="py-3 px-4 whitespace-nowrap">Dung Lượng</th>
+                <th className="py-3 px-4 whitespace-nowrap">Loại Sao Lưu</th>
+                <th className="py-3 px-4 whitespace-nowrap">Trạng Thái</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
@@ -457,7 +458,7 @@ export const BackupManager: React.FC<BackupManagerProps> = ({
               )}
             </tbody>
           </table>
-        </div>
+        </HorizontalScrollArea>
       </div>
 
       {restoreCandidate && (

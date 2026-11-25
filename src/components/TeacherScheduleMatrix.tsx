@@ -2,6 +2,7 @@ import React from 'react';
 import { Teacher, TimetableSlot, ClassRoom, Room } from '../types';
 import { CalendarCheck, Printer, FileSpreadsheet, GraduationCap } from 'lucide-react';
 import { TeacherAvatar } from './TeacherAvatar';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 
 interface TeacherScheduleMatrixProps {
   teachers: Teacher[];
@@ -57,7 +58,7 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
       </div>
 
       {/* EXCEL GRID MATRIX TABLE */}
-      <div className="teacher-print-shell bg-white rounded-2xl border border-slate-300 shadow-xs overflow-hidden">
+      <div className="teacher-print-shell bg-white rounded-2xl border border-slate-300 shadow-xs overflow-x-clip">
         <div className="teacher-print-heading p-4 bg-red-900 text-white flex justify-between items-center print:bg-white print:text-slate-900">
           <div>
             <h3 className="font-bold text-base uppercase tracking-wider">TRUNG TÂM ANH NGỮ PHÚC PHÚC THỊNH</h3>
@@ -66,13 +67,13 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
           <span className="text-xs text-red-100 italic">Cập nhật: 2026</span>
         </div>
 
-        <div className="teacher-print-table-wrap overflow-x-auto">
-          <table className="teacher-print-table w-full text-xs text-left border-collapse border border-slate-300">
+        <HorizontalScrollArea className="teacher-print-table-wrap">
+          <table className="teacher-print-table w-full min-w-[960px] text-xs text-left border-collapse border border-slate-300">
             <thead>
               <tr className="bg-amber-500 text-slate-950 uppercase text-[11px] font-bold border-b border-amber-600">
-                <th className="py-3 px-4 border-r border-amber-600 w-44">Giáo Viên</th>
+                <th className="py-3 px-4 border-r border-amber-600 w-44 whitespace-nowrap">Giáo Viên</th>
                 {days.map(d => (
-                  <th key={d} className="py-3 px-3 border-r border-amber-600 text-center">
+                  <th key={d} className="py-3 px-3 border-r border-amber-600 text-center whitespace-nowrap">
                     {d}
                   </th>
                 ))}
@@ -126,7 +127,7 @@ export const TeacherScheduleMatrix: React.FC<TeacherScheduleMatrixProps> = ({
               ))}
             </tbody>
           </table>
-        </div>
+        </HorizontalScrollArea>
       </div>
     </div>
   );

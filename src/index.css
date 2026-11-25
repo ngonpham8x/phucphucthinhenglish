@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* High-visibility scrollbars for wide data tables across all browsers and zoom levels */
+.table-scrollbar,
+.table-scrollbar-top {
+  scrollbar-width: auto;
+  scrollbar-color: #64748b #e2e8f0;
+}
+
+.table-scrollbar::-webkit-scrollbar {
+  height: 12px;
+  width: 12px;
+}
+
+.table-scrollbar-top::-webkit-scrollbar {
+  height: 11px;
+}
+
+.table-scrollbar::-webkit-scrollbar-track,
+.table-scrollbar-top::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+.table-scrollbar::-webkit-scrollbar-thumb,
+.table-scrollbar-top::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 9999px;
+  border: 2px solid #e2e8f0;
+}
+
+.table-scrollbar::-webkit-scrollbar-thumb:hover,
+.table-scrollbar-top::-webkit-scrollbar-thumb:hover {
+  background: #991b1b;
+}
+
 @media print {
   /* Print only the requested document. This prevents the fixed receipt from
      repeating above every application page and removes the web-app frame. */
@@ -38,6 +72,7 @@
 
   body[data-printing="teacher-schedule"] .teacher-print-table {
     width: 100%;
+    min-width: 0 !important;
     table-layout: fixed;
     font-size: 7.5pt;
   }

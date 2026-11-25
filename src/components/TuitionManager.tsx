@@ -2,6 +2,7 @@ import { localISODate } from '../lib/date';
 import {canSeeDebt} from '../lib/access';
 import {isReceiptSubjectToNewRules} from '../lib/receiptPolicy';
 import React, { useEffect, useMemo, useState } from 'react';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 import { TuitionReceipt, Student, ClassRoom, CourseProgram, StaffPermissions, CenterSettings } from '../types';
 import { CreditCard, Plus, PlusCircle, Printer, FileText, CheckCircle, AlertCircle, Search, X, Save, DollarSign, Edit, Trash2, Filter, RotateCcw, Split, Calendar, GraduationCap, ArrowRight } from 'lucide-react';
 import logoImg from '../assets/images/regenerated_image_1786351687546.png';
@@ -632,13 +633,13 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
       </section>
 
       {/* Receipts History Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-clip">
         <div className="p-4 bg-slate-800 text-slate-200 font-bold text-xs uppercase flex justify-between items-center">
           <span>Lịch Sử Phiếu Thu Học Phí ({filteredReceipts.length}/{receipts.length})</span>
           <span className="normal-case font-medium text-slate-400">Bấm vào một dòng để xem/in chi tiết</span>
         </div>
 
-        <div className="overflow-x-auto">
+        <HorizontalScrollArea>
           <table className="w-full min-w-[1080px] text-left text-xs text-slate-700">
             <thead className="bg-slate-100 text-slate-600 uppercase text-[11px] font-bold border-b border-slate-200">
               <tr>
@@ -737,7 +738,7 @@ export const TuitionManager: React.FC<TuitionManagerProps> = ({
               {!filteredReceipts.length && <tr><td colSpan={11} className="px-4 py-10 text-center text-sm font-semibold text-slate-500">Không tìm thấy phiếu thu phù hợp với bộ lọc hiện tại.</td></tr>}
             </tbody>
           </table>
-        </div>
+        </HorizontalScrollArea>
       </div>
 
       {/* COLLECT TUITION MODAL */}

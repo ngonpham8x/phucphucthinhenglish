@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AccountAuditLog, ActivityLog } from '../types';
 import { History, Search, Filter, ShieldCheck, RefreshCw } from 'lucide-react';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 import { maskEmail } from '../lib/privacy';
 import {
   isRemovedActivityLog,
@@ -139,7 +140,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+      <section className="overflow-x-clip rounded-2xl border border-slate-200 bg-white shadow-xs">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><ShieldCheck className="h-4 w-4 text-red-800" /> Nhật ký tài khoản</h3>
@@ -162,15 +163,15 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
         ) : filteredAccountLogs.length === 0 ? (
           <p className="p-5 text-center text-xs text-slate-500">Chưa có thay đổi tài khoản nào được ghi nhận.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <HorizontalScrollArea>
             <table className="w-full min-w-[760px] text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">Thời gian</th>
-                  <th className="px-4 py-3">Tài khoản</th>
-                  <th className="px-4 py-3">Thao tác</th>
-                  <th className="px-4 py-3">Người thực hiện</th>
-                  <th className="px-4 py-3">Chi tiết</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Thời gian</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Tài khoản</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Thao tác</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Người thực hiện</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Chi tiết</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -185,13 +186,13 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                 ))}
               </tbody>
             </table>
-          </div>
+          </HorizontalScrollArea>
         )}
       </section>
 
       {/* Logs Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-clip">
+        <HorizontalScrollArea>
           <table className="w-full min-w-[780px] text-left text-xs text-slate-700">
             <thead className="bg-slate-800 text-slate-200 uppercase text-[11px] font-bold">
               <tr>
@@ -229,7 +230,7 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
               ))}
             </tbody>
           </table>
-        </div>
+        </HorizontalScrollArea>
       </div>
     </div>
   );

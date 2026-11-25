@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TimetableSlot, ClassRoom, Teacher, Room } from '../types';
+import { HorizontalScrollArea } from './HorizontalScrollArea';
 import {
   CalendarDays,
   Clock,
@@ -209,14 +210,14 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
       )}
 
       {/* TIMETABLE GRID TABLE */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-x-clip">
+        <HorizontalScrollArea>
+          <table className="w-full min-w-[920px] text-left border-collapse text-xs">
             <thead className="bg-slate-800 text-slate-200 uppercase text-[11px] font-bold">
               <tr>
-                <th className="py-3 px-4 border-b border-slate-700 w-32">Ca Học / Giờ</th>
+                <th className="py-3 px-4 border-b border-slate-700 w-32 whitespace-nowrap">Ca Học / Giờ</th>
                 {(viewMode === 'week' ? daysOfWeek : [selectedDay]).map((day) => (
-                  <th key={day} className="py-3 px-4 border-b border-slate-700 text-center">
+                  <th key={day} className="py-3 px-4 border-b border-slate-700 text-center whitespace-nowrap">
                     {day}
                   </th>
                 ))}
@@ -289,7 +290,7 @@ export const TimetableManager: React.FC<TimetableManagerProps> = ({
               })}
             </tbody>
           </table>
-        </div>
+        </HorizontalScrollArea>
       </div>
 
       {/* ADD SLOT MODAL WITH CONFLICT CHECKER */}

@@ -236,7 +236,7 @@ export const DashboardDetailModal: React.FC<DashboardDetailModalProps> = ({
           </button>
         </header>
 
-        <div className="min-h-0 overflow-auto p-4 sm:p-6">
+        <div className="min-h-0 overflow-auto table-scrollbar p-4 sm:p-6">
           {isStudentDetail && (
             <table className="w-full min-w-[680px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 text-[10px] font-bold uppercase text-slate-500">
