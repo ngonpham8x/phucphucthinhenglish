@@ -27,9 +27,25 @@ export const SYSTEM_OWNER_EMAILS: readonly string[] = [
   'phucphucthinhenglish@gmail.com',
 ];
 
+export const DISPLAY_ROLE_LABEL_BY_EMAIL: Record<string, string> = {
+  'phucphucthinhenglish@gmail.com': 'Hành chính',
+};
+
 export function isSystemOwnerEmail(email?: string | null): boolean {
   if (!email) return false;
   return SYSTEM_OWNER_EMAILS.includes(email.trim().toLowerCase());
+}
+
+export function getDisplayRoleLabel(
+  user?: { role?: UserRole | null; email?: string | null } | null,
+  fallbackOwnerLabel = 'Chủ cơ sở',
+  fallbackStaffLabel = 'Nhân viên',
+): string {
+  const normalizedEmail = (user?.email || '').trim().toLowerCase();
+  if (normalizedEmail && DISPLAY_ROLE_LABEL_BY_EMAIL[normalizedEmail]) {
+    return DISPLAY_ROLE_LABEL_BY_EMAIL[normalizedEmail];
+  }
+  return user?.role === 'owner' ? fallbackOwnerLabel : fallbackStaffLabel;
 }
 
 function mergePermissions(candidate: Partial<StaffPermissions> | null): StaffPermissions {

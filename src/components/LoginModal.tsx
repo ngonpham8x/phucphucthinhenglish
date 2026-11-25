@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LogOut, ShieldCheck, X } from 'lucide-react';
 import { UserAccount } from '../types';
+import { getDisplayRoleLabel } from '../lib/auth';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -39,7 +40,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, current
             <h2 className="font-extrabold text-slate-900">{currentUser.name}</h2>
             <p className="text-xs text-slate-500">Tài khoản đã xác thực</p>
             <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-              <ShieldCheck className="h-3 w-3" /> {currentUser.role === 'owner' ? 'Chủ trung tâm' : 'Nhân viên'}
+              <ShieldCheck className="h-3 w-3" /> {getDisplayRoleLabel(currentUser, 'Chủ trung tâm', 'Nhân viên')}
             </span>
           </div>
         </div>

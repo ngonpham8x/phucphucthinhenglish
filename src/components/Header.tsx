@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { UserAccount, CenterSettings } from '../types';
 import { Logo } from './Logo';
 import { useLanguage } from '../context/LanguageContext';
+import { getDisplayRoleLabel } from '../lib/auth';
 import {
   ChevronDown,
   Search,
@@ -157,7 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {currentUser.name.replace(/\s*\(Quản [L|l]ý\)/gi, '')}
                 </div>
                 <div className="text-[10px] font-semibold text-red-600">
-                  {currentUser.role === 'owner' ? t('owner') : t('staff')}
+                  {getDisplayRoleLabel(currentUser, t('owner'), t('staff'))}
                 </div>
               </div>
               <ChevronDown className="w-4 h-4 text-slate-400" />

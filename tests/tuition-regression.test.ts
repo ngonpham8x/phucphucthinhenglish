@@ -8,7 +8,7 @@ import {
   getStudentCourseProgress
 } from '../src/lib/tuition';
 import { getEnrolledStudentsForClass, getStudentClassIds } from '../src/lib/student';
-import { isSystemOwnerEmail, profileToAccount } from '../src/lib/auth';
+import { isSystemOwnerEmail, profileToAccount, getDisplayRoleLabel } from '../src/lib/auth';
 import type { TuitionReceipt, Student, ClassRoom } from '../src/types';
 
 const receipt = (values: Partial<TuitionReceipt>): TuitionReceipt => ({
@@ -148,5 +148,7 @@ assert.equal(resolvedAccount.permissions.tuition.view, true);
 assert.equal(resolvedAccount.permissions.tuition.delete, true);
 assert.equal(resolvedAccount.permissions.student.add, true);
 assert.equal(resolvedAccount.permissions.report.revenue, true);
+assert.equal(getDisplayRoleLabel(resolvedAccount), 'Hành chính');
+assert.equal(getDisplayRoleLabel({ role: 'owner', email: 'other@example.com' }), 'Chủ cơ sở');
 
 console.log('Passed: course period suggestions, multi-level/next course tuition collection, course progress tracking, and system owner full permissions.');

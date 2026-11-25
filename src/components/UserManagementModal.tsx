@@ -421,6 +421,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   };
 
   const getMemberRoleBadge = (member: ManagedUser) => {
+    if (isSystemOwnerEmail(member.email)) {
+      return {
+        title: 'Hành Chính',
+        className: 'bg-blue-100 text-blue-800 border-blue-300',
+      };
+    }
     if (member.role === 'owner') {
       return {
         title: 'Chủ Trung Tâm',
@@ -452,12 +458,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     };
   };
 
-  const renderPermissionBadges = (role?: UserRole, permissions?: StaffPermissions | null) => {
+  const renderPermissionBadges = (role?: UserRole, permissions?: StaffPermissions | null, email?: string) => {
     if (role === 'owner') {
+      const isDisplayAdmin = isSystemOwnerEmail(email);
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-red-100 text-red-900 border border-red-300">
           <ShieldCheck className="w-3.5 h-3.5 text-red-700" />
-          Toàn quyền Chủ Trung Tâm
+          {isDisplayAdmin ? 'Toàn quyền hệ thống' : 'Toàn quyền Chủ Trung Tâm'}
         </span>
       );
     }
@@ -704,7 +711,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                               Quyền hạn được cấp:
                             </div>
-                            {renderPermissionBadges(member.role, member.permissions)}
+                            {renderPermissionBadges(member.role, member.permissions, member.email)}
                           </div>
                         </div>
                       </div>
