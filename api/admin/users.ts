@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isHiddenAccountIdentity } from '../../src/lib/activityLog.js';
 
 const STAFF_PERMISSION_SHAPE = {
   student: ['view', 'add', 'edit', 'delete', 'export'],
@@ -222,15 +223,8 @@ export default async function handler(req: any, res: any) {
 
     if (result.error) return json(res, 500, { error: 'Không thể tải danh sách tài khoản.' });
 
-    const hiddenEmails = ['ngonpham8x@gmail.com', 'tayninhdoimoi@gmail.com', 'bhttq3@gmail.com'];
     const rawList = Array.isArray(result.data) ? result.data : (result.data ? [result.data] : []);
-    const filteredUsers = rawList.filter((u: any) => {
-      const email = (u?.email || '').toLowerCase().trim();
-      const normName = (u?.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-      if (hiddenEmails.includes(email)) return false;
-      if (normName === 'pham duy ngon' || normName === 'duy ngon pham') return false;
-      return true;
-    });
+    const filteredUsers = rawList.filter((u: any) => !isHiddenAccountIdentity(u?.full_name, u?.email));
 
     return json(res, 200, { users: filteredUsers });
   }
@@ -283,7 +277,10 @@ export default async function handler(req: any, res: any) {
       // ignore
     }
 
-    await client.from('profiles').delete().eq('id', userId);
+    const { error: deleteProfileError } = await client.from('profiles').delete().eq('id', userId);
+    if (deleteProfileError) {
+      return json(res, 500, { error: 'Không thể xóa hồ sơ tài khoản.' });
+    }
 
     if (targetEmail) {
       try {
@@ -336,7 +333,10 @@ export default async function handler(req: any, res: any) {
 
     // A known Google user can be promoted without an email invitation or password.
     if (existing) {
-      if(existing.id===callerId && role!=='owner') return json(res,400,{error:'Bạn không thể tự hạ quyền Chủ trung tâm của mình.'});
+      if (existing.id === callerId && role !== 'owner') return json(res, 400, { error: 'Bạn không thể tự hạ quyền Chủ trung tâm của mình.' });
+      if (email === 'phucphucthinhenglish@gmail.com' && role !== 'owner') {
+        return json(res, 400, { error: 'Không thể hạ quyền tài khoản Chủ trung tâm mặc định của hệ thống.' });
+      }
       const details = `Cập nhật cấp bậc: ${roleLabel(existing.role)} → ${roleLabel(role)}. ${role === 'owner' ? 'Cấp toàn quyền Chủ trung tâm.' : permissionSummary(permissions)}`;
       if(!await updateAccount(client,res,callerId,existing.id,fullName,role,true,permissions,'ACCOUNT_UPDATED',details)) return;
       return json(res, 200, { user: { id: existing.id, role }, provisioned: false });
@@ -368,10 +368,15 @@ export default async function handler(req: any, res: any) {
 
   const { data: target, error: targetError } = await client
     .from('profiles')
-    .select('id, full_name, role, is_active, permissions')
+    .select('id, email, full_name, role, is_active, permissions')
     .eq('id', userId)
     .maybeSingle();
   if (targetError || !target) return json(res, 404, { error: 'Không tìm thấy tài khoản.' });
+
+  const targetEmail = (target.email || '').toLowerCase().trim();
+  if (!active && ['phucphucthinhenglish@gmail.com'].includes(targetEmail)) {
+    return json(res, 400, { error: 'Không thể khóa tài khoản Chủ trung tâm mặc định của hệ thống.' });
+  }
 
   if(!await updateAccount(client,res,callerId,target.id,target.full_name,target.role,active,target.permissions,
     active ? 'ACCOUNT_UNLOCKED' : 'ACCOUNT_LOCKED',active ? 'Mở khóa tài khoản; có thể đăng nhập Google.' : 'Khóa tài khoản; không thể truy cập hệ thống.')) return;

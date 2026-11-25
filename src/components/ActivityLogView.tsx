@@ -2,7 +2,13 @@ import React, { useState } from 'react';
 import { AccountAuditLog, ActivityLog } from '../types';
 import { History, Search, Filter, ShieldCheck, RefreshCw } from 'lucide-react';
 import { maskEmail } from '../lib/privacy';
-import { isRemovedActivityLog, formatLogDetails, formatLogModule } from '../lib/activityLog';
+import {
+  isRemovedActivityLog,
+  formatLogDetails,
+  formatLogModule,
+  isHiddenAccountIdentity,
+  containsHiddenAccountText,
+} from '../lib/activityLog';
 
 interface ActivityLogViewProps {
   logs: ActivityLog[];
@@ -19,14 +25,6 @@ const accountActionLabels: Record<AccountAuditLog['action'], string> = {
   ACCOUNT_UNLOCKED: 'Mở khóa',
 };
 
-const normalizeAccountName = (value: string) => value
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .trim()
-  .toLowerCase();
-
-const isHiddenAccount = (name: string) => normalizeAccountName(name) === 'duy ngon pham';
-
 export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
   logs,
   accountLogs,
@@ -37,20 +35,28 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
   const [performerFilter, setPerformerFilter] = useState('all');
-  const performerName = (name: string) => isHiddenAccount(name) ? 'Tài khoản hệ thống' : (name.trim() || 'Chủ trung tâm');
+  const isHiddenLogPerformer = (name?: string | null, email?: string | null) =>
+    isHiddenAccountIdentity(name, email) || containsHiddenAccountText(name);
+  const performerName = (name: string, email?: string) =>
+    isHiddenLogPerformer(name, email) ? 'Tài khoản hệ thống' : (name.trim() || 'Chủ trung tâm');
   const visibleLogs = logs.filter(log => !isRemovedActivityLog(log));
   const performers = [...new Set([
-    ...visibleLogs.map(log => performerName(log.userName)),
-    ...accountLogs.filter(log => !isHiddenAccount(log.targetName)).map(log => performerName(log.actorName)),
+    ...visibleLogs.map(log => performerName(log.userName, log.userEmail)),
+    ...accountLogs
+      .filter(log => !isHiddenLogPerformer(log.targetName) && !containsHiddenAccountText(log.details))
+      .map(log => performerName(log.actorName)),
   ])].sort((a, b) => a.localeCompare(b, 'vi'));
 
 
   const filteredLogs = visibleLogs.filter(log => {
     const formattedDetails = formatLogDetails(log);
     const formattedModule = formatLogModule(log.module);
+    const hiddenPerformer = isHiddenLogPerformer(log.userName, log.userEmail);
+    const visibleName = performerName(log.userName, log.userEmail);
+    const visibleEmail = hiddenPerformer ? 'Nội bộ' : log.userEmail;
     const matchesSearch =
-      log.userName.toLowerCase().includes(search.toLowerCase()) ||
-      log.userEmail.toLowerCase().includes(search.toLowerCase()) ||
+      visibleName.toLowerCase().includes(search.toLowerCase()) ||
+      visibleEmail.toLowerCase().includes(search.toLowerCase()) ||
       log.details.toLowerCase().includes(search.toLowerCase()) ||
       formattedDetails.toLowerCase().includes(search.toLowerCase()) ||
       log.module.toLowerCase().includes(search.toLowerCase()) ||
@@ -58,14 +64,15 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
 
     const matchesAction = actionFilter === 'all' || log.action === actionFilter;
 
-    return matchesSearch && matchesAction && (performerFilter === 'all' || performerName(log.userName) === performerFilter);
+    return matchesSearch && matchesAction && (performerFilter === 'all' || visibleName === performerFilter);
   });
 
   const filteredAccountLogs = accountLogs.filter((log) => {
-    if (isHiddenAccount(log.targetName)) return false;
-    if (performerFilter !== 'all' && performerName(log.actorName) !== performerFilter) return false;
+    if (isHiddenLogPerformer(log.targetName) || containsHiddenAccountText(log.details)) return false;
+    const visibleActor = performerName(log.actorName);
+    if (performerFilter !== 'all' && visibleActor !== performerFilter) return false;
     const term = search.toLowerCase();
-    return !term || [log.actorName, log.targetName, log.details, accountActionLabels[log.action]]
+    return !term || [visibleActor, log.targetName, log.details, accountActionLabels[log.action]]
       .some((value) => value.toLowerCase().includes(term));
   });
 
@@ -202,8 +209,10 @@ export const ActivityLogView: React.FC<ActivityLogViewProps> = ({
                 <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-4 font-mono text-slate-500">{log.timestamp}</td>
                   <td className="py-3 px-4">
-                    <div className="font-bold text-slate-900">{isHiddenAccount(log.userName) ? 'Tài khoản hệ thống' : log.userName}</div>
-                    <div className="text-[10px] text-slate-500">{maskEmail(log.userEmail)}</div>
+                    <div className="font-bold text-slate-900">{performerName(log.userName, log.userEmail)}</div>
+                    <div className="text-[10px] text-slate-500">
+                      {isHiddenLogPerformer(log.userName, log.userEmail) ? 'Nội bộ' : maskEmail(log.userEmail)}
+                    </div>
                   </td>
                   <td className="py-3 px-4">
                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${

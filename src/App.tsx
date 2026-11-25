@@ -1179,6 +1179,7 @@ export default function App() {
               teachers={teachers}
               classes={classes}
               receipts={receipts}
+              settings={settings}
               onNavigateTab={navigateTo}
             />
           )}

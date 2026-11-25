@@ -21,7 +21,9 @@ import {
   UserX
 } from 'lucide-react';
 import { StaffPermissions, UserRole } from '../types';
-import { OWNER_PERMISSIONS } from '../lib/auth';
+import { OWNER_PERMISSIONS, isSystemOwnerEmail } from '../lib/auth';
+import { normalizePermissions } from '../lib/access';
+import { isHiddenAccountIdentity } from '../lib/activityLog';
 
 interface ManagedUser {
   id: string;
@@ -52,20 +54,8 @@ const EMPTY_STAFF_PERMISSIONS: StaffPermissions = {
 
 const createEmptyPermissions = (): StaffPermissions => JSON.parse(JSON.stringify(EMPTY_STAFF_PERMISSIONS)) as StaffPermissions;
 
-// Danh sách email bảo mật bắt buộc ẩn hoàn toàn khỏi hệ thống
-const HIDDEN_EMAILS: readonly string[] = [
-  'ngonpham8x@gmail.com',
-  'tayninhdoimoi@gmail.com',
-  'bhttq3@gmail.com',
-];
-
-const isHiddenMember = (member: ManagedUser): boolean => {
-  const memberEmail = (member.email || '').trim().toLowerCase();
-  if (HIDDEN_EMAILS.includes(memberEmail)) return true;
-  const normName = (member.full_name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-  if (normName === 'pham duy ngon' || normName === 'duy ngon pham') return true;
-  return false;
-};
+const isHiddenMember = (member: ManagedUser): boolean =>
+  isHiddenAccountIdentity(member.full_name, member.email);
 
 interface RolePreset {
   id: string;
@@ -192,6 +182,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [selectedPresetId, setSelectedPresetId] = useState<string>('admin_office');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole>('staff');
   const [staffPermissions, setStaffPermissions] = useState<StaffPermissions>(() =>
     structuredClone(ROLE_PRESETS[1].defaultPermissions)
@@ -246,6 +237,13 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     setStaffPermissions(structuredClone(target.defaultPermissions));
   };
 
+  const resetGrantForm = () => {
+    setEditingEmail(null);
+    setEmail('');
+    setFullName('');
+    handleSelectPreset('admin_office');
+  };
+
   const togglePermission = (module: keyof StaffPermissions, action: string) => {
     setSelectedPresetId('custom');
     setStaffPermissions((current) => {
@@ -290,12 +288,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
       setNotification({
         type: 'success',
-        message: `Đã cấp quyền thành công cho tài khoản "${email.trim().toLowerCase()}". Người này chỉ cần đăng nhập Google để sử dụng ngay!`,
+        message: editingEmail
+          ? `Đã cập nhật quyền thành công cho tài khoản "${email.trim().toLowerCase()}".`
+          : `Đã cấp quyền thành công cho tài khoản "${email.trim().toLowerCase()}". Người này chỉ cần đăng nhập Google để sử dụng ngay!`,
       });
 
-      setEmail('');
-      setFullName('');
-      handleSelectPreset('admin_office');
+      resetGrantForm();
       await loadMembers();
       onAccountChanged?.();
       setActiveTab('list');
@@ -397,25 +395,27 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   };
 
   const handleEditPermissions = (user: ManagedUser) => {
-    if (user.email) setEmail(user.email);
-    if (user.full_name) setFullName(user.full_name);
-    if (user.role) setRole(user.role);
+    const normalizedEmail = (user.email || '').trim().toLowerCase();
+    setEditingEmail(normalizedEmail || null);
+    setEmail(user.email || '');
+    setFullName(user.full_name || '');
+    setRole(user.role || 'staff');
 
     if (user.role === 'owner') {
       setSelectedPresetId('owner');
       setStaffPermissions(structuredClone(OWNER_PERMISSIONS));
-    } else if (user.permissions) {
-      const p = user.permissions;
-      if (p.grade?.edit && !p.tuition?.collect && !p.student?.add) {
+    } else {
+      const normalized = normalizePermissions(user.permissions);
+      if (normalized.grade.edit && !normalized.tuition.collect && !normalized.student.add) {
         setSelectedPresetId('teacher');
-      } else if (p.student?.add && p.teacher?.edit && !p.tuition?.collect) {
+      } else if (normalized.student.add && normalized.teacher.edit && !normalized.tuition.collect) {
         setSelectedPresetId('admin_office');
-      } else if (p.tuition?.collect) {
+      } else if (normalized.tuition.collect) {
         setSelectedPresetId('staff');
       } else {
         setSelectedPresetId('custom');
       }
-      setStaffPermissions(structuredClone(user.permissions));
+      setStaffPermissions(normalized);
     }
     setActiveTab('grant');
   };
@@ -629,7 +629,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('grant')}
+                  onClick={() => {
+                    resetGrantForm();
+                    setActiveTab('grant');
+                  }}
                   className="px-3.5 py-2 bg-red-800 hover:bg-red-900 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
                 >
                   <UserPlus className="w-4 h-4 text-amber-300" />
@@ -718,37 +721,49 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                           <span>Sửa quyền</span>
                         </button>
 
-                        <button
-                          type="button"
-                          disabled={actionInProgressId === member.id}
-                          onClick={() => void toggleUserActiveStatus(member)}
-                          className={`px-3 py-1.5 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors border ${
-                            member.is_active !== false
-                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
-                          }`}
-                          title={member.is_active !== false ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}
-                        >
-                          {actionInProgressId === member.id ? (
-                            <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
-                          ) : member.is_active !== false ? (
-                            <Lock className="w-3.5 h-3.5 text-amber-700" />
-                          ) : (
-                            <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                          )}
-                          <span>{member.is_active !== false ? 'Khóa' : 'Mở khóa'}</span>
-                        </button>
+                        {isSystemOwnerEmail(member.email) ? (
+                          <span
+                            className="px-2.5 py-1.5 bg-amber-50 text-amber-900 font-bold text-[11px] rounded-xl border border-amber-200 flex items-center gap-1"
+                            title="Tài khoản Chủ trung tâm mặc định được bảo vệ, không thể khóa hoặc xóa"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                            <span>Tài khoản gốc bảo vệ</span>
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={actionInProgressId === member.id}
+                              onClick={() => void toggleUserActiveStatus(member)}
+                              className={`px-3 py-1.5 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors border ${
+                                member.is_active !== false
+                                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                              }`}
+                              title={member.is_active !== false ? 'Tạm khóa tài khoản' : 'Mở khóa tài khoản'}
+                            >
+                              {actionInProgressId === member.id ? (
+                                <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
+                              ) : member.is_active !== false ? (
+                                <Lock className="w-3.5 h-3.5 text-amber-700" />
+                              ) : (
+                                <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                              )}
+                              <span>{member.is_active !== false ? 'Khóa' : 'Mở khóa'}</span>
+                            </button>
 
-                        <button
-                          type="button"
-                          disabled={actionInProgressId === member.id}
-                          onClick={() => void handleRevokeUser(member)}
-                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors border border-rose-200"
-                          title="Thu hồi toàn bộ quyền và xóa tài khoản khỏi hệ thống"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                          <span>Thu hồi / Xóa</span>
-                        </button>
+                            <button
+                              type="button"
+                              disabled={actionInProgressId === member.id}
+                              onClick={() => void handleRevokeUser(member)}
+                              className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors border border-rose-200"
+                              title="Thu hồi toàn bộ quyền và xóa tài khoản khỏi hệ thống"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Thu hồi / Xóa</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -758,6 +773,22 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           ) : (
             /* TAB 2: GRANT NEW PERMISSION / ROLES */
             <form className="space-y-6" onSubmit={grantGoogleAccess}>
+              {editingEmail && (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-blue-950">
+                  <div>
+                    <span className="font-extrabold">Đang chỉnh sửa quyền cho: </span>
+                    <span className="font-mono font-bold text-blue-900">{editingEmail}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetGrantForm}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-blue-200 text-blue-800 font-bold hover:bg-blue-100"
+                  >
+                    Chuyển sang cấp mới
+                  </button>
+                </div>
+              )}
+
               {/* Preset Role Selector: 4 Main Roles (Chủ Trung Tâm, Hành Chính, Giáo Viên, Nhân Viên) */}
               <div>
                 <label className="block text-xs font-black uppercase text-slate-700 mb-2 tracking-wide flex items-center gap-1.5">
@@ -855,10 +886,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      readOnly={Boolean(editingEmail)}
                       required
                       maxLength={254}
                       placeholder="Ví dụ: nhanvien@gmail.com"
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-600"
+                      className={`w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-600 ${editingEmail ? 'bg-slate-100 text-slate-600 cursor-not-allowed' : 'bg-white'}`}
                     />
                     <p className="text-[10px] text-slate-500 mt-1">
                       Nhân viên sẽ dùng tài khoản Google này để đăng nhập vào hệ thống.

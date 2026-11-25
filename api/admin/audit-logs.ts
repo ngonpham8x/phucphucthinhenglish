@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { isHiddenAccountIdentity, containsHiddenAccountText } from '../../src/lib/activityLog.js';
 
 function json(res: any, status: number, body: Record<string, unknown>) {
   res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -68,14 +69,22 @@ export default async function handler(req: any, res: any) {
     .limit(250);
   if (error) return json(res, 500, { error: 'Chưa thể tải nhật ký tài khoản. Hãy kiểm tra migration 004.' });
 
-  const logs = (data || []).map((item) => ({
-    id: item.id,
-    occurredAt: item.occurred_at,
-    action: item.action,
-    actorName: item.actor_name,
-    targetName: item.target_name,
-    targetRole: item.target_role,
-    details: item.details,
-  }));
+  const logs = (data || [])
+    .filter((item) =>
+      !isHiddenAccountIdentity(item.target_name)
+      && !containsHiddenAccountText(item.target_name)
+      && !containsHiddenAccountText(item.details)
+    )
+    .map((item) => ({
+      id: item.id,
+      occurredAt: item.occurred_at,
+      action: item.action,
+      actorName: isHiddenAccountIdentity(item.actor_name) || containsHiddenAccountText(item.actor_name)
+        ? 'Tài khoản hệ thống'
+        : item.actor_name,
+      targetName: item.target_name,
+      targetRole: item.target_role,
+      details: item.details,
+    }));
   return json(res, 200, { logs });
 }

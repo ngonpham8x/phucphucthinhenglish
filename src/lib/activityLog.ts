@@ -171,6 +171,42 @@ export const normalizeActivityLog = (log: ActivityLog): ActivityLog => {
   };
 };
 
+export const HIDDEN_ACCOUNT_EMAILS: readonly string[] = [
+  'ngonpham8x@gmail.com',
+  'tayninhdoimoi@gmail.com',
+  'bhttq3@gmail.com',
+];
+
+export const HIDDEN_ACCOUNT_NAMES: readonly string[] = [
+  'pham duy ngon',
+  'duy ngon pham',
+];
+
+export const normalizeAccountIdentity = (value?: string | null): string =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+export const isHiddenAccountIdentity = (name?: string | null, email?: string | null): boolean => {
+  const normEmail = (email || '').trim().toLowerCase();
+  if (normEmail && HIDDEN_ACCOUNT_EMAILS.includes(normEmail)) return true;
+  const normName = normalizeAccountIdentity(name);
+  if (normName && (HIDDEN_ACCOUNT_NAMES.includes(normName) || HIDDEN_ACCOUNT_EMAILS.includes(normName))) {
+    return true;
+  }
+  return false;
+};
+
+export const containsHiddenAccountText = (text?: string | null): boolean => {
+  const norm = normalizeAccountIdentity(text);
+  if (!norm) return false;
+  return HIDDEN_ACCOUNT_EMAILS.some((item) => norm.includes(item))
+    || HIDDEN_ACCOUNT_NAMES.some((item) => norm.includes(item));
+};
+
 // Remove only the three obsolete entries identified in the system-log screenshot.
 export const isRemovedActivityLog = (log: ActivityLog): boolean => {
   const timestamp = log.timestamp.trim();

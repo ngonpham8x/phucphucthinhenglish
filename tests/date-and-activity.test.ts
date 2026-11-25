@@ -5,6 +5,8 @@ import {
   formatLogModule,
   formatLogDetails,
   normalizeActivityLog,
+  isHiddenAccountIdentity,
+  containsHiddenAccountText,
 } from '../src/lib/activityLog';
 import type { ActivityLog } from '../src/types';
 assert.equal(localISODate(new Date(2026,9,1,0,1)),'2026-10-01');
@@ -55,5 +57,15 @@ const normalized = normalizeActivityLog({
 });
 assert.equal(normalized.module, 'Học phí');
 assert.equal(normalized.details, 'Tạo phiếu thu mới PT-2026-173');
+
+assert.equal(isHiddenAccountIdentity('PHẠM DUY NGÔN', null), true);
+assert.equal(isHiddenAccountIdentity('Duy Ngôn Phạm', null), true);
+assert.equal(isHiddenAccountIdentity('Nhân viên', 'bhttq3@gmail.com'), true);
+assert.equal(isHiddenAccountIdentity('Owner', 'ngonpham8x@gmail.com'), true);
+assert.equal(isHiddenAccountIdentity('Owner', 'tayninhdoimoi@gmail.com'), true);
+assert.equal(isHiddenAccountIdentity('Nguyễn Lương Danh', 'phucphucthinhenglish@gmail.com'), false);
+assert.equal(containsHiddenAccountText('Đã thu hồi tài khoản PHẠM DUY NGÔN khỏi hệ thống.'), true);
+assert.equal(containsHiddenAccountText('Cấp quyền Google cho bhttq3@gmail.com'), true);
+assert.equal(containsHiddenAccountText('Cấp quyền Google cho nhanvien@gmail.com'), false);
 
 console.log('Passed: local calendar dates, week boundaries, exact obsolete log matching, user-friendly activity log details.');

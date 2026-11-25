@@ -111,11 +111,12 @@ export const Header: React.FC<HeaderProps> = ({
           {currentUser.role === 'owner' && (
             <button
               onClick={onOpenUserManagement}
-              className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-amber-300 transition-colors hidden lg:flex shadow-2xs"
+              className="px-2 sm:px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-amber-300 transition-colors shadow-2xs"
               title="Cấp quyền quản lý cho nhân viên trung tâm"
+              aria-label={t('permissions')}
             >
               <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-              <span>{t('permissions')}</span>
+              <span className="hidden lg:inline">{t('permissions')}</span>
             </button>
           )}
 
@@ -139,11 +140,18 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center gap-2 pl-2 py-1 pr-2 hover:bg-slate-100 rounded-xl transition-all border border-slate-200"
               title="Chuyển đổi tài khoản / Phân quyền"
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-8 h-8 rounded-full object-cover border border-slate-200"
-              />
+              {currentUser.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-red-100 text-red-800 font-extrabold text-xs flex items-center justify-center border border-red-200">
+                  {(currentUser.name || 'U').slice(0, 1).toUpperCase()}
+                </div>
+              )}
               <div className="text-left hidden sm:block">
                 <div className="text-xs font-bold text-slate-800 leading-tight">
                   {currentUser.name.replace(/\s*\(Quản [L|l]ý\)/gi, '')}

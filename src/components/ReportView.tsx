@@ -1,6 +1,6 @@
 import { localISODate, reportWeekBounds } from '../lib/date';
 import React, { useState } from 'react';
-import { Student, Teacher, ClassRoom, TuitionReceipt } from '../types';
+import { Student, Teacher, ClassRoom, TuitionReceipt, CenterSettings } from '../types';
 import { BarChart3, Calendar, Download, Printer, DollarSign, Users, BookOpen, X } from 'lucide-react';
 import { debtBreakdown } from '../lib/tuition';
 import { isStudentInClass } from '../lib/student';
@@ -10,6 +10,7 @@ interface ReportViewProps {
   teachers: Teacher[];
   classes: ClassRoom[];
   receipts: TuitionReceipt[];
+  settings?: CenterSettings;
   onNavigateTab: (tab: string) => void;
 }
 
@@ -18,6 +19,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   teachers,
   classes,
   receipts,
+  settings,
   onNavigateTab
 }) => {
   const [timeFilter, setTimeFilter] = useState<'day' | 'week' | 'month'>('month');
@@ -106,8 +108,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
       {/* Report Paper */}
       <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-xs space-y-6">
         <div className="text-center border-b border-slate-200 pb-4">
-          <h1 className="font-extrabold text-xl text-red-900 uppercase tracking-wider">TRUNG TÂM ANH NGỮ PHÚC PHÚC THỊNH</h1>
-          <p className="text-xs text-slate-500">Cơ sở 01: Số 123 Đường Nguyễn Huệ, Phường 1, TP. Tây Ninh</p>
+          <h1 className="font-extrabold text-xl text-red-900 uppercase tracking-wider">{settings?.name || 'TRUNG TÂM ANH NGỮ PHÚC PHÚC THỊNH'}</h1>
+          {settings?.address && <p className="text-xs text-slate-500">{settings.address}</p>}
           <h2 className="text-lg font-bold text-slate-800 uppercase mt-2">
             BÁO CÁO TỔNG HỢP {timeFilter === 'day' ? 'HẰNG NGÀY' : (timeFilter === 'week' ? 'HẰNG TUẦN' : 'HẰNG THÁNG')}
           </h2>

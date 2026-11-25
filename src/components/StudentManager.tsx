@@ -128,6 +128,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
   const canAdd = isOwner || permissions.student.add;
   const canEdit = isOwner || permissions.student.edit;
   const canDelete = isOwner || permissions.student.delete;
+  const canCollectTuition = isOwner || (permissions.tuition.view && permissions.tuition.collect);
   const showDebt = canSeeDebt(isOwner,permissions);
   // Báo cáo workbook có cả dữ liệu học phí, nên chỉ quyền Excel mới được mở.
   const canExport = isOwner || permissions.excel.import || permissions.excel.export;
@@ -498,8 +499,9 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                             </button>
 
                             {(() => {
+                              if (!canCollectTuition || !onOpenTuitionCollect) return null;
                               const prog = getStudentCourseProgress(st.id, st.classId, receipts, programs, classes);
-                              if (prog.hasCompletedCourse && onOpenTuitionCollect) {
+                              if (prog.hasCompletedCourse) {
                                 return (
                                   <button
                                     onClick={() => onOpenTuitionCollect({
@@ -663,8 +665,9 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                     </button>
 
                     {(() => {
+                      if (!canCollectTuition || !onOpenTuitionCollect) return null;
                       const prog = getStudentCourseProgress(st.id, st.classId, receipts, programs, classes);
-                      if (prog.hasCompletedCourse && onOpenTuitionCollect) {
+                      if (prog.hasCompletedCourse) {
                         return (
                           <button
                             onClick={() => onOpenTuitionCollect({
@@ -965,7 +968,7 @@ export const StudentManager: React.FC<StudentManagerProps> = ({
                       <span className="text-[11px] text-indigo-800">
                         Gợi ý khóa tiếp theo: <b>{courseProgress.nextSuggestedPeriod}</b>
                       </span>
-                      {onOpenTuitionCollect && (
+                      {canCollectTuition && onOpenTuitionCollect && (
                         <button
                           type="button"
                           onClick={() => {
