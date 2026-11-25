@@ -894,6 +894,18 @@ export default function App() {
     addLog('SỬA', 'Điểm', `Cập nhật bảng điểm cho học sinh ID ${updatedGrade.studentId}`);
   };
 
+  const handleDeleteGrade = (gradeId: string) => {
+    setGrades(prev => prev.filter(g => g.id !== gradeId));
+    addLog('XÓA', 'Điểm', `Xóa điểm học sinh (${gradeId})`);
+  };
+
+  const handleClearGrades = (gradeIds: string[]) => {
+    if (!gradeIds.length) return;
+    const idSet = new Set(gradeIds);
+    setGrades(prev => prev.filter(g => !idSet.has(g.id)));
+    addLog('XÓA', 'Điểm', `Xóa ${gradeIds.length} bản ghi điểm khỏi bảng điểm`);
+  };
+
   // Tuition Handler
   const handleAddReceipt = (r: TuitionReceipt) => {
     const normalized = normaliseReceipt(r);
@@ -1140,6 +1152,8 @@ export default function App() {
               permissions={currentUser.permissions}
               isOwner={currentUser.role === 'owner'}
               onUpdateGrade={handleUpdateGrade}
+              onDeleteGrade={handleDeleteGrade}
+              onClearGrades={handleClearGrades}
             />
           )}
 
